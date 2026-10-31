@@ -1,0 +1,194 @@
+[
+ {
+  "category": "Computers",
+  "min_age": 10,
+  "max_age": 16,
+  "question": "Wat betekent CPU?",
+  "answers": [
+   "Central Processing Unit",
+   "Computer Power Unit",
+   "Central Program Utility",
+   "Core Processing Usage"
+  ],
+  "correct": 0
+ },
+ {
+  "category": "Online veiligheid",
+  "min_age": 8,
+  "max_age": 16,
+  "question": "Welk van deze is een sterk wachtwoord?",
+  "answers": [
+   "123456",
+   "wachtwoord",
+   "Kat!Fiets7#Maan",
+   "jouw naam"
+  ],
+  "correct": 2
+ },
+ {
+  "category": "Computers",
+  "min_age": 10,
+  "max_age": 16,
+  "question": "Hoeveel bits zitten er in 1 byte?",
+  "answers": [
+   "4",
+   "8",
+   "16",
+   "32"
+  ],
+  "correct": 1
+ },
+ {
+  "category": "Online veiligheid",
+  "min_age": 9,
+  "max_age": 16,
+  "question": "Wat is phishing?",
+  "answers": [
+   "Vissen met een computer",
+   "Een nep-bericht om je gegevens te stelen",
+   "Een soort virusscanner",
+   "Een programmeertaal"
+  ],
+  "correct": 1
+ },
+ {
+  "category": "Programmeren",
+  "min_age": 11,
+  "max_age": 16,
+  "question": "Wat is 1 + 1 in binair?",
+  "answers": [
+   "2",
+   "11",
+   "10",
+   "01"
+  ],
+  "correct": 2
+ },
+ {
+  "category": "Programmeren",
+  "min_age": 9,
+  "max_age": 16,
+  "question": "Welke taal gebruik je om webpagina's op te bouwen?",
+  "answers": [
+   "HTML",
+   "MP3",
+   "JPEG",
+   "USB"
+  ],
+  "correct": 0
+ },
+ {
+  "category": "Online veiligheid",
+  "min_age": 11,
+  "max_age": 16,
+  "question": "Wat doet een firewall?",
+  "answers": [
+   "Brand blussen",
+   "Netwerkverkeer filteren",
+   "Bestanden comprimeren",
+   "Het scherm verlichten"
+  ],
+  "correct": 1
+ },
+ {
+  "category": "Programmeren",
+  "min_age": 8,
+  "max_age": 16,
+  "question": "Wat is een 'bug'?",
+  "answers": [
+   "Een fout in een programma",
+   "Een snelle computer",
+   "Een soort kabel",
+   "Een wachtwoord"
+  ],
+  "correct": 0
+ },
+ {
+  "category": "Programmeren",
+  "min_age": 12,
+  "max_age": 16,
+  "question": "Welk getal is 1010 in binair?",
+  "answers": [
+   "5",
+   "8",
+   "10",
+   "12"
+  ],
+  "correct": 2
+ },
+ {
+  "category": "Online veiligheid",
+  "min_age": 8,
+  "max_age": 16,
+  "question": "Wat moet je doen met een onbekende USB-stick?",
+  "answers": [
+   "Meteen insteken",
+   "Aan een volwassene geven",
+   "Openen op school",
+   "Delen met vrienden"
+  ],
+  "correct": 1
+ },
+ {
+  "category": "Computers",
+  "min_age": 9,
+  "max_age": 16,
+  "question": "Waar staat 'www' voor?",
+  "answers": [
+   "World Wide Web",
+   "Wireless Web Window",
+   "Web Wide World",
+   "World Web Wire"
+  ],
+  "correct": 0
+ },
+ {
+  "category": "Computers",
+  "min_age": 12,
+  "max_age": 16,
+  "question": "Wat gebruikt een Raspberry Pi als besturingssysteem meestal?",
+  "answers": [
+   "Linux",
+   "Windows XP",
+   "MS-DOS",
+   "Android Auto"
+  ],
+  "correct": 0
+ },
+ {
+  "id": "voorbeeld_video",
+  "category": "Online veiligheid",
+  "min_age": 10,
+  "max_age": 16,
+  "question": "Wat is er verdacht aan deze e-mail?",
+  "text": "Je krijgt deze mail op een zaterdagavond. Kijk goed naar de afzender en naar wat ze van je vragen.",
+  "video": "voorbeeld.ogv",
+  "video_when": "before",
+  "answers": [
+   "Niets, banken mailen altijd zo",
+   "Het adres van de afzender is niet van de bank",
+   "De mail is te kort",
+   "Hij kwam in het weekend"
+  ],
+  "correct": 1,
+  "time": 20,
+  "explanation": "Een echte bank gebruikt haar eigen domein en vraagt nooit om via een link in te loggen."
+ },
+ {
+  "id": "voorbeeld_tekst",
+  "category": "Online veiligheid",
+  "min_age": 8,
+  "max_age": 16,
+  "question": "Wat doe je het best?",
+  "text": "Lotte speelt een online game. Een andere speler, die ze niet kent, belooft haar 5000 gratis munten als ze haar gebruikersnaam en wachtwoord stuurt. Hij zegt dat het aanbod maar vijf minuten geldig is en dat al haar vrienden het ook gedaan hebben.",
+  "answers": [
+   "Snel het wachtwoord sturen voor de munten",
+   "Alleen de gebruikersnaam sturen, dat is veilig",
+   "Niets sturen, de speler blokkeren en het melden",
+   "Eerst vragen of hij echt te vertrouwen is"
+  ],
+  "correct": 2,
+  "time": 25,
+  "explanation": "Je wachtwoord deel je met niemand. Haast (\"maar vijf minuten\") is een typische truc van oplichters."
+ }
+]

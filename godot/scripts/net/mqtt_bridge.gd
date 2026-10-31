@@ -1,0 +1,131 @@
+class_name MqttBridge
+extends MqttClient
+## Connects the game to the installation over MQTT (WebSocket). Topics
+## (prefix = topic_prefix, payloads are JSON):
+##   <prefix>/tile/<n>/cmd     game -> tile   programs, start, stop ({"program": ...})
+##   <prefix>/tile/<n>/event   tile -> game   {"result": {...}}, {"press": "Cross"},
+##                                            {"pressure": {"Cross": 0.8}}, ...
+##                                            (any apply_command fields; "tile" is added)
+##   <prefix>/cmd              app/operator -> game   any apply_command message,
+##                                            e.g. {"register": "Erik", "color": "#ff8800", "age": 9}
+##   <prefix>/registered       game -> app    {"tile": 3, "player": "Erik", "color": "#ff8800"}
+##   <prefix>/activated        game -> app    {"tile": 3, "player": "Erik"}
+##   <prefix>/status           game -> all    "online" / "offline" (retained)
+##   <prefix>/node/<id>        game -> all    retained announcement {id, role, host, port, screens, version}
+##   <prefix>/state            game -> all    retained game state (GameManager.status()) for the web interface
+##   <prefix>/event            game -> all    {text, color}: the event feed
+##   <prefix>/tiles            control -> game  retained {"enabled": {"3": false, ...}}: tiles out of service
+##   <prefix>/mode             control -> game  retained {"mode": "setup" | "closed" | "open" | "paused"}
+## Leave url empty to run without MQTT.
+
+@export var topic_prefix := "cybercircle"
+@export var real_tiles := true   # tiles run their own logic: switch the twin's simulation off
+@export var node_id := ""        # name in the web interface; "" = "godot-<ip>"
+@export var role := "master"
+@export var enet_port := 0       # (display connections: next step)
+
+var _state_json := ""
+var _state_timer := 0.0
+var _announce_timer := 0.0
+
+var arena: Node3D
+
+
+func setup(arena_node: Node3D) -> void:
+	arena = arena_node
+	if url == "":
+		return
+	if real_tiles:
+		arena.simulate_firmware = false
+	message.connect(_on_message)
+	if node_id == "":
+		node_id = "godot-" + _lan_address().replace(".", "-")
+	connected.connect(func():
+		print("mqtt: connected to ", url)
+		publish(topic_prefix + "/status", "online", true)
+		_announce()
+		_publish_settings()
+		_state_json = "")
+	arena.tile_message.connect(func(id, msg):
+		publish_json("%s/tile/%d/cmd" % [topic_prefix, id], msg))
+	arena.registered.connect(func(id, who, color):
+		publish_json(topic_prefix + "/registered",
+			{"tile": id, "player": who, "color": "#" + color.to_html(false)}))
+	arena.activated.connect(func(id, who):
+		publish_json(topic_prefix + "/activated", {"tile": id, "player": who}))
+	arena.game.game_event.connect(func(text, color):
+		publish_json(topic_prefix + "/event", {"text": text, "color": "#" + color.to_html(false)}))
+	subscribe(topic_prefix + "/cmd")
+	subscribe(topic_prefix + "/tile/+/event")
+	subscribe(topic_prefix + "/tiles")
+	subscribe(topic_prefix + "/mode")
+	subscribe(topic_prefix + "/settings")
+	arena.game.settings_changed.connect(_publish_settings)
+	start()
+
+
+## Every setting with range, default and value (retained): the web interface
+## builds its settings page from it.
+func _publish_settings() -> void:
+	if role == "master":
+		publish_json(topic_prefix + "/settings/schema", arena.game.settings_schema(), true)
+
+
+func _on_message(topic: String, payload: PackedByteArray) -> void:
+	var data = JSON.parse_string(payload.get_string_from_utf8())
+	if not data is Dictionary:
+		push_warning("mqtt: ignored non-JSON message on " + topic)
+		return
+	if topic == topic_prefix + "/mode":                  # the operator's operating mode
+		arena.apply_command({"game": "mode", "mode": data.get("mode", "")})
+		return
+	if topic == topic_prefix + "/settings":              # the operator's settings
+		arena.game.apply_settings(data)
+		return
+	if topic == topic_prefix + "/tiles":                 # tiles in / out of service
+		var enabled: Dictionary = data.get("enabled", {})
+		for n in enabled:
+			arena.set_tile_enabled(int(n), bool(enabled[n]))
+		return
+	var parts := topic.trim_prefix(topic_prefix + "/").split("/")
+	if parts.size() == 3 and parts[0] == "tile" and parts[2] == "event":
+		data["tile"] = int(parts[1])
+	elif parts != PackedStringArray(["cmd"]):
+		return
+	arena.apply_command(data)
+
+
+func _process(delta: float) -> void:
+	super(delta)
+	if not online:
+		return
+	_announce_timer -= delta
+	if _announce_timer <= 0.0:          # heartbeat: the web interface shows who is online
+		_announce()
+	_state_timer -= delta
+	if _state_timer <= 0.0:
+		_state_timer = 0.5
+		var json := JSON.stringify(arena.game.status())
+		if json != _state_json:
+			_state_json = json
+			publish(topic_prefix + "/state", json, true)
+
+
+func _announce() -> void:
+	_announce_timer = 10.0
+	publish_json(topic_prefix + "/node/" + node_id, {"id": node_id, "role": role, "host": _lan_address(),
+		"port": enet_port, "screens": range(1, arena.screen_wall.screen_groups.size() + 1),
+		"version": ProjectSettings.get_setting("application/config/version", ""),
+		"fps": Engine.get_frames_per_second()}, true)
+
+
+## This machine's address on the LAN (the first private IPv4 address).
+func _lan_address() -> String:
+	for a in IP.get_local_addresses():
+		if a.begins_with("192.168.") or a.begins_with("10.") or a.begins_with("172."):
+			return a
+	return "127.0.0.1"
+
+
+func _exit_tree() -> void:
+	publish(topic_prefix + "/status", "offline", true)

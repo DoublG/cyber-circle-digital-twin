@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cyber Circle Control</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <span class="logo">CYBER CIRCLE</span>
+  <span id="status" class="status">…</span>
+  <span id="timer" class="timer"></span>
+  <span id="mode" class="mode"></span>
+  <span id="mode-buttons" class="row" style="margin:0"></span>
+  <span id="links" class="links"></span>
+</header>
+<nav>
+  <button data-tab="game" class="active">Spel</button>
+  <button data-tab="tiles">Tegels</button>
+  <button data-tab="nodes">Processen</button>
+  <button data-tab="players">Spelers</button>
+  <button data-tab="questions">Vragen</button>
+  <button data-tab="ranking">Ranglijst</button>
+  <button data-tab="settings">Instellingen</button>
+</nav>
+
+<main>
+<section id="tab-game" class="tab active">
+  <div class="row controls">
+    <button data-game="next" title="Intro overslaan / ronde beëindigen / scores overslaan">⏭ Volgende fase</button>
+    <button data-game="start" title="Niet wachten op de automatische start">▶ Start ronde nu</button>
+  </div>
+  <h2>Volgende rondes</h2>
+  <div id="plan" class="plan"></div>
+  <h2>Tegels</h2>
+  <div id="tiles" class="tiles"></div>
+  <h2>Gebeurtenissen</h2>
+  <ul id="events" class="events"></ul>
+</section>
+
+<section id="tab-tiles" class="tab">
+  <p class="hint">Elke fysieke tegel meldt zich aan met zijn eigen id. Zet hem op een plaats (1–13) rond de robot.
+    Een tegel wisselen = de nieuwe tegel op die plaats zetten. Een plaats <b>buiten gebruik</b> wordt in het spel
+    overgeslagen (een speler die erop staat gaat eruit).</p>
+  <table id="tile-table"><thead><tr><th>Plaats</th><th>Fysieke tegel</th><th>Status</th><th>In gebruik</th></tr></thead><tbody></tbody></table>
+  <h2>Niet toegewezen tegels</h2>
+  <ul id="free-devices" class="events"></ul>
+</section>
+
+<section id="tab-nodes" class="tab">
+  <p class="hint">Elk Godot-proces meldt zich hier aan. Kies welk proces de <b>master</b> is (spellogica,
+    database, tegels); de schermen verbinden met die master.</p>
+  <table id="nodes"><thead><tr><th>Proces</th><th>Rol</th><th>Adres</th><th>Schermen</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
+  <p id="master" class="hint"></p>
+</section>
+
+<section id="tab-players" class="tab">
+  <form id="add-player" class="row">
+    <input name="name" placeholder="Naam" required>
+    <input name="color" type="color" value="#ff8800" title="Kleur">
+    <input name="age" type="number" min="0" max="99" placeholder="Leeftijd" title="Leeftijd (0 = onbekend)">
+    <button>+ Speler</button>
+  </form>
+  <input id="player-search" placeholder="Zoek speler…">
+  <table id="players"><thead><tr><th>#</th><th>Naam</th><th>Kleur</th><th>Leeftijd</th><th>Record (rondes)</th><th>Gespeeld</th><th>Toewijzen</th></tr></thead><tbody></tbody></table>
+</section>
+
+<section id="tab-questions" class="tab">
+  <div class="row"><button id="new-question">+ Vraag</button></div>
+  <table id="questions"><thead><tr><th>#</th><th>Categorie</th><th>Leeftijd</th><th>Vraag</th><th>Actief</th><th></th></tr></thead><tbody></tbody></table>
+  <dialog id="question-dialog">
+    <form id="question-form" method="dialog">
+      <h2>Vraag</h2>
+      <label>Categorie <input name="category"></label>
+      <div class="row"><label>Min. leeftijd <input name="min_age" type="number" value="0"></label>
+        <label>Max. leeftijd <input name="max_age" type="number" value="99"></label>
+        <label>Tijd (s, 0 = standaard) <input name="time" type="number" step="1" value="0"></label></div>
+      <label>Vraag <input name="question" required></label>
+      <label>Extra tekst <textarea name="text" rows="2"></textarea></label>
+      <div class="answers">
+        <label><span class="k sq">▢</span> <input name="answer1" required></label>
+        <label><span class="k tr">△</span> <input name="answer2" required></label>
+        <label><span class="k cr">✕</span> <input name="answer3" required></label>
+        <label><span class="k ci">○</span> <input name="answer4" required></label>
+      </div>
+      <label>Juist antwoord <select name="correct"><option value="0">1 – vierkant</option>
+        <option value="1">2 – driehoek</option><option value="2">3 – kruis</option><option value="3">4 – cirkel</option></select></label>
+      <label>Uitleg na het antwoord <textarea name="explanation" rows="2"></textarea></label>
+      <div class="row"><label>Video (bestand in data/videos) <input name="video"></label>
+        <label>Video <select name="video_when"><option value="before">voor de vraag</option><option value="during">tijdens</option></select></label>
+        <label>Actief <select name="active"><option value="1">ja</option><option value="0">nee</option></select></label></div>
+      <input type="hidden" name="slug"><input type="hidden" name="id">
+      <div class="row"><button value="save">Opslaan</button><button value="cancel" formnovalidate>Annuleren</button>
+        <button id="delete-question" type="button" class="danger">Verwijderen</button></div>
+    </form>
+  </dialog>
+</section>
+
+<section id="tab-ranking" class="tab">
+  <table id="ranking"><thead><tr><th>Plaats</th><th>Naam</th><th>Record (meeste rondes overleefd)</th><th>Keer gespeeld</th></tr></thead><tbody></tbody></table>
+</section>
+<section id="tab-settings" class="tab">
+  <p class="hint">Tijden, snelheid en punten van het spel en van elk spelletje. <b>Tempo</b> versnelt of vertraagt
+    alle tijden tegelijk. Spelinstellingen gelden meteen, die van een spelletje vanaf de volgende ronde.
+    Een gewijzigde waarde is <span class="changed-hint">oranje</span>; leeg = de standaardwaarde.</p>
+  <div class="row"><button id="settings-save">Opslaan</button><button id="settings-reset" class="danger">Alles standaard</button>
+    <span id="settings-msg" class="hint"></span></div>
+  <div id="settings" class="settings"></div>
+</section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

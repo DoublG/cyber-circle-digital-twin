@@ -1,0 +1,17 @@
+# Godot
+.godot/
+*.import.tmp
+# Python
+control/.venv/
+__pycache__/
+# runtime data: databases, logs
+*.db
+*.db-shm
+*.db-wal
+*.log
+# generated: screenshots, recordings, demo movies (make them again, see docs/SETUP.md §7)
+godot/tests/shots/
+godot/movie/*.avi
+movies/
+# blender backups
+*.blend1

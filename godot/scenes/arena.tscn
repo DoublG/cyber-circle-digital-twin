@@ -1,0 +1,204 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://scripts/arena.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/robot.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/tile.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://models/arena_floor.glb" id="4"]
+[ext_resource type="PackedScene" path="res://scenes/room.tscn" id="5"]
+[ext_resource type="Script" path="res://scripts/screen_wall.gd" id="6"]
+[ext_resource type="Script" path="res://scripts/game/game_manager.gd" id="7"]
+[ext_resource type="Script" path="res://scripts/net/mqtt_bridge.gd" id="8"]
+
+[sub_resource type="Environment" id="Environment_1"]
+background_mode = 1
+background_color = Color(0.03, 0.02, 0.06, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.45, 0.42, 0.6, 1)
+ambient_light_energy = 0.5
+tonemap_mode = 2
+glow_enabled = true
+
+[node name="Arena" type="Node3D"]
+script = ExtResource("1")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_1")
+
+[node name="Camera" type="Camera3D" parent="."]
+transform = Transform3D(-1, 0, 0, 0, 0.927374, 0.374137, 0, 0.374137, -0.927374, 0, 3, -6.2)
+current = true
+fov = 55.0
+
+[node name="ScreenWall" type="CanvasLayer" parent="."]
+script = ExtResource("6")
+
+[node name="Game" type="Node" parent="."]
+script = ExtResource("7")
+
+[node name="Mqtt" type="Node" parent="."]
+script = ExtResource("8")
+url = ""
+
+[node name="Room" parent="." instance=ExtResource("5")]
+
+[node name="Floor" parent="." instance=ExtResource("4")]
+
+[node name="Robot" parent="." instance=ExtResource("2")]
+
+[node name="Tiles" type="Node3D" parent="."]
+
+[node name="Tile_01" parent="Tiles" instance=ExtResource("3")]
+transform = Transform3D(-1, 0, 6.12323e-17, 0, 1, 0, -6.12323e-17, 0, -1, 1.53081e-16, 0, -2.5)
+tile_id = 1
+
+[node name="Label" type="Label3D" parent="Tiles/Tile_01"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0.0265, -0.44)
+pixel_size = 0.0004
+modulate = Color(0, 0, 0, 1)
+outline_size = 0
+text = "TEGEL 01"
+font_size = 24
+
+[node name="Tile_02" parent="Tiles" instance=ExtResource("3")]
+transform = Transform3D(-0.885456, 0, 0.464723, 0, 1, 0, -0.464723, 0, -0.885456, 1.16181, 0, -2.21364)
+tile_id = 2
+
+[node name="Label" type="Label3D" parent="Tiles/Tile_02"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0.0265, -0.44)
+pixel_size = 0.0004
+modulate = Color(0, 0, 0, 1)
+outline_size = 0
+text = "TEGEL 02"
+font_size = 24
+
+[node name="Tile_03" parent="Tiles" instance=ExtResource("3")]
+transform = Transform3D(-0.568065, 0, 0.822984, 0, 1, 0, -0.822984, 0, -0.568065, 2.05746, 0, -1.42016)
+tile_id = 3
+
+[node name="Label" type="Label3D" parent="Tiles/Tile_03"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0.0265, -0.44)
+pixel_size = 0.0004
+modulate = Color(0, 0, 0, 1)
+outline_size = 0
+text = "TEGEL 03"
+font_size = 24
+
+[node name="Tile_04" parent="Tiles" instance=ExtResource("3")]
+transform = Transform3D(-0.120537, 0, 0.992709, 0, 1, 0, -0.992709, 0, -0.120537, 2.48177, 0, -0.301342)
+tile_id = 4
+
+[node name="Label" type="Label3D" parent="Tiles/Tile_04"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0.0265, -0.44)
+pixel_size = 0.0004
+modulate = Color(0, 0, 0, 1)
+outline_size = 0
+text = "TEGEL 04"
+font_size = 24
+
+[node name="Tile_05" parent="Tiles" instance=ExtResource("3")]
+transform = Transform3D(0.354605, 0, 0.935016, 0, 1, 0, -0.935016, 0, 0.354605, 2.33754, 0, 0.886512)
+tile_id = 5
+
+[node name="Label" type="Label3D" parent="Tiles/Tile_05"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0.0265, -0.44)
+pixel_size = 0.0004
+modulate = Color(0, 0, 0, 1)
+outline_size = 0
+text = "TEGEL 05"
+font_size = 24
+
+[node name="Tile_06" parent="Tiles" instance=ExtResource("3")]
+transform = Transform3D(0.748511, 0, 0.663123, 0, 1, 0, -0.663123, 0, 0.748511, 1.65781, 0, 1.87128)
+tile_id = 6
+
+[node name="Label" type="Label3D" parent="Tiles/Tile_06"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0.0265, -0.44)
+pixel_size = 0.0004
+modulate = Color(0, 0, 0, 1)
+outline_size = 0
+text = "TEGEL 06"
+font_size = 24
+
+[node name="Tile_07" parent="Tiles" instance=ExtResource("3")]
+transform = Transform3D(0.970942, 0, 0.239316, 0, 1, 0, -0.239316, 0, 0.970942, 0.598289, 0, 2.42735)
+tile_id = 7
+
+[node name="Label" type="Label3D" parent="Tiles/Tile_07"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0.0265, -0.44)
+pixel_size = 0.0004
+modulate = Color(0, 0, 0, 1)
+outline_size = 0
+text = "TEGEL 07"
+font_size = 24
+
+[node name="Tile_08" parent="Tiles" instance=ExtResource("3")]
+transform = Transform3D(0.970942, 0, -0.239316, 0, 1, 0, 0.239316, 0, 0.970942, -0.598289, 0, 2.42735)
+tile_id = 8
+
+[node name="Label" type="Label3D" parent="Tiles/Tile_08"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0.0265, -0.44)
+pixel_size = 0.0004
+modulate = Color(0, 0, 0, 1)
+outline_size = 0
+text = "TEGEL 08"
+font_size = 24
+
+[node name="Tile_09" parent="Tiles" instance=ExtResource("3")]
+transform = Transform3D(0.748511, 0, -0.663123, 0, 1, 0, 0.663123, 0, 0.748511, -1.65781, 0, 1.87128)
+tile_id = 9
+
+[node name="Label" type="Label3D" parent="Tiles/Tile_09"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0.0265, -0.44)
+pixel_size = 0.0004
+modulate = Color(0, 0, 0, 1)
+outline_size = 0
+text = "TEGEL 09"
+font_size = 24
+
+[node name="Tile_10" parent="Tiles" instance=ExtResource("3")]
+transform = Transform3D(0.354605, 0, -0.935016, 0, 1, 0, 0.935016, 0, 0.354605, -2.33754, 0, 0.886512)
+tile_id = 10
+
+[node name="Label" type="Label3D" parent="Tiles/Tile_10"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0.0265, -0.44)
+pixel_size = 0.0004
+modulate = Color(0, 0, 0, 1)
+outline_size = 0
+text = "TEGEL 10"
+font_size = 24
+
+[node name="Tile_11" parent="Tiles" instance=ExtResource("3")]
+transform = Transform3D(-0.120537, 0, -0.992709, 0, 1, 0, 0.992709, 0, -0.120537, -2.48177, 0, -0.301342)
+tile_id = 11
+
+[node name="Label" type="Label3D" parent="Tiles/Tile_11"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0.0265, -0.44)
+pixel_size = 0.0004
+modulate = Color(0, 0, 0, 1)
+outline_size = 0
+text = "TEGEL 11"
+font_size = 24
+
+[node name="Tile_12" parent="Tiles" instance=ExtResource("3")]
+transform = Transform3D(-0.568065, 0, -0.822984, 0, 1, 0, 0.822984, 0, -0.568065, -2.05746, 0, -1.42016)
+tile_id = 12
+
+[node name="Label" type="Label3D" parent="Tiles/Tile_12"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0.0265, -0.44)
+pixel_size = 0.0004
+modulate = Color(0, 0, 0, 1)
+outline_size = 0
+text = "TEGEL 12"
+font_size = 24
+
+[node name="Tile_13" parent="Tiles" instance=ExtResource("3")]
+transform = Transform3D(-0.885456, 0, -0.464723, 0, 1, 0, 0.464723, 0, -0.885456, -1.16181, 0, -2.21364)
+tile_id = 13
+
+[node name="Label" type="Label3D" parent="Tiles/Tile_13"]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0.0265, -0.44)
+pixel_size = 0.0004
+modulate = Color(0, 0, 0, 1)
+outline_size = 0
+text = "TEGEL 13"
+font_size = 24
