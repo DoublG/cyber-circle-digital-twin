@@ -9,9 +9,9 @@ __pycache__/
 *.db-shm
 *.db-wal
 *.log
-# generated: screenshots, recordings, demo movies (make them again, see docs/SETUP.md §7)
+# generated: screenshots, raw recordings (make them again, see docs/SETUP.md §7)
 godot/tests/shots/
 godot/movie/*.avi
-movies/
+movies/*.avi
 # blender backups
 *.blend1
