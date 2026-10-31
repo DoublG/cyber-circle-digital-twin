@@ -1,9 +1,9 @@
 class_name QuizView
 extends Control
 ## Shared quiz screen, a slide show - one step at a time, with a fade between:
-##   read      the question, big
-##   question  the question + the 4 answers (icon and colour of their button)
-##             + countdown; small indicators of who answered (not what)
+##   read      the question + the 4 buttons (icon and colour), no answers yet
+##   question  the answers fade in, the countdown runs; small indicators of
+##             who answered (not what)
 ##   timeup    "TIJD OM!"
 ##   answers   every player's chosen icon (big player cards)
 ##   reveal    who was right (green / red; shield = protected) - the right
@@ -12,8 +12,10 @@ extends Control
 ## player standing on the tile and facing the robot:
 ##     Square   Triangle
 ##     Cross    Circle
-## Long texts shrink to fit their panel. A question video is shown full width
-## before answering ("video" phase) or next to the question while answering.
+## The question gets most of the room, the buttons are compact. Long texts
+## shrink to fit their panel. A question video is shown full width before
+## answering ("video" phase) or left of the question while answering; a
+## picture ("image") left of the question.
 ## Players for whom the question is too hard (age) get a blue shield badge.
 
 var _header: Label
@@ -43,6 +45,10 @@ var _player_cards := {}          # tile_id -> {panel, name, icon, mark, shield}
 var _answered: HFlowContainer    # question step: who answered already (not what)
 var _answered_chips := {}        # tile_id -> Label
 var _last_phase := ""
+
+const Q_SIZE := 62               # question (shrinks to fit)
+const BODY_SIZE := 38            # longer text under it
+const ANSWER_SIZE := 44
 
 
 func _init() -> void:
@@ -113,10 +119,10 @@ func _init() -> void:
 	q_texts.add_theme_constant_override("separation", 16)
 	_text_area = _holder(q_texts)
 	q_row.add_child(_text_area)
-	_question = Retro.label(70, Retro.CREAM)
+	_question = Retro.label(Q_SIZE, Retro.CREAM)
 	_question.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	q_texts.add_child(_question)
-	_body = Retro.label(46, Retro.CREAM.darkened(0.15))
+	_body = Retro.label(BODY_SIZE, Retro.CREAM.darkened(0.15))
 	_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	q_texts.add_child(_body)
 
@@ -124,9 +130,9 @@ func _init() -> void:
 	_grid = GridContainer.new()
 	_grid.columns = 2
 	_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_grid.size_flags_stretch_ratio = 1.3
-	_grid.add_theme_constant_override("h_separation", 20)
-	_grid.add_theme_constant_override("v_separation", 20)
+	_grid.size_flags_stretch_ratio = 0.62             # compact: the question gets the room
+	_grid.add_theme_constant_override("h_separation", 16)
+	_grid.add_theme_constant_override("v_separation", 14)
 	box.add_child(_grid)
 	for b in QuizRound.ANSWER_BUTTONS:
 		var col: Color = CyberTile.BUTTON_COLORS[b]
@@ -134,24 +140,24 @@ func _init() -> void:
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		card.size_flags_vertical = Control.SIZE_EXPAND_FILL
 		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 26)
+		row.add_theme_constant_override("separation", 18)
 		card.add_child(row)
 		# solid coloured key with the icon, like the lit icon on the glass
-		var key := Retro.panel_container(col, col.lightened(0.4), 3, 22, 8)
+		var key := Retro.panel_container(col, col.lightened(0.4), 3, 14, 6)
 		key.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		var icon := Retro.ButtonIcon.new()
 		icon.button = b
 		icon.glow = false
 		icon.color = Retro.BG
-		icon.custom_minimum_size = Vector2(130, 130)
+		icon.custom_minimum_size = Vector2(84, 84)
 		key.add_child(icon)
 		row.add_child(key)
 		var texts := VBoxContainer.new()
 		texts.alignment = BoxContainer.ALIGNMENT_CENTER
 		row.add_child(_holder(texts))
-		var tag := Retro.label(30, col, Retro.BUTTON_NAMES[b], HORIZONTAL_ALIGNMENT_LEFT)
+		var tag := Retro.label(22, col, Retro.BUTTON_NAMES[b], HORIZONTAL_ALIGNMENT_LEFT)
 		texts.add_child(tag)
-		var text := Retro.label(58, Retro.CREAM, "", HORIZONTAL_ALIGNMENT_LEFT)
+		var text := Retro.label(ANSWER_SIZE, Retro.CREAM, "", HORIZONTAL_ALIGNMENT_LEFT)
 		text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		texts.add_child(text)
 		_grid.add_child(card)
@@ -194,9 +200,14 @@ func _init() -> void:
 func show_question(state: Dictionary) -> void:
 	var phase: String = state.phase
 	if phase != _last_phase:                       # a new step: fade it in
+		if phase == "question" and _last_phase == "read":
+			for l in _answer_labels:                # same slide: only the answers fade in
+				l.modulate.a = 0.0
+				l.create_tween().tween_property(l, "modulate:a", 1.0, 0.5)
+		else:
+			_content.modulate.a = 0.0
+			create_tween().tween_property(_content, "modulate:a", 1.0, 0.35)
 		_last_phase = phase
-		_content.modulate.a = 0.0
-		create_tween().tween_property(_content, "modulate:a", 1.0, 0.35)
 	var watching := phase == "video"
 	var slide := phase in ["timeup", "answers", "reveal"]
 	var players: Array = state.players
@@ -206,8 +217,8 @@ func show_question(state: Dictionary) -> void:
 	_meta.visible = not meta.is_empty()
 
 	_q_panel.visible = not slide
-	_grid.visible = phase == "question"
-	_bar.visible = phase == "question"
+	_grid.visible = phase in ["read", "question"]
+	_bar.visible = phase in ["read", "question"]
 	_status.visible = phase in ["question", "video"]
 	_answered.visible = phase == "question"
 	_slide.visible = slide
@@ -218,15 +229,15 @@ func show_question(state: Dictionary) -> void:
 
 	# question slides: video / read / question
 	_question.text = state.question
-	_media.texture = state.video
-	_media.visible = state.video != null
-	_media.size_flags_stretch_ratio = 3.0 if watching else 1.2
+	_media.texture = state.get("media", state.video)
+	_media.visible = _media.texture != null
+	_media.size_flags_stretch_ratio = 3.0 if watching else 0.9
 	_body.text = state.text
 	_body.add_theme_color_override("font_color", Retro.CREAM.darkened(0.15))
 	_body.visible = not watching and _body.text != ""
 	var big := _media.visible or _body.visible
-	_q_panel.size_flags_stretch_ratio = 1.25 if big else 1.0
-	_fit(_text_area, [_question, _body], [96, 56] if phase == "read" else ([70, 46] if not watching else [52, 46]))
+	_q_panel.size_flags_stretch_ratio = 1.15 if big else 1.0
+	_fit(_text_area, [_question, _body], [Q_SIZE, BODY_SIZE] if not watching else [48, BODY_SIZE])
 	var alive := players.filter(func(p): return not p.dead).size()
 	var answered := players.filter(func(p): return not p.dead and p.answer >= 0).size()
 
@@ -239,15 +250,20 @@ func show_question(state: Dictionary) -> void:
 		_status.text = "BEKIJK DE VIDEO  ▸  DAARNA KIES JE HET ANTWOORD"
 		_status.add_theme_color_override("font_color", Retro.TEAL)
 		return
-	if phase == "read":
-		return
 	for i in 4:
 		var b: StringName = QuizRound.ANSWER_BUTTONS[i]
 		var col: Color = CyberTile.BUTTON_COLORS[b]
-		_cards[i].add_theme_stylebox_override("panel", Retro.panel(col.darkened(0.82), col, 5, 26, 16))
-		_answer_labels[i].text = state.answers[i]
+		_cards[i].add_theme_stylebox_override("panel", Retro.panel(col.darkened(0.82), col, 4, 18, 10))
+		_answer_labels[i].text = state.answers[i] if phase == "question" else ""
 		_tags[i].text = Retro.BUTTON_NAMES[b]
 		_tags[i].add_theme_color_override("font_color", col)
+	if phase == "read":                            # the buttons, no answers yet
+		_bar.value = 1.0
+		_countdown.visible = false
+		_status.visible = true
+		_status.text = "LEES DE VRAAG  ▸  ZO DADELIJK DE ANTWOORDEN"
+		_status.add_theme_color_override("font_color", Retro.TEAL)
+		return
 	_countdown.symbol = "✔"
 	_fit_answers()
 	var frac := clampf(state.time_left / state.time_total, 0.0, 1.0)
@@ -399,9 +415,9 @@ func _fit_answers() -> void:
 	_fit_keys[_grid] = key
 	var k := 1.0
 	for l in _answer_labels:
-		k = minf(k, _fit_scale(area.size - Vector2(0, 46), [l], [58]))
+		k = minf(k, _fit_scale(area.size - Vector2(0, 34), [l], [ANSWER_SIZE]))
 	for l in _answer_labels:
-		l.add_theme_font_size_override("font_size", int(58 * k))
+		l.add_theme_font_size_override("font_size", int(ANSWER_SIZE * k))
 
 
 func _fit_scale(room: Vector2, labels: Array, sizes: Array) -> float:

@@ -57,6 +57,7 @@ class QuestionIn(BaseModel):
     explanation: str = ""
     video: str = ""
     video_when: str = "before"
+    image: str = ""                          # picture next to the question (data/images/)
     time: float = 0
     active: int = 1
 

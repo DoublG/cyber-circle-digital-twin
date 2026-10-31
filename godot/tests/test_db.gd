@@ -100,6 +100,7 @@ func _ready() -> void:
 	await _until(func(): return not arena.is_playing(bram_tile), 60.0)
 	check(not arena.is_playing(bram_tile), "Bram exterminated, tile free")
 	game.skip()                                     # end the round
+	await _until(func(): return game._lives_shown and not arena.attacks_busy())   # (on the scoreboard)
 	await _wait(1.0)
 	check(arena.tiles[2].health == anna_lives + 1, "streak: Anna +1 life at the end of the round (%d -> %d)" % [anna_lives, arena.tiles[2].health])
 	game.stop_game()                                # end the game: Anna's result with her rank

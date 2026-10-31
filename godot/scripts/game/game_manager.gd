@@ -38,6 +38,7 @@ signal mode_changed(mode: Mode)
 signal game_event(text: String, color: Color)
 signal scores_shown(title: String, subtitle: String, rows: Array)   # the scoreboard after a round
 signal settings_changed
+signal lives_revealed                  # the scoreboard shows the lives changing (+1 / -1 / exterminated)
 
 enum State { LOBBY, INTRO, PLAYING, SCOREBOARD }
 ## Operating mode, set by the operator (web interface -> control server -> MQTT `mode`):
@@ -73,7 +74,8 @@ const GAME_TUNABLES := [
 @export var tempo := 1.0
 @export var intro_time := 7.0
 @export var scoreboard_time := 8.0
-@export var result_time := 10.0        # personal rounds: places + robot attack in the player views first
+@export var result_time := 10.0        # personal rounds: places in the player views first
+@export var lives_delay := 2.5         # s the scoreboard shows before the lives change
 @export var auto_start_delay := 20.0   # seconds after the first player joins; 0 = start manually
 @export var lives := 5                 # lives when the player's age is unknown
 ## Lives depend on age: {up to this age: lives}. Younger players get more
@@ -124,6 +126,8 @@ var _started := {}                     # tile_id -> true once the player has had
 var _life_lost := {}                   # tile_id -> round_number in which they lost a life
 var settings := {}                     # operator values: {"game": {key: v}, "<round type>": {key: v}}
 var _game_defaults := {}
+var _lives_shown := false              # the scoreboard shows the lives after the change
+var _score_seq := 0                    # (a skipped scoreboard stops its own sequence)
 var _sound_defaults := {}
 
 
@@ -330,15 +334,25 @@ func all_questions() -> Array:
 
 ## The chance of each category for the next question (the categories in `pool`):
 ## its weight x (1 + category_drought x questions since it was last asked;
-## never asked: as long as there have been questions, max 10). {category: chance}.
+## never asked: as long as there have been questions, max 10); a category
+## whose questions were all asked is skipped while other ones have new ones
+## (repeats only when nothing new is left).
+## {category: chance}.
 func category_chances(pool: Array) -> Dictionary:
 	var w := {}
+	var fresh := {}                                 # category -> it still has unasked questions
 	for q in pool:
 		var c := str(q.get("category", ""))
+		if not question_memory.asked.has(str(q.get("id", q.get("question", "")))):
+			fresh[c] = true
 		if w.has(c):
 			continue
 		var since: int = question_memory.since.get(c, mini(question_memory.count + 1, 10))
 		w[c] = float(category_weights.get(c, 1.0)) * (1.0 + category_drought * mini(since, 10))
+	if not fresh.is_empty():
+		for c in w:
+			if not fresh.has(c):
+				w[c] = 0.0                          # every question asked already: not while others have new ones
 	var total: float = w.values().reduce(func(a, b): return a + b, 0.0)
 	if total <= 0.0:
 		return {}                                   # every category weight 0
@@ -500,56 +514,96 @@ func _begin_round() -> void:
 	_set_state(State.PLAYING)
 	arena.robot.set_bulb_effect("chase")
 	if current.mode == "personal":
-		screen_wall.show_players(current.make_player_overlay, current.on_tile)
+		screen_wall.show_players(func(id): return current.make_player_overlay(id) if in_round(id) else _waiting_overlay(),
+			current.on_tile)
 	else:
 		screen_wall.set_timer("")
 		screen_wall.show_shared(current.make_shared_view)
 
 
+## The end of a round. Lives only change here, and only on the scoreboard:
+##   (personal rounds: first the places in the player views, result_time)
+##   scoreboard with the lives as they were -> after lives_delay the rows show
+##   the change (+1 / -1 / exterminated) -> the robot gives / takes the lives:
+##   whoever reaches 0 is exterminated (the robot turns and fires, the tile's
+##   death animation, the death clip on their screen; several: all in one
+##   go, the robot turning from one to the next) -> scoreboard_time more, then
+##   the next round. Nothing waits for the animations: they run on top (into
+##   the next round; that player's view stays on the clip).
 func _end_round() -> void:
 	current.finish()
-	_apply_lives(current.life_changes())
+	var changes := _life_plan(current.life_changes())
+	var doomed := changes.keys().filter(func(id): return arena.tiles[id - 1].health + changes[id] <= 0)
+	arena.aim_at_doomed(doomed)                  # the robot turns to the first one already
+	_lives_shown = false
+	_score_seq += 1
+	var seq := _score_seq
 	if db and game_id != 0:
 		var type: String = current.get_script().resource_path.get_file().get_basename().trim_suffix("_round")
 		var rows := current.points.keys().filter(func(id): return arena.is_playing(id)).map(func(id): return {
 			"player_id": arena.player_db_id(id), "tile": id, "points": current.points[id],
-			"score": survived.get(id, 0), "lives": arena.tiles[id - 1].health})
+			"score": survived.get(id, 0),
+			"lives": maxi(arena.tiles[id - 1].health + changes.get(id, 0), 0)})
 		db.save_round(game_id, round_number, type, rows)
 	var best := _ranking(current.points).filter(func(r): return r.delta > 0)
 	best.sort_custom(func(a, b): return a.delta > b.delta)
 	log_event("%s VOORBIJ" % current.title.to_upper() + (
 		" - BESTE: %s (%+d)" % [best[0].name.to_upper(), best[0].delta] if not best.is_empty() else ""), Retro.AMBER)
 	_set_state(State.SCOREBOARD)
-	_timer = scoreboard_time / tempo
+	_timer = INF                                  # held until the lives are done
 	if current.mode == "personal" and result_time > 0.0:
-		# the players still see their own view: places, +1 / -1 life, the
-		# robot's attack on the last places (and an extermination) - then scores
-		_timer += result_time / tempo
-		screen_wall.set_timer("")
+		screen_wall.set_timer("")                 # the players still see their own view: places
 		await get_tree().create_timer(result_time / tempo).timeout
-		if state != State.SCOREBOARD:
+		if state != State.SCOREBOARD or seq != _score_seq:
 			return
-	_show_scores("Scorebord", current.title, current.points)
-	_celebrate_leader()
+	_show_scores("Scorebord", current.title, current.points, changes)
+	await get_tree().create_timer(lives_delay / tempo).timeout
+	if state != State.SCOREBOARD or seq != _score_seq:
+		return
+	_lives_shown = true
+	lives_revealed.emit()
+	_apply_lives(changes)
+	_timer = scoreboard_time / tempo
+	if doomed.is_empty():
+		_celebrate_leader()                       # (else the robot is busy exterminating)
 
 
-## End of a round: lives change by at most 1 (+1: green flash, -1: the robot
-## attacks), and everyone who still has a life survived the round.
-func _apply_lives(changes: Dictionary) -> void:
-	var losers := []
+## End of a round: lives change by at most 1 (max the hearts on the tile), and
+## everyone who will still have a life survived the round. {tile_id: -1 / 0 / +1}.
+func _life_plan(changes: Dictionary) -> Dictionary:
+	var plan := {}
 	for id in current.players:
 		if not arena.is_playing(id) or arena.tiles[id - 1].is_dead:
 			continue
+		var health: int = arena.tiles[id - 1].health
 		var d: int = clampi(changes.get(id, 0), -1, 1)
-		if arena.tiles[id - 1].health + d > 0:
+		if d > 0 and health >= CyberTile.HEART_COUNT:
+			d = 0
+		plan[id] = d
+		if health + d > 0:
 			survived[id] = survived.get(id, 0) + 1
-		if d > 0:
+	return plan
+
+
+## The lives change (on the scoreboard): +1 a green flash, -1 the robot fires
+## (at 0: the extermination).
+func _apply_lives(plan: Dictionary) -> void:
+	var losers := []
+	var doomed := []
+	for id in plan:
+		if not arena.is_playing(id) or arena.tiles[id - 1].is_dead:
+			continue
+		if plan[id] > 0:
 			arena.give_life(id)
-		elif d < 0:
-			losers.append(id)
+		elif plan[id] < 0:
+			if arena.tiles[id - 1].health <= 1:
+				doomed.append(id)
+			else:
+				losers.append(id)
+	arena.exterminate(doomed)                    # all at once, the robot from one to the next
 	if not losers.is_empty():
 		arena.robot_attack(losers)
-	for id in current.players:
+	for id in plan:
 		screen_wall.update_player(id)
 
 
@@ -586,6 +640,18 @@ func on_button(tile_id: int, button: StringName) -> void:
 	if state == State.PLAYING and current and tile_id in current.players:
 		if not arena.tiles[tile_id - 1].is_dead:
 			current.button(tile_id, button)
+
+
+## Playing in the current round (not: joined during it - they wait for the
+## scoreboard, where new players come in).
+func in_round(tile_id: int) -> bool:
+	return current != null and tile_id in current.players
+
+
+func _waiting_overlay() -> Control:
+	var line := StatusLine.new()
+	line.source = func(): return "WACHT OP DE VOLGENDE RONDE"
+	return line
 
 
 ## Called by the arena when a tile reports a result of its own logic.
@@ -773,15 +839,20 @@ func _alive_players() -> Array:
 ## The players in the game, best first: most rounds survived, then most lives,
 ## then most points. [{name, tile, survived, lives, score, delta (this round's
 ## points), out, record, rank}]
-func _ranking(round_points: Dictionary) -> Array:
+## changes: this round's lives change {tile_id: -1 / 0 / +1} - "lives" is the
+## number after it, "lives_before" before; "out" = exterminated (after it).
+func _ranking(round_points: Dictionary, changes := {}) -> Array:
 	var rows := []
 	for id in scores:
 		if not arena.is_playing(id):
 			continue
+		var before: int = arena.lives_after_hits(id)
+		var after: int = maxi(before + int(changes.get(id, 0)), 0)
 		rows.append({"name": arena.player_name(id), "tile": id, "survived": survived.get(id, 0),
-			"lives": arena.lives_after_hits(id), "score": scores[id],
-			"delta": round_points.get(id, 0), "out": arena.tiles[id - 1].is_dead or arena.lives_after_hits(id) == 0,
-			"record": record(id), "rank": overall_rank(id)})
+			"lives": after, "lives_before": before, "change": changes.get(id, 0), "score": scores[id],
+			"delta": round_points.get(id, 0), "out": arena.tiles[id - 1].is_dead or after == 0,
+			"was_out": arena.tiles[id - 1].is_dead, "record": record(id), "rank": overall_rank(id),
+			"new": state == State.SCOREBOARD and current != null and id not in current.players})
 	rows.sort_custom(func(a, b):
 		if a.survived != b.survived:
 			return a.survived > b.survived
@@ -791,12 +862,21 @@ func _ranking(round_points: Dictionary) -> Array:
 	return rows
 
 
-func _show_scores(title: String, subtitle: String, round_points: Dictionary) -> void:
-	var rows := _ranking(round_points)
+func _show_scores(title: String, subtitle: String, round_points: Dictionary, changes := {}) -> void:
+	var rows := _ranking(round_points, changes)
 	screen_wall.set_timer("")
-	screen_wall.show_shared(func():
+	screen_wall.show_shared(func():               # (also rebuilt when a player joins / leaves)
 		var v := ScoreboardView.new()
-		v.show_scores(title, subtitle, rows)
+		var shown := rows.duplicate()
+		var listed := rows.map(func(r): return r.tile)
+		for id in arena.player_ids():               # new players come in here: at the bottom
+			if id not in listed and not arena.tiles[id - 1].is_dead:
+				var h: int = arena.tiles[id - 1].health
+				shown.append({"name": arena.player_name(id), "tile": id, "survived": 0, "lives": h,
+					"lives_before": h, "change": 0, "score": 0, "delta": 0, "out": false, "was_out": false,
+					"record": record(id), "rank": overall_rank(id), "new": true})
+		v.show_scores(title, subtitle, shown, _lives_shown)
+		lives_revealed.connect(v.reveal_lives)
 		return v)
 	scores_shown.emit(title, subtitle, rows)
 	arena.sound.play(&"scoreboard")

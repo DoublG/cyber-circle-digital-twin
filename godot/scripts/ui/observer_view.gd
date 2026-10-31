@@ -105,7 +105,27 @@ func _ready() -> void:
 	col.add_child(feed)
 	wall.arena.game.game_event.connect(_on_event)
 	wall.arena.game.scores_shown.connect(_show_board)
+	wall.arena.exterminated.connect(_exterminated_popup)
 	_update()
+
+
+## Over the floating camera: who was just exterminated (several stack up).
+func _exterminated_popup(_tile_id: int, player: String) -> void:
+	var l := Retro.label(76, Retro.CREAM, "☠  %s GEËXTERMINEERD  ☠" % player.to_upper())
+	l.add_theme_stylebox_override("normal", Retro.panel(Color(0.35, 0.0, 0.0, 0.92), Retro.BAD, 6, 16, 34))
+	l.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+	l.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	var shown := get_children().filter(func(c): return c.has_meta(&"doom_popup")).size()
+	l.offset_top = 340 + shown * 130
+	l.set_meta(&"doom_popup", true)
+	add_child(l)
+	l.pivot_offset = Vector2(500, 50)
+	l.scale = Vector2(1.5, 1.5)
+	var tw := l.create_tween()
+	tw.tween_property(l, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(3.5)
+	tw.tween_property(l, "modulate:a", 0.0, 0.8)
+	tw.tween_callback(l.queue_free)
 
 
 ## The round's scoreboard, over the rules, players and events.
@@ -117,7 +137,8 @@ func _show_board(title: String, subtitle: String, rows: Array) -> void:
 	_board.offset_top = 150
 	_board.offset_bottom = -40
 	add_child(_board)
-	_board.show_scores(title, subtitle, rows)
+	_board.show_scores(title, subtitle, rows, false)
+	wall.arena.game.lives_revealed.connect(_board.reveal_lives)
 	for c in _under:
 		c.visible = false
 
@@ -153,6 +174,8 @@ func _update() -> void:
 			_status.text = "SCOREBORD"
 	if _board and (game.state != GameManager.State.SCOREBOARD or game.mode != GameManager.Mode.OPEN):
 		_hide_board()
+	if _board:                     # an extermination: the board steps aside for the robot
+		_board.visible = arena.dying.is_empty()
 	var ranking := game.overall_ranking()
 	if int(_page_t / page_time) % 2 == 1 and not ranking.is_empty():
 		_rules_title.text = "RANGLIJST - MEESTE RONDES OVERLEEFD"

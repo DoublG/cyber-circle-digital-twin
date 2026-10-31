@@ -84,12 +84,15 @@ var _cable_mats: Array[ShaderMaterial] = []   # index = tile_id - 1
 var _packets: Array[Dictionary] = []          # {tile, pos, color, on_arrive}
 signal registered(tile_id: int, player: String, color: Color)  # e.g. to tell the app the tile
 signal activated(tile_id: int, player: String)
+signal exterminated(tile_id: int, player: String)   # the robot's shot hit: the death animation starts
 signal tile_message(tile_id: int, msg: Dictionary)  # to the real tile (e.g. via MQTT)
 
 var _players := {}                            # tile_id -> {name} (activated)
 var _pending := {}                            # tile_id -> {name, color, time_left} (registered)
 var _demo_idle := 0.0                          # --demo-idle
 var _hits_on_way := {}                        # tile_id -> shots that will cost a life, not landed yet
+var _attacks := 0                             # robot attacks under way (charging, shots flying)
+var dying := {}                               # tile_id -> msec its death clip started (0: not yet) during the extermination
 var _disabled := {}                           # tile_id -> true: out of service (not in the game)
 
 
@@ -339,8 +342,10 @@ func robot_attack(tile_ids: Array, color := Color(1.0, 0.1, 0.05), shielded: Arr
 		robot.look_at_side(targets[0] - 1)
 		while not robot.is_facing_target():
 			await get_tree().process_frame
+	_attacks += 1
 	sound.play(&"charge")
 	await robot.charge_attack(targets.map(func(id): return id - 1), color)
+	get_tree().create_timer(3.0).timeout.connect(func(): _attacks -= 1)   # (the shots land in ~1-2 s)
 	if not tile_ids.is_empty():
 		game.log_event("ROBOT RAAKT " + ", ".join(tile_ids.map(func(id): return player_name(id).to_upper())), Retro.BAD)
 	for id in shielded:
@@ -362,6 +367,44 @@ func robot_attack(tile_ids: Array, color := Color(1.0, 0.1, 0.05), shielded: Arr
 				elif damage:                    # max 1 life per round: this hit is free
 					screen_wall.popup(id, "♥ VEILIG", CyberTile.SHIELD_COLOR)
 		send_packet(id, color, on_arrive, false)
+
+
+## Length of the death clip in s (to time the free tile; 4 without a clip).
+func death_clip_length() -> float:
+	if not ResourceLoader.exists(death_clip):
+		return 4.0
+	var p := VideoStreamPlayer.new()
+	p.stream = load(death_clip)
+	var length := p.get_stream_length()
+	p.free()
+	return length if length > 0.0 else 4.0
+
+
+## The end of a round: these players will be exterminated (their lives reach 0
+## on the scoreboard). The robot already turns to the first one and waits.
+func aim_at_doomed(tile_ids: Array) -> void:
+	if not tile_ids.is_empty():
+		robot.lock_on(int(tile_ids[0]) - 1)
+
+
+## The exterminations of a round, all at once (the scoreboard shows them):
+## every doomed tile blinks red, the robot fires at the first, and while its
+## death animation plays it turns to the next one, and so on (CyberRobot's
+## death queue). Nothing waits for it: the game goes on, this runs on top.
+func exterminate(tile_ids: Array) -> void:
+	var any := false
+	for id in tile_ids:
+		if is_playing(id) and not tiles[id - 1].is_dead:
+			game.take_life(id)
+			tiles[id - 1].health = 0          # -> died -> _on_tile_died (queued on the robot)
+			any = true
+	if not any and not tile_ids.is_empty():
+		robot.release_head()                  # (aimed, but they left in the meantime)
+
+
+## An attack under way or a shot on its way (the scoreboard waits for it).
+func attacks_busy() -> bool:
+	return _attacks > 0 or _hits_on_way.values().any(func(n): return n > 0)
 
 
 ## The lives a player will have once the robot's shots on the way have landed
@@ -573,15 +616,24 @@ func _on_tile_died(tile_id: int) -> void:
 	var who := player_name(tile_id)
 	game.log_event("%s IS GEËXTERMINEERD!" % who.to_upper(), Retro.BAD)
 	sound.play(&"death")
+	dying[tile_id] = 0
+	if dying.size() == 1:                        # the overview drifts over to watch
+		observer.focus(tile.global_position, 9.0)
+	else:                                        # several: a wide view on the robot
+		observer.focus(Vector3.ZERO, 9.0 + dying.size() * 1.5)
 	tile.blink_doomed()
 	robot.queue_death(tile_id - 1, tile.global_position + Vector3(0, 0.05, 0), func():
 		set_cable_flow(tile_id, Color(0.6, 0.0, 0.0), 0.25)
 		_death_sounds()
-		var clip := screen_wall.play_clip(tile_id, death_clip)   # the movie in their view
+		dying[tile_id] = Time.get_ticks_msec()
+		exterminated.emit(tile_id, who)
+		screen_wall.play_clip(tile_id, death_clip)   # the movie in their (split screen) view
+		var clip := death_clip_length()            # (shown later when the screens switch to it)
 		var started := Time.get_ticks_msec()
 		await tile.play_death()
 		var left := clip - (Time.get_ticks_msec() - started) / 1000.0
 		await get_tree().create_timer(maxf(free_delay, left)).timeout
+		dying.erase(tile_id)
 		if player_name(tile_id) == who:            # still the same player
 			leave(tile_id)
 			game.log_event("T%02d IS WEER VRIJ" % tile_id, Retro.DIM))

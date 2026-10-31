@@ -11,7 +11,7 @@ import threading
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCHEMA = os.path.join(HERE, "..", "godot", "data", "schema.sql")
 QUESTION_FIELDS = ("slug", "category", "min_age", "max_age", "question", "text", "answer1", "answer2",
-                   "answer3", "answer4", "correct", "explanation", "video", "video_when", "time", "active")
+                   "answer3", "answer4", "correct", "explanation", "video", "video_when", "image", "time", "active")
 
 
 class Database:
@@ -24,6 +24,10 @@ class Database:
         self.con.execute("PRAGMA foreign_keys = ON")
         with open(SCHEMA, encoding="utf-8") as f:
             self.con.executescript(f.read())
+        cols = {r["name"] for r in self.con.execute("PRAGMA table_info(questions)")}
+        if "image" not in cols:                  # databases from before the picture column
+            self.con.execute("ALTER TABLE questions ADD COLUMN image TEXT NOT NULL DEFAULT ''")
+            self.con.commit()
 
     def _all(self, sql, args=()):
         with self.lock:
@@ -92,7 +96,7 @@ class Database:
         q = {"id": r["slug"] or str(r["id"]), "category": r["category"], "min_age": r["min_age"],
              "max_age": r["max_age"], "question": r["question"],
              "answers": [r["answer1"], r["answer2"], r["answer3"], r["answer4"]], "correct": r["correct"]}
-        for key in ("text", "explanation", "video"):
+        for key in ("text", "explanation", "video", "image"):
             if r[key]:
                 q[key] = r[key]
         if r["video"]:
@@ -158,7 +162,8 @@ class Database:
                    "min_age": q.get("min_age", 0), "max_age": q.get("max_age", 99), "question": q["question"],
                    "text": q.get("text", ""), "answer1": a[0], "answer2": a[1], "answer3": a[2], "answer4": a[3],
                    "correct": q["correct"], "explanation": q.get("explanation", ""), "video": q.get("video", ""),
-                   "video_when": q.get("video_when", "before"), "time": q.get("time", 0), "active": 1}
+                   "video_when": q.get("video_when", "before"), "image": q.get("image", ""),
+                   "time": q.get("time", 0), "active": 1}
             existing = self._one("SELECT id FROM questions WHERE slug = ?", (row["slug"],))
             self.save_question(row, existing["id"] if existing else None)
         return len(items)

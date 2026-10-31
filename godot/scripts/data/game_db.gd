@@ -36,6 +36,9 @@ func open(path: String) -> bool:
 	for statement in "\n".join(lines).split(";"):
 		if statement.strip_edges() != "":
 			_db.query(statement)
+	_db.query("PRAGMA table_info(questions)")
+	if not _db.query_result.any(func(c): return c.name == "image"):   # from before the picture column
+		_db.query("ALTER TABLE questions ADD COLUMN image TEXT NOT NULL DEFAULT ''")
 	return true
 
 
@@ -52,7 +55,7 @@ func questions() -> Array:
 		var q := {"id": r.slug if r.slug else str(r.id), "category": r.category,
 			"min_age": r.min_age, "max_age": r.max_age, "question": r.question,
 			"answers": [r.answer1, r.answer2, r.answer3, r.answer4], "correct": r.correct}
-		for key in ["text", "explanation", "video"]:
+		for key in ["text", "explanation", "video", "image"]:
 			if str(r[key]) != "":
 				q[key] = r[key]
 		if str(r.video) != "":
@@ -86,10 +89,10 @@ func add_player(name: String, color: String, age := 0) -> int:
 func add_question(q: Dictionary) -> void:
 	var a: Array = q.answers
 	_run("INSERT INTO questions (slug, category, min_age, max_age, question, text, answer1, answer2,"
-		+ " answer3, answer4, correct, explanation, video, video_when, time) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+		+ " answer3, answer4, correct, explanation, video, video_when, image, time) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
 		[q.get("id", null), q.get("category", ""), q.get("min_age", 0), q.get("max_age", 99), q.question,
 		q.get("text", ""), a[0], a[1], a[2], a[3], q.correct, q.get("explanation", ""), q.get("video", ""),
-		q.get("video_when", "before"), q.get("time", 0)])
+		q.get("video_when", "before"), q.get("image", ""), q.get("time", 0)])
 
 
 ## Rows of any query (tests, tools).

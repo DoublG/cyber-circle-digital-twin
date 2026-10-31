@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480">
+  <rect width="640" height="480" fill="#120e0b"/>
+  <g transform="rotate(-18 320 250)">
+    <rect x="150" y="190" width="300" height="120" rx="22" fill="#2c6fd6" stroke="#9cc2ff" stroke-width="6"/>
+    <rect x="450" y="210" width="90" height="80" rx="6" fill="#c9ccd1" stroke="#ffffff" stroke-width="4"/>
+    <rect x="478" y="228" width="22" height="16" fill="#3a3f47"/>
+    <rect x="478" y="258" width="22" height="16" fill="#3a3f47"/>
+    <circle cx="190" cy="250" r="14" fill="#120e0b" stroke="#9cc2ff" stroke-width="4"/>
+    <rect x="230" y="222" width="170" height="56" rx="8" fill="#e8eef8"/>
+    <text x="315" y="262" font-family="monospace" font-size="34" font-weight="bold" fill="#2c3440" text-anchor="middle">16 GB</text>
+  </g>
+  <text x="520" y="140" font-family="sans-serif" font-size="150" font-weight="bold" fill="#ffbd38" text-anchor="middle">?</text>
+  <text x="320" y="440" font-family="monospace" font-size="30" fill="#8c7a66" text-anchor="middle">gevonden op de speelplaats</text>
+</svg>

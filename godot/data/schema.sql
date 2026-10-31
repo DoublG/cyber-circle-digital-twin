@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS questions (
     explanation TEXT    NOT NULL DEFAULT '',
     video       TEXT    NOT NULL DEFAULT '', -- file in godot/data/videos/ (or absolute path)
     video_when  TEXT    NOT NULL DEFAULT 'before',
+    image       TEXT    NOT NULL DEFAULT '', -- picture next to the question: file in godot/data/images/ (or absolute path)
     time        REAL    NOT NULL DEFAULT 0,  -- seconds to answer, 0 = game default
     active      INTEGER NOT NULL DEFAULT 1
 );

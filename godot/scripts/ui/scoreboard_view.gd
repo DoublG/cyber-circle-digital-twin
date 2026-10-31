@@ -3,16 +3,22 @@ extends Control
 ## Ranking shown on all screens after every round: the players in the game by
 ## rounds survived, with this round's points, lives, their record (most rounds
 ## survived ever) and overall place.
-## rows: [{name, tile, survived, lives, delta, out, record, rank}] sorted best first.
+## rows: [{name, tile, survived, lives, delta, out, record, rank}] sorted best first;
+## with this round's lives change also {lives_before, change, was_out}: the
+## rows first show the lives as they were, reveal_lives() shows the change
+## (+1 green, -1 red, 0 lives: GEËXTERMINEERD).
 
 const MAX_ROWS := 13
+
+var _rows := []                  # [{data, panel, name, lives}]
 
 
 func _init() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 
 
-func show_scores(title: String, subtitle: String, rows: Array) -> void:
+func show_scores(title: String, subtitle: String, rows: Array, revealed := true) -> void:
+	_rows.clear()
 	for c in get_children():
 		c.queue_free()
 	add_child(Retro.background())
@@ -38,16 +44,21 @@ func show_scores(title: String, subtitle: String, rows: Array) -> void:
 	list.add_child(_row(px, Retro.DIM, ["#", "SPELER", "TEGEL", "PUNTEN", "LEVENS", "RONDES", "RECORD", "PLAATS"], null))
 	for i in n:
 		var r: Dictionary = rows[i]
-		var col := Retro.BG if i == 0 else (Retro.DIM if r.out else Retro.CREAM)
+		var out: bool = r.out if revealed else r.get("was_out", r.out)
+		var col := Retro.BG if i == 0 else (Retro.DIM if out else Retro.CREAM)
 		var style: StyleBoxFlat
 		if i == 0:
 			style = Retro.panel(Retro.AMBER, Retro.CREAM, 3, 14, 20)
-		elif r.out:
+		elif out:
 			style = Retro.panel(Color(0.06, 0.06, 0.06), Color(0.2, 0.2, 0.2), 2, 14, 20)
 		else:
 			style = Retro.panel(Retro.PANEL, Retro.ORANGE.darkened(0.35), 2, 14, 20)
-		var cells := ["%02d" % (i + 1), r.name.to_upper() + ("  [UIT]" if r.out else ""),
-			"T%02d" % r.tile, "%+d" % r.delta, "♥".repeat(r.get("lives", 0)), str(r.get("survived", 0)),
+		var lives: int = r.get("lives", 0) if revealed else r.get("lives_before", r.get("lives", 0))
+		if r.get("new", false):
+			style = Retro.panel(Color(0.02, 0.16, 0.15), Retro.TEAL, 3, 14, 20)
+		var cells := ["%02d" % (i + 1) if not r.get("new", false) else "+",
+			r.name.to_upper() + ("  [UIT]" if out else ("  NIEUW!" if r.get("new", false) else "")),
+			"T%02d" % r.tile, "%+d" % r.delta if not r.get("new", false) else "", "♥".repeat(lives), str(r.get("survived", 0)),
 			str(r.get("record", 0)), "#%d" % r.rank if r.get("rank", 0) > 0 else "-"]
 		var row := _row(px, col, cells, style)
 		if i != 0 and not r.out:  # colour the round points, lives, rounds and place
@@ -57,6 +68,95 @@ func show_scores(title: String, subtitle: String, rows: Array) -> void:
 			h.get_child(5).add_theme_color_override("font_color", Retro.AMBER)
 			h.get_child(7).add_theme_color_override("font_color", Retro.TEAL)
 		list.add_child(row)
+		_rows.append({"data": r, "panel": row, "name": row.get_child(0).get_child(1),
+			"lives": row.get_child(0).get_child(4)})
+		if revealed and r.get("out") and not r.get("was_out", true):
+			_mark_exterminated(_rows.back())
+		if r.get("new", false):                    # welcome: slides in, teal glow
+			row.get_child(0).get_child(1).add_theme_color_override("font_color", Retro.TEAL)
+			row.modulate.a = 0.0
+			var tw := row.create_tween()
+			tw.tween_property(row, "modulate:a", 1.0, 0.6)
+			tw.tween_property(row, "modulate", Color(1.4, 1.4, 1.4), 0.3)
+			tw.tween_property(row, "modulate", Color.WHITE, 0.4)
+	if revealed:
+		_banner_if_exterminated()
+
+
+## (rebuilt after the change, e.g. a player joined: the banner again)
+func _banner_if_exterminated() -> void:
+	var names := _rows.filter(func(e): return e.data.out and not e.data.get("was_out", true)) \
+		.map(func(e): return e.data.name.to_upper())
+	if not names.is_empty():
+		_exterminate_banner(names)
+
+
+## The lives change: hearts +1 (green) / -1 (red), 0 lives: GEËXTERMINEERD
+## (the row turns red and blinks, a big banner over the board, a red flash).
+func reveal_lives() -> void:
+	var doomed := []
+	for e in _rows:
+		if e.data.get("change", 0) < 0 and e.data.lives == 0 and not e.data.get("was_out", false):
+			doomed.append(e.data.name.to_upper())
+	if not doomed.is_empty():
+		_exterminate_banner(doomed)
+	for e in _rows:
+		var r: Dictionary = e.data
+		var d: int = r.get("change", 0)
+		if d == 0 or r.get("was_out", false):
+			continue
+		var lives: Label = e.lives
+		lives.text = "♥".repeat(r.lives) + ("+" if d > 0 else "")
+		lives.add_theme_color_override("font_color", Retro.GOOD if d > 0 else Retro.BAD)
+		var tw := lives.create_tween()
+		lives.pivot_offset = lives.size / 2.0
+		tw.tween_property(lives, "scale", Vector2(1.5, 1.5), 0.15)
+		tw.tween_property(lives, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK)
+		if r.lives == 0:
+			_mark_exterminated(e)
+
+
+func _exterminate_banner(names: Array) -> void:
+	var flash := ColorRect.new()                   # the whole board flashes red
+	flash.color = Color(1.0, 0.05, 0.0, 0.55)
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(flash)
+	var ft := flash.create_tween()
+	ft.tween_property(flash, "color:a", 0.0, 0.6)
+	ft.tween_callback(flash.queue_free)
+	var banner := PanelContainer.new()
+	banner.add_theme_stylebox_override("panel", Retro.panel(Color(0.35, 0.0, 0.0), Retro.BAD, 8, 18, 30))
+	banner.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)   # over the title: the rows stay readable
+	banner.anchor_left = 0.04
+	banner.anchor_right = 0.96
+	banner.offset_left = 0
+	banner.offset_right = 0
+	banner.offset_top = 24
+	var v := VBoxContainer.new()
+	banner.add_child(v)
+	v.add_child(Retro.label(84, Retro.CREAM, "☠  GEËXTERMINEERD  ☠"))
+	v.add_child(Retro.label(56, Retro.AMBER, "  ·  ".join(names)))
+	add_child(banner)
+	banner.pivot_offset = Vector2(900, 120)
+	banner.scale = Vector2(1.6, 1.6)
+	banner.modulate.a = 0.0
+	var tw := banner.create_tween()
+	tw.tween_property(banner, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(banner, "modulate:a", 1.0, 0.2)
+	var pulse := banner.create_tween().set_loops()
+	pulse.tween_property(banner, "self_modulate", Color(1.5, 0.6, 0.6), 0.3)
+	pulse.tween_property(banner, "self_modulate", Color.WHITE, 0.3)
+
+
+func _mark_exterminated(e: Dictionary) -> void:
+	e.name.text = e.data.name.to_upper() + "  GEËXTERMINEERD"
+	e.name.add_theme_color_override("font_color", Retro.BG)
+	e.lives.text = "-"
+	e.panel.add_theme_stylebox_override("panel", Retro.panel(Retro.BAD, Retro.CREAM, 3, 14, 20))
+	var tw: Tween = e.panel.create_tween().set_loops(4)
+	tw.tween_property(e.panel, "modulate:a", 0.35, 0.18)
+	tw.tween_property(e.panel, "modulate:a", 1.0, 0.18)
 
 
 ## One table row; widths are fixed so the columns line up without a grid.

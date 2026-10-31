@@ -35,6 +35,7 @@ var _model: Node3D
 var _target_yaw := 0.0
 var _has_target := false
 var _hold := 0.0
+var _locked := false             # lock_on: keep facing the target until the next action
 var _plunger_parts: Array[Node3D] = []  # Eye_Tip, Eye_Lens, Eye_Fins: kick back when firing
 var _hits := 0                          # hit animations running
 var _head_locked := false               # an animation drives the head directly
@@ -113,7 +114,7 @@ func _process(delta: float) -> void:
 		head.rotation.y += clampf(diff, -step, step)
 		if absf(diff) < 0.01:
 			_hold += delta
-			if hold_after_target >= 0.0 and _hold > hold_after_target:
+			if hold_after_target >= 0.0 and _hold > hold_after_target and not _locked:
 				_has_target = false
 	elif not (_anim and _anim.is_playing()):
 		head.rotation.y = wrapf(head.rotation.y - deg_to_rad(idle_spin_deg) * delta, -PI, PI)
@@ -193,8 +194,16 @@ func look_at_point(global_point: Vector3) -> void:
 	_hold = 0.0
 
 
+## Turn to a side and stay on it (e.g. the first one to be exterminated,
+## while the scores come up) until release_head() or the death queue.
+func lock_on(side: int) -> void:
+	look_at_side(side)
+	_locked = true
+
+
 func release_head() -> void:
 	_has_target = false
+	_locked = false
 
 
 ## Plays the baked "HeadSpin" or "HeadScan" animation from the glb.
@@ -420,6 +429,7 @@ func play_death(side: int, global_target = null) -> void:
 
 func _run_deaths() -> void:
 	_death_running = true
+	_locked = false
 	var prev_effect := bulb_effect
 	var prev_hold := hold_after_target
 	hold_after_target = -1.0  # stay locked on each victim

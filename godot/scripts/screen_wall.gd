@@ -114,8 +114,12 @@ func set_timer(text: String) -> void:
 ## important part in the centre 55%, then they work in every split (wide view,
 ## half, narrow third). Returns its length in seconds (0 when the player has
 ## no view or the file is missing).
-func play_clip(tile_id: int, path: String) -> float:
-	if not _huds.has(tile_id) or not ResourceLoader.exists(path):
+## Only in the players' own (split screen) views - never over a shared screen
+## (scoreboard, intro, quiz): then nothing, and it plays (from where it would
+## be) once the screens show the players' views again.
+## from: s into the clip (the screens were rebuilt while it played).
+func play_clip(tile_id: int, path: String, from := 0.0) -> float:
+	if _mode == "shared" or not _huds.has(tile_id) or not ResourceLoader.exists(path):
 		return 0.0
 	var cell: Control = _huds[tile_id].cell
 	var player := VideoStreamPlayer.new()
@@ -136,6 +140,8 @@ func play_clip(tile_id: int, path: String) -> float:
 	_huds[tile_id]["clip"] = true         # the clip says it all: hide the big status label
 	update_player(tile_id)
 	player.play()
+	if from > 0.0:
+		player.stream_position = from
 	view.texture = player.get_video_texture()
 	var length := player.get_stream_length()
 	if length <= 0.0:
@@ -143,7 +149,7 @@ func play_clip(tile_id: int, path: String) -> float:
 	player.finished.connect(func():
 		back.queue_free()
 		player.queue_free())
-	return length
+	return length - from
 
 
 ## Floating text (e.g. "+3") over one player's view.
@@ -199,6 +205,11 @@ func refresh() -> void:
 			screen.add_child(banner)
 	for id in _huds:
 		update_player(id)
+	for id in arena.dying:                        # an extermination still playing: its clip
+		if arena.dying[id] > 0 and arena.is_playing(id) and _mode != "shared":
+			var at: float = (Time.get_ticks_msec() - int(arena.dying[id])) / 1000.0
+			if at < arena.death_clip_length() - 0.5:
+				play_clip(id, arena.death_clip, at)
 
 
 ## The timer, top-right on every screen (no player's plate is there).
@@ -249,7 +260,8 @@ func _player_view(tile_id: int) -> Control:
 	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cell.add_child(hud)
 	cell.resized.connect(func(): _fit_hud(cell, hud))
-	if _look_down:
+	if _look_down and not tile.is_dead and not arena.dying.has(tile_id) and arena.game.in_round(tile_id):
+		# (dying, or waiting for the next round: the view stays on the robot)
 		var tile_view := Transform3D(Basis(), eye).looking_at(
 			tile.global_position + to_robot * tile_look_ahead, robot_view.basis.y)
 		var cam: Camera3D = cell.get_meta(&"camera")

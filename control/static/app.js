@@ -216,7 +216,7 @@ let questions = [];
 async function loadQuestions() {
   questions = await api("GET", "/api/questions/all");
   $("#questions tbody").innerHTML = questions.map(q => `<tr><td>${q.id}</td><td>${esc(q.category)}</td>
-    <td>${q.min_age}–${q.max_age}</td><td>${esc(q.question)}${q.video ? " 🎬" : ""}</td>
+    <td>${q.min_age}–${q.max_age}</td><td>${esc(q.question)}${q.video ? " 🎬" : ""}${q.image ? " 🖼" : ""}</td>
     <td>${q.active ? "ja" : "nee"}</td><td><button class="small" data-qid="${q.id}">Bewerk</button></td></tr>`).join("");
 }
 function openQuestion(q) {

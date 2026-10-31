@@ -70,7 +70,11 @@ func _ready() -> void:
 	var lives := {}
 	for id in [1, 2, 5, 9]:
 		lives[id] = arena.tiles[id - 1].health
-	await _wait(4.0)                                 # end of the round: lives
+	await _until(func(): return game.state == GameManager.State.SCOREBOARD)
+	await _wait(1.0)
+	check([1, 2, 5, 9].all(func(id): return arena.tiles[id - 1].health == lives[id]), "places first: lives unchanged until the scoreboard")
+	await _until(func(): return game._lives_shown and not arena.attacks_busy(), 30.0)   # the scoreboard: lives
+	await _wait(1.0)
 	check(arena.tiles[4].health == lives[5] - 1, "last place (Cleo): -1 life")
 	var best: int = piet.points.values().max()
 	var firsts := [1, 2, 9].filter(func(id): return piet.points[id] == best)

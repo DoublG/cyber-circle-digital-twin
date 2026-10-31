@@ -211,13 +211,22 @@ X-GNOME-Autostart-enabled=true
 3. 20 s after the first activation the rounds start by themselves
    (`auto_start_delay`). **Rounds keep coming** as long as there are players:
    intro → round → (personal rounds: places in the players' own views) →
-   scores → next round. New players join from the next round.
-4. **Lives change only at the end of a round, by at most 1:**
+   scoreboard → next round. Someone who joins during a round **waits** ("WACHT
+   OP DE VOLGENDE RONDE", their view stays on the robot); the scoreboard is
+   where new players come in (row **NIEUW!**) and they play from the next round.
+4. **Lives change only on the scoreboard after a round, by at most 1:**
    personal rounds – 1st place +1, last place −1; quiz – a wrong or missing
    answer −1 (never more than one), and every 10 right answers in a row (over
-   rounds) +1. Max 5 lives. At 0 lives a player is **exterminated**: the tile
-   blinks red, the robot turns and fires, the tile is electrocuted and
-   explodes, the player's screen plays the death clip, the tile is free again.
+   rounds) +1. Max 5 lives. During a round the robot's shots are harmless.
+   The scoreboard first shows the lives as they were; after `lives_delay`
+   (2.5 s) the rows show the change (+♥ green, −♥ red) and the robot gives /
+   takes the lives. At 0 a player is **exterminated** – very visible: a big
+   red GEËXTERMINEERD banner over the scoreboard, their row red and blinking,
+   the death clip over the scoreboard on their screen; the overview steps the
+   board aside and drifts over to watch the robot turn and fire and the tile
+   get electrocuted and explode. The next round may already start: the
+   extermination runs on in parallel (that player's view stays on the clip and
+   does not tilt down), then the tile is free again.
 5. When the last player is gone the game idles again. **Stop spel** ends it
    at once. Every play is saved.
 
@@ -404,7 +413,11 @@ or a new master continues in the same mode.
   choose the master here.
 * **Spelers** – search / add players, assign one to a tile.
 * **Vragen** – add / edit / hide questions (answer 1–4 = square, triangle,
-  cross, circle; ages; video; explanation).
+  cross, circle; ages; video; a picture next to the question – a file in
+  `godot/data/images/`, `.png`/`.jpg`/`.webp`/`.svg`; explanation). On the
+  screen a question goes: the question with the 4 buttons (no answers yet,
+  *Leestijd*) → the answers fade in and the countdown runs → TIJD OM → everyone's
+  icon → who was right.
 * **Ranglijst** – the overall ranking (highest score per player).
 * **Instellingen** – times, speeds and points, per group: *Spel* (tempo,
   intro / result / scoreboard time, start delay, lives by age, the streak for

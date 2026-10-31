@@ -27,9 +27,12 @@ extends GameRound
 ##   "video_when":  "before" (default): the video plays first, full width, and
 ##                  answering starts when it ends; "during": it loops next to
 ##                  the question while players answer
+##   "image":       a picture next to the question (.png / .jpg / .webp): a
+##                  name in data/images/, a res:// path or an absolute path
 
 const QUESTIONS_FILE := "res://data/questions.json"
 const VIDEO_DIR := "res://data/videos/"
+const IMAGE_DIR := "res://data/images/"
 ## answer 1..4 = these buttons (and their colours); same order as the icons on
 ## the glass seen from the player's spot: top-left, top-right, bottom-left, bottom-right
 const ANSWER_BUTTONS: Array[StringName] = [&"Square", &"Triangle", &"Cross", &"Circle"]
@@ -39,7 +42,7 @@ var categories: Array = []         # only questions from these categories (empty
 var question_time := 15.0
 var reveal_time := 5.0
 var answers_time := 3.0            # s: everyone's answer shown, before who was right
-var read_time := 3.5               # s: only the question, before the answers appear
+var read_time := 3.5               # s: the question + buttons, before the answers appear
 var timeup_time := 1.2             # s: "TIJD OM!" between answering and the answers
 ## Steps of a question (the screen is a slide show, one step at a time):
 ##   [video] -> read (the question) -> question (answers + countdown) ->
@@ -51,6 +54,7 @@ var _phase := "question"           # "video", "question" or "reveal"
 var _phase_left := 0.0
 var _question_time := 15.0         # time for the current question
 var _video: VideoStreamPlayer      # one decoder; every screen shows its texture
+var _image: Texture2D              # the question's picture (or null)
 var _answers := {}                 # tile_id -> answer index
 var points_per_answer := 10
 var _wrong := {}                   # tile_id -> wrong / no answers (not counting shielded ones)
@@ -73,7 +77,7 @@ func _rules(streak: int) -> String:
 func tunables() -> Array:            # (no duration: the round ends after the last question)
 	return [
 		setting("question_count", "Vragen per ronde", 1, 10, 1),
-		setting("read_time", "Leestijd vraag", 0, 15, 0.5, "s"),
+		setting("read_time", "Leestijd vraag (zonder antwoorden)", 0, 15, 0.5, "s"),
 		setting("question_time", "Antwoordtijd", 5, 60, 1, "s"),
 		setting("timeup_time", "Tijd om", 0, 5, 0.1, "s"),
 		setting("answers_time", "Iedereens antwoord", 1, 10, 0.5, "s"),
@@ -157,6 +161,7 @@ func _next_question() -> void:
 	var own_time := float(q.get("time", 0))                   # the question's own time (0: the setting)
 	_question_time = own_time / game.tempo if own_time > 0.0 else question_time
 	_stop_video()
+	_image = _load_image(str(q.get("image", ""))) if q.has("image") else null
 	if q.has("video"):
 		var during: bool = q.get("video_when", "before") == "during"
 		_play_video(q.video, during)
@@ -169,7 +174,22 @@ func _next_question() -> void:
 	_read()
 
 
-## Step: only the question, to read it (the icons are dark: no answering yet).
+## The question's picture: a name in data/images/, a res:// path or a file.
+func _load_image(file: String) -> Texture2D:
+	var path := file
+	if not path.begins_with("res://") and not path.is_absolute_path():
+		path = IMAGE_DIR + path
+	if path.begins_with("res://"):
+		return load(path) if ResourceLoader.exists(path) else null
+	var img := Image.load_from_file(path) if FileAccess.file_exists(path) else null
+	if img == null:
+		push_warning("quiz: image not found: %s" % file)
+		return null
+	return ImageTexture.create_from_image(img)
+
+
+## Step: the question and the 4 buttons, without the answers yet (the icons
+## on the tile are dark: no answering yet); then the answers and the countdown.
 func _read() -> void:
 	_phase = "read"
 	_phase_left = read_time
@@ -256,6 +276,7 @@ func _update(delta: float) -> void:
 		"question": q.question, "answers": q.answers,
 		"text": q.get("text", ""),
 		"video": _video.get_video_texture() if _video else null,
+		"media": _video.get_video_texture() if _video else _image,   # left of the question
 		"video_progress": video_frac,
 		"time_left": _phase_left,
 		"time_total": {"question": _question_time, "answers": answers_time, "read": read_time,

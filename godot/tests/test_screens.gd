@@ -67,7 +67,9 @@ func _run() -> void:
 
 	# a question with a video, then one with a long text
 	var all: Array = JSON.parse_string(FileAccess.get_file_as_string(QuizRound.QUESTIONS_FILE))
-	quiz._questions = all.filter(func(q): return q.get("id", "").begins_with("voorbeeld"))
+	quiz._questions = all.filter(func(q): return q.get("id", "") in ["voorbeeld_video", "voorbeeld_afbeelding", "voorbeeld_tekst"])
+	quiz._questions.sort_custom(func(a, b): return a.id > b.id)          # video, then tekst ...
+	quiz._questions = [quiz._questions[0], quiz._questions[2], quiz._questions[1]]   # video, picture, long text
 	quiz._stop_video()
 	quiz._index = -1
 	quiz._next_question()
@@ -80,9 +82,17 @@ func _run() -> void:
 	await _until(func(): return quiz._phase == "reveal")
 	await _wait(0.3)
 	await _shot("10_quiz_reveal_after_video")
+	await _until(func(): return quiz._phase == "read" and quiz._index == 1)
+	await _wait(0.8)
+	await _shot("11a_quiz_picture_read")
 	await _until(func(): return quiz._phase == "question" and quiz._index == 1)
 	await _wait(1.0)
-	await _shot("11_quiz_long_text")
+	await _shot("11_quiz_picture")
+	quiz._index = 1                    # straight on to the long text
+	quiz._next_question()
+	await _until(func(): return quiz._phase == "question" and quiz._index == 2)
+	await _wait(1.0)
+	await _shot("11b_quiz_long_text")
 
 	# switch the overview camera to a close view of the robot for one shot
 	game.skip()

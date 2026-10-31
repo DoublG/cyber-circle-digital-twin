@@ -15,6 +15,8 @@ var arena: Node3D
 var _t := 0.0
 var _angle := 0.0
 var _look := Vector3.ZERO
+var _focus := Vector3.ZERO      # a tile to watch (an extermination) ...
+var _focus_left := 0.0          # ... for this many seconds more
 
 
 func setup(arena_node: Node3D) -> void:
@@ -24,12 +26,34 @@ func setup(arena_node: Node3D) -> void:
 	_look = center
 
 
+## Drift over to watch a tile (behind it, the robot in view) for `seconds`,
+## then float on - still gliding, no fast moves. Vector3.ZERO: a wide view
+## on the robot from above (several tiles at once).
+func focus(tile_pos: Vector3, seconds: float) -> void:
+	_focus = tile_pos
+	_focus_left = seconds
+
+
 func _process(delta: float) -> void:
 	_t += delta
-	_angle += orbit_speed * delta
 	var look := center + Vector3(sin(_t * 0.07) * 0.5, 0.2 * sin(_t * 0.05), cos(_t * 0.06) * 0.5)
-	var k := 1.0 - exp(-delta * glide)
-	position = position.lerp(_orbit_pos(), k)
+	var target := _orbit_pos()
+	var g := glide
+	if _focus_left > 0.0:
+		_focus_left -= delta
+		if _focus == Vector3.ZERO:
+			target = Vector3(position.x, 0.0, position.z).normalized() * radius.x + Vector3(0.0, height.y, 0.0)
+			look = Vector3(0.0, 0.3, 0.0)
+		else:
+			var dir := Vector3(_focus.x, 0.0, _focus.z).normalized()
+			target = _focus + dir * 2.6 + Vector3(0.0, 2.0, 0.0)
+			look = _focus.lerp(center, 0.35)
+		g = glide * 1.6
+		_angle = atan2(position.z, position.x)     # afterwards: float on from here
+	else:
+		_angle += orbit_speed * delta
+	var k := 1.0 - exp(-delta * g)
+	position = position.lerp(target, k)
 	_look = _look.lerp(look, k)
 	look_at(_look, Vector3.UP)
 
