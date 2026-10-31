@@ -6,7 +6,8 @@ extends Node
 ## Script: lobby (Anna and Bram playing, Cleo invited on T03 -> activates) ->
 ## quiz (the slide show: question + who answered, everyone's answer, who was
 ## right; Bram wrong, Cleo's shield, Anna changes her answer at the last
-## second; then all right) -> scoreboard -> Cyclone (cameras tilt down to the tiles, the players play) ->
+## second; then all right) -> scoreboard -> Ritme (icons fall down the lanes:
+## Anna on the line, Cleo in the band, Bram misses a lot) ->
 ## places in the views, Bram (last, 1 life) exterminated: death clip in his
 ## view, his tile free again -> scoreboard.
 
@@ -25,7 +26,7 @@ func _ready() -> void:
 	game.intro_time = 5.0
 	game.scoreboard_time = 30.0
 	game.random_rounds = false
-	game.round_types = [QuizRound, CycloneRound]
+	game.round_types = [QuizRound, RhythmRound]
 	# film screen 1 only: its own SubViewport, shown full window
 	var wall: ScreenWall = arena.screen_wall
 	var screen_vp: SubViewport = wall._screens[0].get_viewport()
@@ -67,27 +68,38 @@ func _direct() -> void:
 	quiz._next_question()
 	await _answer(quiz, {1: "switch", 2: false, 3: false})   # Bram wrong, Cleo shielded, Anna switches
 	await _answer(quiz, {1: true, 2: true, 3: true})         # everyone right
-	await _until(func(): return game.current is CycloneRound, 60.0)
+	await _until(func(): return game.current is RhythmRound, 60.0)
 
-	print("[movie] Cyclone")
-	var cyc: CycloneRound = game.current
-	cyc.duration = 22.0
+	print("[movie] Ritme")
+	var rh: RhythmRound = game.current
+	rh.duration = 30.0
 	await _until(func(): return game.state == GameManager.State.PLAYING)
 	arena.tiles[1].health = 1                              # Bram on his last life
-	# bots: Anna presses on red, Cleo on the yellow next to it, Bram always too late
-	var aim := {1: 0, 3: 1, 2: 7}
-	var t := 0.0
+	# bots: Anna mostly on the line, Cleo in the band, Bram misses half and presses at random
+	var timing := {1: 0.0, 3: 0.7, 2: 0.5}
+	var pressed := {}
 	while game.state == GameManager.State.PLAYING:
-		for id in aim:
-			var fw: TileFirmware = arena.tiles[id - 1].get_node("Firmware")
-			if fw._running and fw._phase == "run" and fw._offset() == aim[id] and randf() < 0.5:
-				arena.tiles[id - 1].press_button(&"Cross")
+		for i in range(rh._first, rh.notes.size()):
+			var n: Dictionary = rh.notes[i]
+			if n.t - rh.clock > n.fall:
+				break
+			for id in timing:
+				if pressed.has([id, i]):
+					continue
+				var h := absi(hash([id, i]))
+				var miss: bool = (id == 2 and h % 2 == 0) or (id == 1 and h % 7 == 0) or (id == 3 and h % 5 == 0)
+				var off: float = timing[id] * rh.band * n.fall * (1.0 if h % 3 else -1.0)
+				if rh.clock >= n.t + off:
+					pressed[[id, i]] = true
+					if not miss:
+						arena.tiles[id - 1].press_button(CyberTile.BUTTONS[n.lane], 0.05)
+					elif id == 2 and h % 4 == 0:
+						arena.tiles[id - 1].press_button(CyberTile.BUTTONS[(n.lane + 1) % 4], 0.05)
 		await get_tree().process_frame
-		t += get_process_delta_time()
 
 	print("[movie] places, Bram exterminated")
 	await _until(func(): return game.screen_wall.shared_views.size() > 0, 30.0)   # the scoreboard
-	await _wait(5.0)
+	await _wait(16.0)                                      # lives change, the robot fires, the death clip
 	print("[movie] done")
 	get_tree().quit()
 
