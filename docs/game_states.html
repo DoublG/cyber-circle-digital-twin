@@ -1,0 +1,147 @@
+<title>Cyber Circle Game States</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; each diagram in its own scrollable panel, timings as a table */
+:root {
+  --bg: #f3f5f7; --panel: #ffffff; --fg: #17202a; --dim: #5b6876;
+  --line: #d5dce3; --teal: #0e7c7b; --amber: #b86e00; --red: #c0392b;
+  --display: "Chakra Petch", "Segoe UI", sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f141a; --panel: #18202a; --fg: #e4e9ee; --dim: #93a1af;
+  --line: #2c3845; --teal: #3cc7c2; --amber: #f2a93b; --red: #ff6b5b; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f141a; --panel: #18202a; --fg: #e4e9ee; --dim: #93a1af;
+  --line: #2c3845; --teal: #3cc7c2; --amber: #f2a93b; --red: #ff6b5b; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 16px/1.55 var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+main { max-width: 980px; margin: 0 auto; padding-block: 40px 64px; display: grid; gap: 36px; }
+h1 { font: 700 2.2rem/1.1 var(--display); margin: 0; letter-spacing: .02em; text-wrap: balance; }
+h1 span { color: var(--teal); }
+h2 { font: 700 1.3rem/1.2 var(--display); margin: 0 0 6px; text-wrap: balance; }
+p { margin: 0; max-width: 68ch; color: var(--dim); }
+code { font: 500 .88em var(--mono); color: var(--amber); }
+section { display: grid; gap: 14px; min-width: 0; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 18px; overflow-x: auto; }
+.panel pre.mermaid { margin: 0; background: none; min-width: 640px; text-align: center; }
+.tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag { font: 500 .78rem var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 3px 9px; border-radius: 3px; border: 1px solid var(--line); color: var(--dim); }
+.tag.state { color: var(--teal); border-color: var(--teal); }
+.tag.mode { color: var(--amber); border-color: var(--amber); }
+.tag.par { color: var(--red); border-color: var(--red); }
+table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 600 .75rem var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
+td:nth-child(2) { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+</style>
+
+<main>
+  <header style="display:grid;gap:10px">
+    <h1>Cyber Circle <span>game states</span></h1>
+    <p>How the game moves from an empty room to rounds, the scoreboard and exterminations. From <code>game_manager.gd</code> and <code>arena.gd</code>. All times are in the web interface (Instellingen) and divided by the tempo.</p>
+    <div class="tags"><span class="tag mode">Mode: set by the operator</span><span class="tag state">State: the game loop</span><span class="tag par">Runs in parallel</span></div>
+  </header>
+
+  <section>
+    <div><h2>1. Operator modes</h2>
+    <p>Set from the web interface (MQTT <code>mode</code>). Without a control server the game starts OPEN. Players can only join while OPEN.</p></div>
+    <div class="panel"><pre class="mermaid">
+flowchart LR
+  SETUP["SETUP<br/>tiles and screens assigned<br/>screens show slot numbers"]
+  CLOSED["CLOSED<br/>setup locked<br/>no players"]
+  OPEN["OPEN<br/>players join<br/>rounds start by themselves"]
+  PAUSED["PAUSED<br/>timers and tile games frozen"]
+  SETUP <--> CLOSED
+  CLOSED <--> OPEN
+  SETUP <--> OPEN
+  OPEN -- "pause" --> PAUSED
+  PAUSED -- "resume" --> OPEN
+  OPEN -. "to SETUP / CLOSED:<br/>game stopped, results saved,<br/>invites cancelled" .-> CLOSED
+</pre></div>
+  </section>
+
+  <section>
+    <div><h2>2. The game loop</h2>
+    <p>Four states: LOBBY, INTRO, PLAYING, SCOREBOARD. Lives only change on the scoreboard. Players who join during a round wait and come in at the next scoreboard as NIEUW.</p></div>
+    <div class="panel"><pre class="mermaid">
+flowchart TD
+  L(["LOBBY<br/>idle, nobody playing"])
+  J{"first player activates<br/>a tile (mode OPEN)"}
+  N["next round<br/>randomizer picks a type<br/>(weights, drought, lives director)"]
+  E{"any players left?"}
+  F["finish game<br/>results + ranks saved,<br/>everyone leaves"]
+  I["INTRO<br/>shared screens: title + rules<br/>intro_time 7 s"]
+  P["PLAYING"]
+  PS["shared round (quiz)<br/>one screen for all"]
+  PP["personal round<br/>split views per player<br/>late joiners: WACHT OP DE VOLGENDE RONDE"]
+  X{"round over?<br/>time up, all out, or skip"}
+  R["end of round<br/>lives plan (+1 / 0 / -1)<br/>robot already turns to the first doomed"]
+  RT["personal: places in own view<br/>result_time 10 s"]
+  S1["SCOREBOARD<br/>lives as they were<br/>new players NIEUW"]
+  S2["lives revealed after lives_delay 2.5 s<br/>+1 green, -1 robot fires,<br/>0: GEËXTERMINEERD banner"]
+  S3["scoreboard_time 8 s"]
+
+  L --> J --> |"auto_start_delay 20 s"| N
+  N --> E
+  E -- "no" --> F --> L
+  E -- "yes" --> I --> P
+  P --> PS & PP
+  PS --> X
+  PP --> X
+  X -- "no" --> P
+  X -- "yes" --> R
+  R -- "personal" --> RT --> S1
+  R -- "shared" --> S1
+  S1 --> S2 --> S3 --> N
+  STOP["Stop spel"] -.-> F
+</pre></div>
+  </section>
+
+  <section>
+    <div><h2>3. Extermination (on top of the loop)</h2>
+    <p>Starts when the scoreboard reveals 0 lives. It never holds up the next round. Several players are exterminated together; the robot moves from one to the next.</p></div>
+    <div class="panel"><pre class="mermaid">
+flowchart TD
+  D["lives reach 0 on the scoreboard<br/>all doomed players at once"]
+  B["tile blinks red<br/>overview: popup over the floating camera"]
+  H["robot turns and fires<br/>(the next doomed one while this one plays)"]
+  A["tile death animation<br/>electrocution + explosion + free_delay"]
+  W{"player's own split view<br/>on screen?"}
+  C["death clip from the start<br/>shorter than clip_time: last frame held"]
+  T{"waited longer than<br/>clip_wait 30 s?"}
+  FREE["tile free again"]
+  D --> B --> H --> A
+  H --> W
+  W -- "yes" --> C
+  W -- "no (shared screens)" --> T
+  T -- "no, keep waiting" --> W
+  T -- "yes, skip clip" --> FREE
+  C -- "after clip_time 8 s<br/>(or the clip, if longer)" --> FREE
+  A --> FREE
+</pre></div>
+    <p>The tile is freed when both the death animation and the clip (or its wait) are done.</p>
+  </section>
+
+  <section>
+    <div><h2>Timings</h2></div>
+    <div class="panel">
+      <table>
+        <thead><tr><th>Setting</th><th>Default</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td>Start na eerste speler</td><td>20 s</td><td>Countdown in the lobby after the first player joins</td></tr>
+          <tr><td>Uitleg voor een ronde</td><td>7 s</td><td>INTRO: round title and rules on the shared screens</td></tr>
+          <tr><td>Uitslag eigen spel</td><td>10 s</td><td>Personal rounds: places in the player's own view before the scoreboard</td></tr>
+          <tr><td>lives_delay</td><td>2.5 s</td><td>Scoreboard shows the old lives, then the change</td></tr>
+          <tr><td>Scorebord</td><td>8 s</td><td>Scoreboard after the lives changed</td></tr>
+          <tr><td>Doodsfilmpje op eigen scherm (min.)</td><td>8 s</td><td>Minimum time the death screen stays; a shorter clip holds its last frame</td></tr>
+          <tr><td>Doodsfilmpje wacht op eigen scherm max.</td><td>30 s</td><td>How long the clip waits for a split view before it is skipped</td></tr>
+          <tr><td>Tempo</td><td>1.0×</td><td>Divides every time above</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>

@@ -52,6 +52,7 @@ var _shared_factory := Callable()       # shared mode: () -> Control
 var _timer_text := ""
 var _timer_labels: Array[Label] = []
 var shared_views: Array = []            # current shared views, one per screen
+var _observer_screen: Control           # the overview page's screen (observer_page)
 var _followers: Array[Camera3D] = []    # cameras that show the floating observer rig
 
 
@@ -146,8 +147,10 @@ func play_clip(tile_id: int, path: String, from := 0.0) -> float:
 	var length := player.get_stream_length()
 	if length <= 0.0:
 		length = 4.0
-	player.finished.connect(func():
-		back.queue_free()
+	player.finished.connect(func():           # too short: the last frame stays until the view goes
+		var last := player.get_video_texture().get_image() if player.get_video_texture() else null
+		if last:
+			view.texture = ImageTexture.create_from_image(last)
 		player.queue_free())
 	return length - from
 
@@ -195,6 +198,7 @@ func refresh() -> void:
 		for id in screen_groups[k]:               # fixed layout: one equal slot per tile
 			row.add_child(_player_view(id) if arena.is_playing(id) else _tile_slot(id))
 		_add_timer_label(screen)
+	_test_patterns(arena.game.mode == GameManager.Mode.SETUP)
 	for screen in _screens:
 		if arena.game.mode == GameManager.Mode.PAUSED:
 			var banner := Retro.label(120, Retro.AMBER, "PAUZE")
@@ -205,11 +209,23 @@ func refresh() -> void:
 			screen.add_child(banner)
 	for id in _huds:
 		update_player(id)
-	for id in arena.dying:                        # an extermination still playing: its clip
-		if arena.dying[id] > 0 and arena.is_playing(id) and _mode != "shared":
-			var at: float = (Time.get_ticks_msec() - int(arena.dying[id])) / 1000.0
-			if at < arena.death_clip_length() - 0.5:
-				play_clip(id, arena.death_clip, at)
+	play_death_clips(true)
+
+
+## Death clips (only in split-screen player views, never over shared screens):
+## a waiting one starts from the beginning as soon as the player's view is on
+## screen; after a rebuild (resume) a playing one continues where it was.
+func play_death_clips(resume := false) -> void:
+	if _mode == "shared":
+		return
+	for id in arena.clip_waiting.keys():
+		if arena.clip_started.has(id):
+			if resume:
+				var at: float = arena.clock - float(arena.clip_started[id])
+				if arena.death_clip_pending(id):    # (past its end: just its last frame)
+					play_clip(id, arena.death_clip, minf(at, arena.death_clip_length() - 0.1))
+		elif arena.death_clip_pending(id) and play_clip(id, arena.death_clip) > 0.0:
+			arena.clip_started[id] = arena.clock
 
 
 ## The timer, top-right on every screen (no player's plate is there).
@@ -419,7 +435,38 @@ func _new_screen(parent: Node, register := true) -> Control:
 func _add_observer_page(parent: Node) -> void:
 	var page := ObserverView.new()
 	page.wall = self
-	_new_screen(parent, false).add_child(page)
+	_observer_screen = _new_screen(parent, false)
+	_observer_screen.add_child(page)
+
+
+## SETUP: a test pattern over every screen (which screen, edges, colours, live)
+## and the overview page; the CRT effect off so lines and colours are exact.
+func _test_patterns(on: bool) -> void:
+	var mqtt := arena.get_node_or_null("Mqtt") as MqttBridge
+	var node: String = mqtt.node_id if mqtt and mqtt.node_id != "" else "-"
+	var all: Array[Control] = _screens.duplicate()
+	if _observer_screen:
+		all.append(_observer_screen)
+	for k in all.size():
+		var screen := all[k]
+		var old := screen.get_node_or_null("TestPattern")
+		if old:
+			screen.remove_child(old)
+			old.queue_free()
+		var crt := screen.get_parent().get_child(1) as CanvasItem   # (see _new_screen)
+		if crt:
+			crt.visible = not on
+		if not on:
+			continue
+		var tp := TestPattern.new()
+		tp.name = "TestPattern"
+		tp.screen_number = k + 1
+		tp.screen_count = _screens.size()
+		tp.tiles = screen_groups[k] if k < screen_groups.size() else []
+		var m: int = int(monitors[k]) if k < monitors.size() else k
+		tp.output = "MONITOR %d" % m if multi_window else "PREVIEW"
+		tp.node_name = node
+		screen.add_child(tp)
 
 
 ## Preview: screens 1-3 on the top row, 4-5 below, each kept at 16:9.

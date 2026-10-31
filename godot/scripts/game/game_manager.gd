@@ -61,6 +61,8 @@ const GAME_TUNABLES := [
 	{"key": "intro_time", "label": "Uitleg voor een ronde", "min": 2, "max": 30, "step": 1, "unit": "s"},
 	{"key": "result_time", "label": "Uitslag eigen spel", "min": 0, "max": 30, "step": 1, "unit": "s"},
 	{"key": "scoreboard_time", "label": "Scorebord", "min": 2, "max": 30, "step": 1, "unit": "s"},
+	{"key": "clip_time", "label": "Doodsfilmpje op eigen scherm (min.)", "min": 2, "max": 60, "step": 1, "unit": "s"},
+	{"key": "clip_wait", "label": "Doodsfilmpje wacht op eigen scherm max.", "min": 0, "max": 120, "step": 5, "unit": "s"},
 	{"key": "auto_start_delay", "label": "Start na eerste speler", "min": 0, "max": 120, "step": 5, "unit": "s"},
 	{"key": "lives", "label": "Levens (leeftijd onbekend)", "min": 1, "max": 5, "step": 1, "unit": ""},
 	{"key": "lives_age_8", "label": "Levens t/m 8 jaar", "min": 1, "max": 5, "step": 1, "unit": ""},
@@ -187,7 +189,7 @@ func _process(delta: float) -> void:
 				_begin_round()
 		State.PLAYING:
 			current.update(delta)
-			if current.mode == "personal":
+			if current and current.mode == "personal":
 				screen_wall.set_timer("%d" % ceili(maxf(current.time_left, 0.0)))
 			if current.is_finished() or _alive_players().is_empty():
 				_end_round()
@@ -673,7 +675,7 @@ func on_players_changed() -> void:
 				screen_wall.set_timer("")
 			screen_wall.refresh()
 		State.PLAYING:
-			if current.mode == "personal":
+			if current and current.mode == "personal":
 				screen_wall.refresh()
 		_:
 			pass
@@ -971,6 +973,8 @@ func _get_game_setting(key: String):
 		return round_weights.get(key.trim_prefix("weight_"), 1.0)
 	if key.begins_with("lives_age_"):
 		return lives_by_age.get(int(key.trim_prefix("lives_age_")), lives)
+	if key in ["clip_wait", "clip_time"]:
+		return arena.get(key)
 	return get(key)
 
 
@@ -981,6 +985,8 @@ func _set_game_setting(key: String, value) -> void:
 		category_weights[key.trim_prefix("cat:")] = float(value)
 	elif key.begins_with("lives_age_"):
 		lives_by_age[int(key.trim_prefix("lives_age_"))] = int(value)
+	elif key in ["clip_wait", "clip_time"]:
+		arena.set(key, float(value))
 	elif get(key) is int:
 		set(key, int(value))
 	else:

@@ -18,6 +18,7 @@ func _ready() -> void:
 	add_child(arena)
 	var game: GameManager = arena.game
 	game.use_database(DB_FILE)
+	arena.clip_wait = 1.0                       # (the death clip has no split view to wait for here)
 	game.intro_time = 1.0
 	game.scoreboard_time = 1.0
 	game.auto_start_delay = 0.0

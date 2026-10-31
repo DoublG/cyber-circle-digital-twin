@@ -69,6 +69,8 @@ extends Node3D
 @export var activation_timeout := 60.0  # seconds to press all 4 icons after the QR scan
 @export var free_delay := 1.5           # s after the death animation before the tile is free again
 @export_file("*.ogv") var death_clip := "res://data/videos/exterminate.ogv"  # in the player's view
+@export var clip_wait := 30.0           # s the death clip waits for the player's split view (then dropped)
+@export var clip_time := 8.0            # s the death screen stays (a shorter clip holds its last frame)
 @export var simulate_firmware := true  # run the tiles' own logic in the twin (no real tiles)
 
 const CABLE_SHADER := preload("res://shaders/cable_flow.gdshader")
@@ -92,7 +94,11 @@ var _pending := {}                            # tile_id -> {name, color, time_le
 var _demo_idle := 0.0                          # --demo-idle
 var _hits_on_way := {}                        # tile_id -> shots that will cost a life, not landed yet
 var _attacks := 0                             # robot attacks under way (charging, shots flying)
-var dying := {}                               # tile_id -> msec its death clip started (0: not yet) during the extermination
+var dying := {}                               # tile_id -> msec the robot's shot landed (0: not yet) during the extermination
+var clock := 0.0                              # game time (s): follows --fixed-fps, unlike the wall clock
+var clip_waiting := {}                        # tile_id -> clock at the hit: death clip not seen yet (no split view)
+var _clip_length := {}                        # clip path -> length (s)
+var clip_started := {}                        # tile_id -> clock when the death clip started in the player's view
 var _disabled := {}                           # tile_id -> true: out of service (not in the game)
 
 
@@ -371,13 +377,24 @@ func robot_attack(tile_ids: Array, color := Color(1.0, 0.1, 0.05), shielded: Arr
 
 ## Length of the death clip in s (to time the free tile; 4 without a clip).
 func death_clip_length() -> float:
-	if not ResourceLoader.exists(death_clip):
-		return 4.0
-	var p := VideoStreamPlayer.new()
-	p.stream = load(death_clip)
-	var length := p.get_stream_length()
-	p.free()
-	return length if length > 0.0 else 4.0
+	if _clip_length.has(death_clip):
+		return _clip_length[death_clip]
+	var length := 0.0
+	if ResourceLoader.exists(death_clip):
+		var p := VideoStreamPlayer.new()
+		p.stream = load(death_clip)
+		length = p.get_stream_length()
+		p.free()
+	_clip_length[death_clip] = length if length > 0.0 else 4.0
+	return _clip_length[death_clip]
+
+
+## The death clip of this tile still has to be shown (waiting for the split
+## view, at most clip_wait s) or is on screen (the clip, at least clip_time s).
+func death_clip_pending(tile_id: int) -> bool:
+	if clip_started.has(tile_id):
+		return clock - float(clip_started[tile_id]) < maxf(death_clip_length(), clip_time)
+	return clip_waiting.has(tile_id) and clock - float(clip_waiting[tile_id]) < clip_wait
 
 
 ## The end of a round: these players will be exterminated (their lives reach 0
@@ -585,6 +602,7 @@ func _parse_screens(text: String) -> Array:
 
 
 func _process(delta: float) -> void:
+	clock += delta
 	_update_packets(delta)
 	for id in _pending.keys():  # registrations that were never activated
 		_pending[id].time_left -= delta
@@ -627,13 +645,15 @@ func _on_tile_died(tile_id: int) -> void:
 		_death_sounds()
 		dying[tile_id] = Time.get_ticks_msec()
 		exterminated.emit(tile_id, who)
-		screen_wall.play_clip(tile_id, death_clip)   # the movie in their (split screen) view
-		var clip := death_clip_length()            # (shown later when the screens switch to it)
-		var started := Time.get_ticks_msec()
+		clip_waiting[tile_id] = clock
+		screen_wall.play_death_clips()             # their movie, from the start, once their split view shows
 		await tile.play_death()
-		var left := clip - (Time.get_ticks_msec() - started) / 1000.0
-		await get_tree().create_timer(maxf(free_delay, left)).timeout
+		await get_tree().create_timer(free_delay).timeout
 		dying.erase(tile_id)
+		while death_clip_pending(tile_id):         # the tile stays theirs until they have seen it
+			await get_tree().process_frame
+		clip_waiting.erase(tile_id)
+		clip_started.erase(tile_id)
 		if player_name(tile_id) == who:            # still the same player
 			leave(tile_id)
 			game.log_event("T%02d IS WEER VRIJ" % tile_id, Retro.DIM))

@@ -222,11 +222,14 @@ X-GNOME-Autostart-enabled=true
    (2.5 s) the rows show the change (+♥ green, −♥ red) and the robot gives /
    takes the lives. At 0 a player is **exterminated** – very visible: a big
    red GEËXTERMINEERD banner over the scoreboard, their row red and blinking,
-   the death clip over the scoreboard on their screen; the overview steps the
-   board aside and drifts over to watch the robot turn and fire and the tile
-   get electrocuted and explode. The next round may already start: the
-   extermination runs on in parallel (that player's view stays on the clip and
-   does not tilt down), then the tile is free again.
+   popups over the floating camera; the overview steps the board aside and
+   drifts over to watch the robot turn and fire and the tile get electrocuted
+   and explode. The next round may already start: the extermination runs on
+   in parallel. The **death clip** only plays in the player's own split-screen
+   view, never over a shared screen: it starts from the beginning as soon as
+   that view is on screen (waiting at most `clip_wait`, 30 s, else it is
+   skipped) and stays at least `clip_time` (8 s) – a shorter clip holds its
+   last frame. Then the tile is free again. Both are in **Instellingen**.
 5. When the last player is gone the game idles again. **Stop spel** ends it
    at once. Every play is saved.
 
@@ -313,8 +316,10 @@ missing tables themselves; WAL mode, so the app can write while the game runs).
 * **Videos**: put them in `godot/data/videos/` and set `video` to the file
   name. Convert with `tools/convert_video.sh input.mp4` (Theora .ogv, ≤ 1280
   wide; keep them 720p for a Pi). The death clip is
-  `godot/data/videos/exterminate.ogv` – make your own square, important
-  content in the middle 55 %, so it works in every split.
+  `godot/data/videos/exterminate.ogv` – make your own 1080×1080 (Theora
+  .ogv), important content in the middle 600 px wide strip: it fills the
+  player's slot (627×1060 with 3 per screen, 945×1060 with 2) and the sides
+  are cut off. Any length; its last frame stays until `clip_time` is over.
 * **Players** (what the app does): `python3 tools/cybercircle_db.py add-player Erik "#ff8800" 10`
   prints the id and the MQTT message to send.
 * **Overall ranking**: `SELECT name, MAX(score) FROM results JOIN players ON players.id = player_id GROUP BY player_id ORDER BY 2 DESC`.
@@ -389,6 +394,24 @@ database gets the example questions.
 | mode | | next |
 |---|---|---|
 | **SETUP** | physical setup: assign tiles and screens; the game is closed; empty screen slots show their tile number big | 🔒 lock the setup |
+
+**Test screens (SETUP).** In SETUP every screen and the overview show a test
+pattern (`scripts/ui/test_pattern.gd`) over the tile numbers:
+
+* **SCHERM n / 5** and its tiles (T01 T02 T03 ...), or OVERZICHT: check that
+  each monitor sits above the right tiles.
+* Monitor, node name, the 1920×1080 it renders at and the real window size:
+  they should match, or the screen is scaled.
+* A 1 px border, amber corners and four arrows, BOVEN at the top: all four
+  must be fully visible (no overscan, not upside down).
+* 1 px line groups on the left: sharp black/white lines, not grey (no scaling).
+* Colour bars and a grey ramp 0–100 %: 0 % and 10 % must look different
+  (black level), and so must 90 % and 100 % (white clipping).
+* A running clock and a sweeping green block: if they stop, the screen is frozen.
+
+The CRT effect is off in SETUP so lines and colours are exact. Still images of
+the patterns are in `docs/test_screens/` (to test a monitor without the game);
+`tests/test_setup_shot.tscn` regenerates them in `tests/shots/`.
 | **GESLOTEN** | setup locked, game closed | 🔓 unlock · ▶ **Start spel** |
 | **OPEN** | players can join; nobody playing = the game idles; rounds start by themselves | ⏸ pause · ■ **Stop spel** |
 | **PAUZE** | everything frozen (round timers, tile games) | ▶ resume · ■ stop |

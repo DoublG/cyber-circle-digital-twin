@@ -24,6 +24,7 @@ func _ready() -> void:
 	game.scoreboard_time = 4.0
 	game.auto_start_delay = 0.0
 	game.random_rounds = false
+	arena.clip_time = 7.0                      # longer than the 4 s clip: it holds its last frame
 	game.round_types = [ZwartePietRound, CycloneRound]
 	for p in [[1, "Anna", 12], [2, "Bram", 7], [3, "Cleo", 9], [5, "Eva", 11]]:
 		arena.apply_command({"tile": p[0], "join": p[1], "age": p[2]})
@@ -62,6 +63,8 @@ func _ready() -> void:
 		await get_tree().process_frame
 		t += get_process_delta_time()
 	check(both_running, "the robot moved on to the second one during the first one's death animation")
+	check(arena.clip_waiting.has(2) and arena.clip_started.is_empty(),
+		"the death clip waits while the screens are shared (scoreboard)")
 	await get_tree().create_timer(0.8).timeout
 	await RenderingServer.frame_post_draw
 	get_viewport().get_texture().get_image().save_png("res://tests/shots/31_scoreboard_death_clip.png")
@@ -75,7 +78,22 @@ func _ready() -> void:
 	check(game.state == GameManager.State.PLAYING, "the next round did not wait for the animations")
 	check(not game.screen_wall.shared_views.any(func(v): return v.get_parent().get_children().any(
 		func(c): return c is PanelContainer and c != v)), "no death clip over the shared screens")
+	check(arena.clip_started.has(2) and arena.clip_started.has(3),
+		"the death clips start once the split views are on screen")
+	var age: float = arena.clock - float(arena.clip_started.get(2, 0.0))
+	check(age < 1.5, "the clip started from the beginning (%.1f s ago)" % age)
+	check(arena.is_playing(2), "the tile stays theirs while the clip plays")
 	await _shot("33_next_round_while_dying")
+	var clip_end: float = float(arena.clip_started[2]) + arena.death_clip_length()
+	while arena.clock < clip_end + 1.0:
+		await get_tree().process_frame
+	check(arena.is_playing(2) and arena.death_clip_pending(2),
+		"clip shorter than the death screen time: the tile is still theirs")
+	await _shot("34_clip_last_frame")
+	while arena.death_clip_pending(2):
+		await get_tree().process_frame
+	await get_tree().create_timer(0.5).timeout
+	check(not arena.is_playing(2), "the tile is free after the clip")
 	print("DONE")
 	get_tree().quit()
 
