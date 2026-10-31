@@ -44,8 +44,30 @@ func _process(delta: float) -> void:
 		elif round is ZwartePietRound:
 			if round.holder == id and round._clock - round._got_at > randf_range(0.3, 1.5):
 				arena.tiles[id - 1].press_button(CyberTile.BUTTONS.pick_random())
+		elif round is RhythmRound:
+			_rhythm(round, id)
 		elif randf() < delta * 1.6:          # tile games: press now and then
 			arena.tiles[id - 1].press_button(CyberTile.BUTTONS.pick_random())
+
+
+## Rhythm: every bot has its own timing per symbol (from a hash, so it is
+## stable): mostly in the band, often on the line, sometimes not at all.
+func _rhythm(round: RhythmRound, id: int) -> void:
+	var st: Dictionary = round.state.get(id, {})
+	if st.is_empty():
+		return
+	for i in range(round._first, round.notes.size()):
+		var n: Dictionary = round.notes[i]
+		if n.t - round.clock > n.fall * round.band:
+			break
+		if st.judged.has(i):
+			continue
+		var h := absi(hash([id, i]))
+		if float(h % 1000) / 1000.0 > SKILL:
+			continue                         # this one the bot misses
+		var off: float = (float((h / 1000) % 1000) / 1000.0 - 0.5) * 1.6 * round.band * n.fall
+		if round.clock >= n.t + off:
+			arena.tiles[id - 1].press_button(CyberTile.BUTTONS[n.lane])
 
 
 func _join() -> void:

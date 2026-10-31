@@ -86,7 +86,7 @@ class LivesIn(BaseModel):
 
 class PlanIn(BaseModel):
     slot: int = 0                            # 0 = the next round
-    round: str = ""                          # cyclone / quiz / reaction / simon; "" = random
+    round: str = ""                          # cyclone / quiz / reaction / rhythm / simon / zwarte_piet; "" = random
     options: dict = {}                       # round settings, e.g. {"categories": ["Computers"]}
 
 

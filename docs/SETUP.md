@@ -247,7 +247,12 @@ X-GNOME-Autostart-enabled=true
 **Round types**: Quiz (shared), and the personal tile games Cyclone, Reaction,
 Simon and **Zwarte Piet** (a light spins on a random player's tile; kick it to
 your left neighbour with square/cross, right with triangle/circle; when a
-hidden countdown ends, whoever has it loses a point). The randomizer fills the
+hidden countdown ends, whoever has it loses a point) and **Ritme** (a dance
+game: the tile icons fall down 4 lanes on the player's own screen; press the
+icon when it reaches the bottom: in the yellow band +1, on the line +3, a
+press on nothing −1. Slow and one at a time first, then faster and two at
+once. The game judges the presses, not the tile: set *Vertraging tegel →
+spel* to the network delay of the installation). The randomizer fills the
 plan of the next 3 rounds (never the same twice in a row; with fewer than 4
 players only the quiz – personal rounds always have a loser); the operator can
 choose any of them in the web interface.
@@ -331,6 +336,7 @@ cd godot
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_flow.tscn   # whole game flow
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_db.tscn     # database, ranking
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_piet.tscn   # Zwarte Piet
+godot-4 --path . --disable-vsync res://tests/test_rhythm_shot.tscn      # Ritme (chart, judging, screenshot)
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_settings.tscn  # settings, tempo, sounds
 python3 tests/mqtt_test_broker.py 9011 &                                 # then:
 godot-4 --headless --path . res://tests/test_mqtt.tscn                   # MQTT end to end
@@ -449,7 +455,8 @@ or a new master continues in the same mode.
   reveal times, points per right answer; Cyclone: light speed, points for
   red / yellow / a miss; Reactie: reaction window, chance of red, all points;
   Simon: start length, show time, speed-up, points; Zwarte Piet: hidden time,
-  light speed, penalty), *Randomizer* and *Vragen* (weights per round type and
+  light speed, penalty; Ritme: fall time and spacing at the start / end, when
+two at once start, band and line size, points, tile delay), *Randomizer* and *Vragen* (weights per round type and
   per question category, see below) and *Geluid* (volume, random
   sound interval).
   **Tempo** (×) scales every time at once: 1.25 = everything 25 % faster.

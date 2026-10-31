@@ -164,30 +164,33 @@ class ButtonIcon:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	func _draw() -> void:
-		var c := size / 2
-		var r := minf(size.x, size.y) * 0.4
-		for pass_i in (2 if glow else 1):  # wide faint pass = glow, then the sharp line
-			var sharp := pass_i == (1 if glow else 0)
-			var w := r * (0.2 if sharp else 0.45)
-			var col := color if sharp else Color(color, 0.25)
-			match button:
-				&"Square":
-					var h := r * 0.75
-					draw_polyline(PackedVector2Array([c + Vector2(-h, -h), c + Vector2(h, -h),
-						c + Vector2(h, h), c + Vector2(-h, h), c + Vector2(-h, -h), c + Vector2(h, -h)]),
-						col, w, true)
-				&"Triangle":
-					var pts := PackedVector2Array()
-					for k in 5:
-						var a := -PI / 2 + TAU * k / 3
-						pts.append(c + Vector2(cos(a), sin(a)) * r + Vector2(0, r * 0.15))
-					draw_polyline(pts, col, w, true)
-				&"Cross":
-					var d := r * 0.78
-					draw_line(c + Vector2(-d, -d), c + Vector2(d, d), col, w, true)
-					draw_line(c + Vector2(-d, d), c + Vector2(d, -d), col, w, true)
-				_:
-					draw_arc(c, r * 0.82, 0, TAU, 48, col, w, true)
+		Retro.draw_icon(self, button, size / 2, minf(size.x, size.y) * 0.4, color, glow)
+
+
+## Draw a tile button icon on any canvas item: centre c, radius r.
+static func draw_icon(ci: CanvasItem, button: StringName, c: Vector2, r: float, color: Color, glow := true) -> void:
+	for pass_i in (2 if glow else 1):  # wide faint pass = glow, then the sharp line
+		var sharp := pass_i == (1 if glow else 0)
+		var w := r * (0.2 if sharp else 0.45)
+		var col := color if sharp else Color(color, color.a * 0.25)
+		match button:
+			&"Square":
+				var h := r * 0.75
+				ci.draw_polyline(PackedVector2Array([c + Vector2(-h, -h), c + Vector2(h, -h),
+					c + Vector2(h, h), c + Vector2(-h, h), c + Vector2(-h, -h), c + Vector2(h, -h)]),
+					col, w, true)
+			&"Triangle":
+				var pts := PackedVector2Array()
+				for k in 5:
+					var a := -PI / 2 + TAU * k / 3
+					pts.append(c + Vector2(cos(a), sin(a)) * r + Vector2(0, r * 0.15))
+				ci.draw_polyline(pts, col, w, true)
+			&"Cross":
+				var d := r * 0.78
+				ci.draw_line(c + Vector2(-d, -d), c + Vector2(d, d), col, w, true)
+				ci.draw_line(c + Vector2(-d, d), c + Vector2(d, -d), col, w, true)
+			_:
+				ci.draw_arc(c, r * 0.82, 0, TAU, 48, col, w, true)
 
 
 ## Shield badge: protected player (question too hard for their age).
