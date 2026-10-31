@@ -15,6 +15,10 @@ extends Control
 const LOBBY_RULES := "1. Haal een QR-codekaart.\n2. Registreer je met je gsm.\n3. Ga naar een gamemaster: die laat je toe tot het spel.\n4. Zoek de tegel in jouw kleur en druk op de 4 iconen.\n5. Blijf zo lang mogelijk in het spel!"
 const MAX_EVENTS := 9
 const TOP := 10
+const MARGIN := 40               # px around the page
+const BODY_TOP := 164            # under the status bar and the timer
+const GAP := 24
+const RIGHT_WIDTH := 760         # players + events column
 
 var page_time := 10.0             # s per page in the bottom-left panel (rules / ranking)
 
@@ -48,56 +52,68 @@ func _ready() -> void:
 	_status = Retro.label(44, Retro.CREAM)
 	hb.add_child(_status)
 	add_child(head)
-	# big rotating call to action across the top (left of the player list)
-	var cta := CallToAction.new(64)
-	cta.position = Vector2(40, 150)
-	cta.size = Vector2(1100, 180)
-	add_child(cta)
-	_under.append(cta)
 	# top-right: timer
-	_timer = Retro.label(64, Retro.AMBER)
-	_timer.add_theme_stylebox_override("normal", Retro.panel(Color(Retro.PANEL, 0.95), Retro.ORANGE, 4, 16, 26))
+	_timer = Retro.label(52, Retro.AMBER)              # (as tall as the status bar: above BODY_TOP)
+	_timer.add_theme_stylebox_override("normal", Retro.panel(Color(Retro.PANEL, 0.95), Retro.ORANGE, 4, 16, 20))
 	_timer.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	_timer.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_timer.offset_right = -40
+	_timer.offset_right = -MARGIN
 	_timer.offset_top = 36
 	add_child(_timer)
+	# under the status bar two columns that can't overlap: left the call to
+	# action and the rules, right (fixed width) the players and the events
+	var body := HBoxContainer.new()
+	body.set_anchors_preset(Control.PRESET_FULL_RECT)
+	body.offset_left = MARGIN
+	body.offset_right = -MARGIN
+	body.offset_top = BODY_TOP
+	body.offset_bottom = -MARGIN
+	body.add_theme_constant_override("separation", GAP)
+	add_child(body)
+	var left := VBoxContainer.new()
+	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	left.add_theme_constant_override("separation", GAP)
+	body.add_child(left)
+	var cta_box := _holder(180)                    # (a wrapping label can't push the layout)
+	var cta := CallToAction.new(64)
+	cta.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	cta.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cta_box.add_child(cta)
+	left.add_child(cta_box)
+	_under.append(cta_box)
+	var spacer := Control.new()                    # the camera shows through here
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	left.add_child(spacer)
 	# bottom-left: how the current game works
 	var rules := Retro.panel_container(Color(Retro.PANEL, 0.85), Retro.ORANGE, 3, 16, 24)
-	rules.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	rules.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	rules.offset_left = 40
-	rules.offset_bottom = -40
-	rules.custom_minimum_size.x = 980
 	var rb := VBoxContainer.new()
 	rules.add_child(rb)
 	_rules_title = Retro.label(36, Retro.TEAL, "", HORIZONTAL_ALIGNMENT_LEFT)
 	rb.add_child(_rules_title)
 	_rules = Retro.label(28, Retro.CREAM, "", HORIZONTAL_ALIGNMENT_LEFT)
 	_rules.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_rules.custom_minimum_size.x = 930
 	rb.add_child(_rules)
-	add_child(rules)
+	left.add_child(rules)
 	_under.append(rules)
-	# right: players, and the event feed under it
+	# right: players, and the event feed under it (takes the rest, clipped)
 	var col := VBoxContainer.new()
-	col.set_anchors_and_offsets_preset(Control.PRESET_RIGHT_WIDE)
-	col.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	col.offset_right = -40
-	col.offset_top = 160
-	col.offset_bottom = -40
+	col.custom_minimum_size.x = RIGHT_WIDTH
 	col.add_theme_constant_override("separation", 16)
-	add_child(col)
+	body.add_child(col)
 	_under.append(col)
 	var panel := Retro.panel_container(Color(Retro.PANEL, 0.82), Retro.ORANGE, 3, 16, 20)
 	_list = VBoxContainer.new()
-	_list.add_theme_constant_override("separation", 4)
+	_list.add_theme_constant_override("separation", 2)
 	panel.add_child(_list)
 	col.add_child(panel)
 	var feed := Retro.panel_container(Color(Retro.PANEL, 0.82), Retro.ORANGE, 3, 16, 20)
+	feed.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var feed_box := _holder(0)                     # the rest of the column; older events cut off
+	feed.add_child(feed_box)
 	var fb := VBoxContainer.new()
-	fb.clip_contents = true
-	feed.add_child(fb)
+	fb.set_anchors_preset(Control.PRESET_FULL_RECT)
+	feed_box.add_child(fb)
 	fb.add_child(Retro.label(30, Retro.TEAL, "GEBEURTENISSEN", HORIZONTAL_ALIGNMENT_LEFT))
 	_events = VBoxContainer.new()
 	_events.add_theme_constant_override("separation", 2)
@@ -107,6 +123,17 @@ func _ready() -> void:
 	wall.arena.game.scores_shown.connect(_show_board)
 	wall.arena.exterminated.connect(_exterminated_popup)
 	_update()
+
+
+## A plain clipping Control of a fixed height (0: whatever its container
+## gives): what's inside can't make it bigger.
+func _holder(height: float) -> Control:
+	var c := Control.new()
+	c.custom_minimum_size.y = height
+	c.size_flags_vertical = Control.SIZE_EXPAND_FILL if height == 0 else Control.SIZE_FILL
+	c.clip_contents = true
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return c
 
 
 ## Over the floating camera: who was just exterminated (several stack up).
@@ -132,10 +159,10 @@ func _exterminated_popup(_tile_id: int, player: String) -> void:
 func _show_board(title: String, subtitle: String, rows: Array) -> void:
 	_hide_board()
 	_board = ScoreboardView.new()
-	_board.offset_left = 40
-	_board.offset_right = -40
-	_board.offset_top = 150
-	_board.offset_bottom = -40
+	_board.offset_left = MARGIN
+	_board.offset_right = -MARGIN
+	_board.offset_top = BODY_TOP
+	_board.offset_bottom = -MARGIN
 	add_child(_board)
 	_board.show_scores(title, subtitle, rows, false)
 	wall.arena.game.lives_revealed.connect(_board.reveal_lives)
@@ -229,7 +256,7 @@ func _row(tile: String, name: String, hearts: String, score: String, col: Color,
 func _on_event(text: String, color: Color) -> void:
 	var l := Retro.label(28, color, text, HORIZONTAL_ALIGNMENT_LEFT)
 	l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	l.custom_minimum_size.x = 620
+	l.clip_text = true
 	_events.add_child(l)
 	_events.move_child(l, 0)
 	while _events.get_child_count() > MAX_EVENTS:

@@ -176,6 +176,9 @@ func _init() -> void:
 
 	# bottom: status text, who answered already; the shield legend (players slide)
 	_status = Retro.label(36, Retro.CREAM)
+	_status.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_status.clip_text = true
 	box.add_child(_status)
 	_answered = HFlowContainer.new()
 	_answered.alignment = FlowContainer.ALIGNMENT_CENTER
@@ -219,10 +222,11 @@ func show_question(state: Dictionary) -> void:
 	_q_panel.visible = not slide
 	_grid.visible = phase in ["read", "question"]
 	_bar.visible = phase in ["read", "question"]
-	_status.visible = phase in ["question", "video"]
-	_answered.visible = phase == "question"
-	_slide.visible = slide
-	_countdown.visible = phase in ["question", "video"]
+	_status.visible = phase in ["read", "question", "video"]
+	_answered.visible = phase in ["read", "question"]    # read and question: the same layout,
+	_slide.visible = slide                                # nothing moves when the answers come in
+	_countdown.visible = not slide
+	_countdown.modulate.a = 0.0 if phase == "read" else 1.0
 	if slide:
 		_show_players_slide(phase, players)
 		return
@@ -259,8 +263,7 @@ func show_question(state: Dictionary) -> void:
 		_tags[i].add_theme_color_override("font_color", col)
 	if phase == "read":                            # the buttons, no answers yet
 		_bar.value = 1.0
-		_countdown.visible = false
-		_status.visible = true
+		_update_answered(players)
 		_status.text = "LEES DE VRAAG  ▸  ZO DADELIJK DE ANTWOORDEN"
 		_status.add_theme_color_override("font_color", Retro.TEAL)
 		return
@@ -273,7 +276,7 @@ func show_question(state: Dictionary) -> void:
 	_countdown.seconds = ceili(maxf(state.time_left, 0.0))
 	_countdown.fraction = frac
 	_countdown.color = fill
-	_status.text = "DRUK OP HET ICOON OP JE TEGEL  ▸  JE MAG WISSELEN TOT DE TIJD OM IS  ▸  %d/%d GEANTWOORD" % [answered, alive]
+	_status.text = "DRUK OP JE TEGEL  ▸  WISSELEN MAG TOT DE TIJD OM IS  ▸  %d/%d GEANTWOORD" % [answered, alive]
 	_status.add_theme_color_override("font_color", Retro.CREAM)
 	_update_answered(players)
 

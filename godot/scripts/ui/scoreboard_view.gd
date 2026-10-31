@@ -9,8 +9,10 @@ extends Control
 ## (+1 green, -1 red, 0 lives: GEËXTERMINEERD).
 
 const MAX_ROWS := 13
+const HEADER_HEIGHT := 168       # title + subtitle; the GEËXTERMINEERD banner replaces them
 
 var _rows := []                  # [{data, panel, name, lives}]
+var _header: Control
 
 
 func _init() -> void:
@@ -30,17 +32,31 @@ func show_scores(title: String, subtitle: String, rows: Array, revealed := true)
 	box.offset_bottom = -40
 	box.add_theme_constant_override("separation", 8)
 	add_child(box)
-	box.add_child(Retro.title_bar(title.to_upper(), 76))
+	_header = Control.new()                        # fixed height: the banner takes exactly this place
+	_header.custom_minimum_size.y = HEADER_HEIGHT
+	_header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(_header)
+	var titles := VBoxContainer.new()
+	titles.set_anchors_preset(Control.PRESET_FULL_RECT)
+	titles.alignment = BoxContainer.ALIGNMENT_CENTER
+	titles.add_theme_constant_override("separation", 8)
+	_header.add_child(titles)
+	titles.add_child(Retro.title_bar(title.to_upper(), 76))
 	if subtitle != "":
-		box.add_child(Retro.label(38, Retro.TEAL, subtitle.to_upper()))
+		titles.add_child(Retro.label(38, Retro.TEAL, subtitle.to_upper()))
 
 	var n := mini(rows.size(), MAX_ROWS)
 	var px := 44 if n <= 8 else 30
+	var room := Control.new()                     # the rows scale down when they don't fit
+	room.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	room.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(room)
 	var list := VBoxContainer.new()
-	list.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	list.alignment = BoxContainer.ALIGNMENT_CENTER
 	list.add_theme_constant_override("separation", 10 if n <= 8 else 5)
-	box.add_child(list)
+	room.add_child(list)
+	room.resized.connect(_fit_rows.bind(room, list))
+	list.minimum_size_changed.connect(_fit_rows.bind(room, list))
 	list.add_child(_row(px, Retro.DIM, ["#", "SPELER", "TEGEL", "PUNTEN", "LEVENS", "RONDES", "RECORD", "PLAATS"], null))
 	for i in n:
 		var r: Dictionary = rows[i]
@@ -81,6 +97,15 @@ func show_scores(title: String, subtitle: String, rows: Array, revealed := true)
 			tw.tween_property(row, "modulate", Color.WHITE, 0.4)
 	if revealed:
 		_banner_if_exterminated()
+
+
+## The rows in their room: full width, scaled down (as a whole) if too tall.
+func _fit_rows(room: Control, list: Control) -> void:
+	var need := list.get_combined_minimum_size().y
+	var k := minf(1.0, room.size.y / need) if need > 0.0 else 1.0
+	list.scale = Vector2(k, k)
+	list.size = Vector2(room.size.x / k, maxf(need, room.size.y / k))
+	list.position = Vector2.ZERO
 
 
 ## (rebuilt after the change, e.g. a player joined: the banner again)
@@ -125,21 +150,27 @@ func _exterminate_banner(names: Array) -> void:
 	var ft := flash.create_tween()
 	ft.tween_property(flash, "color:a", 0.0, 0.6)
 	ft.tween_callback(flash.queue_free)
-	var banner := PanelContainer.new()
-	banner.add_theme_stylebox_override("panel", Retro.panel(Color(0.35, 0.0, 0.0), Retro.BAD, 8, 18, 30))
-	banner.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)   # over the title: the rows stay readable
+	var banner := PanelContainer.new()            # in place of the title: never over the rows
+	banner.add_theme_stylebox_override("panel", Retro.panel(Color(0.35, 0.0, 0.0), Retro.BAD, 8, 18, 10))
+	banner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	banner.anchor_left = 0.04
 	banner.anchor_right = 0.96
-	banner.offset_left = 0
-	banner.offset_right = 0
-	banner.offset_top = 24
 	var v := VBoxContainer.new()
+	v.alignment = BoxContainer.ALIGNMENT_CENTER
+	v.add_theme_constant_override("separation", 0)
 	banner.add_child(v)
-	v.add_child(Retro.label(84, Retro.CREAM, "☠  GEËXTERMINEERD  ☠"))
-	v.add_child(Retro.label(56, Retro.AMBER, "  ·  ".join(names)))
-	add_child(banner)
-	banner.pivot_offset = Vector2(900, 120)
-	banner.scale = Vector2(1.6, 1.6)
+	v.add_child(Retro.label(64, Retro.CREAM, "☠  GEËXTERMINEERD  ☠"))
+	var who := Retro.label(42, Retro.AMBER, "  ·  ".join(names))
+	who.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	who.clip_text = true
+	v.add_child(who)
+	for c in _header.get_children():               # the title steps aside
+		if c != banner and not c.has_meta(&"banner"):
+			c.visible = false
+	banner.set_meta(&"banner", true)
+	_header.add_child(banner)
+	banner.pivot_offset = _header.size / 2.0 - Vector2(_header.size.x * 0.04, 0)
+	banner.scale = Vector2(1.12, 1.12)
 	banner.modulate.a = 0.0
 	var tw := banner.create_tween()
 	tw.tween_property(banner, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
@@ -150,7 +181,7 @@ func _exterminate_banner(names: Array) -> void:
 
 
 func _mark_exterminated(e: Dictionary) -> void:
-	e.name.text = e.data.name.to_upper() + "  GEËXTERMINEERD"
+	e.name.text = "☠ %s ☠" % e.data.name.to_upper()           # (the banner says GEËXTERMINEERD)
 	e.name.add_theme_color_override("font_color", Retro.BG)
 	e.lives.text = "-"
 	e.panel.add_theme_stylebox_override("panel", Retro.panel(Retro.BAD, Retro.CREAM, 3, 14, 20))
