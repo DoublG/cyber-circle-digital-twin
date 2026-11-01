@@ -138,6 +138,12 @@ var _result_left := 0.0               # s the UITSLAG board still shows
 var _lives_shown := false              # the scoreboard shows the lives after the change
 var _score_seq := 0                    # (a skipped scoreboard stops its own sequence)
 var _sound_defaults := {}
+var recovery: Recovery                 # crash / power cut: the game comes back where it was
+@export var restore := true                # --no-restore: always a fresh start
+@export var restore_max_age := 3600.0      # s: an older checkpoint is a previous day's game
+var _current_entry := {}               # the round being played, as it was planned (replayed after a crash)
+var _pending_lives := {}               # end of a round: the lives about to change {tile_id: -1/0/+1}
+var _target_lives := {}                # ... and once given / taken: what they become (shots still flying)
 
 
 func setup(arena_node: Node3D) -> void:
@@ -154,6 +160,41 @@ func setup(arena_node: Node3D) -> void:
 		use_database(db_path)
 	_load_records()
 	_enter_lobby()
+	recovery = Recovery.new()
+	recovery.name = "Recovery"
+	recovery.game = self
+	recovery.enabled = restore
+	recovery.max_age = restore_max_age
+	add_child(recovery)
+	recovery.restore.call_deferred()
+
+
+## A stable moment: the game as it is now is what comes back after a crash.
+func _checkpoint() -> void:
+	if recovery:
+		recovery.mark()
+
+
+## Back after a crash / power cut (Recovery.apply): on the scoreboard - the
+## lives that were about to change change now (exterminations too), then the
+## next round. A round that was interrupted is played again (it never counted).
+func resume(changes: Dictionary) -> void:
+	current = null
+	_lives_shown = false
+	_score_seq += 1
+	var seq := _score_seq
+	_set_state(State.SCOREBOARD)
+	_timer = INF
+	log_event("HET SPEL GAAT VERDER (RONDE %d)" % (round_number + 1), Retro.TEAL)
+	_show_scores("Scorebord", "Het spel gaat verder", {}, changes)
+	await get_tree().create_timer(lives_delay / tempo).timeout
+	if state != State.SCOREBOARD or seq != _score_seq:
+		return
+	_lives_shown = true
+	lives_revealed.emit()
+	if not changes.is_empty():
+		_apply_lives(changes)
+	_timer = scoreboard_time / tempo
 
 
 ## Open another database file ("" = none); e.g. a test database.
@@ -258,6 +299,8 @@ func _next_round() -> void:
 	round_number += 1                    # counts rounds (database, 1 life per round)
 	_plan_rounds()
 	var entry: Dictionary = upcoming.pop_front()
+	_current_entry = entry
+	_target_lives.clear()
 	_last_type = entry.type
 	_history.append(_last_type)
 	if _history.size() > 20:
@@ -445,11 +488,13 @@ func set_planned_round(slot: int, type_name: String, options := {}) -> void:
 			return
 		upcoming[slot] = {"type": t, "forced": true, "options": options}
 	_plan_rounds()
+	_checkpoint()
 
 
 func clear_planned_rounds() -> void:
 	upcoming.clear()
 	_plan_rounds()
+	_checkpoint()
 
 
 func set_round_types(types: Array) -> void:
@@ -489,6 +534,7 @@ func status() -> Dictionary:
 			pending.append({"tile": id, "name": p.name, "color": "#" + p.color.to_html(false),
 				"player_id": p.get("player_id", 0)})
 	return {"state": State.keys()[state], "mode": mode_name(), "round": current.title if current else "",
+		"round_number": round_number, "game_id": game_id,
 		"uitslag": _result_left > 0.0,              # SCOREBOARD: still the round's places (UITSLAG)
 		"ranked": current.ranked if current else false,   # the round has points and places (not the quiz)
 		"floor_tiles": Retro.FLOOR_TILES, "tile_count": arena.tiles.size(),
@@ -568,6 +614,7 @@ func _end_round() -> void:
 	best.sort_custom(func(a, b): return a.delta > b.delta)
 	log_event("%s VOORBIJ" % current.title.to_upper() + (
 		" - BESTE: %s (%+d)" % [best[0].name.to_upper(), best[0].delta] if not best.is_empty() else ""), Retro.AMBER)
+	_pending_lives = changes
 	_set_state(State.SCOREBOARD)
 	_timer = INF                                  # held until the lives are done
 	if current.ranked and result_time > 0.0:
@@ -610,6 +657,11 @@ func _life_plan(changes: Dictionary) -> Dictionary:
 ## The lives change (on the scoreboard): +1 a green flash, -1 the robot fires
 ## (at 0: the extermination).
 func _apply_lives(plan: Dictionary) -> void:
+	for id in plan:                               # (what a checkpoint keeps: the animations take a while)
+		if arena.is_playing(id) and not arena.tiles[id - 1].is_dead:
+			_target_lives[id] = clampi(arena.lives_after_hits(id) + plan[id], 0, CyberTile.HEART_COUNT)
+	_pending_lives = {}
+	_checkpoint()
 	var losers := []
 	var doomed := []
 	for id in plan:
@@ -709,6 +761,7 @@ func on_players_changed() -> void:
 			scores.erase(id)
 			survived.erase(id)
 			streaks.erase(id)
+	_checkpoint()
 
 
 ## Adds points (the total never goes below 0); returns the change actually applied.
@@ -854,6 +907,7 @@ func add_score(tile_id: int, n: int) -> int:
 func _set_state(s: State) -> void:
 	state = s
 	state_changed.emit(s)
+	_checkpoint()
 
 
 func _alive_players() -> Array:

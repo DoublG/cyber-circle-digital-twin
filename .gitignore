@@ -31,3 +31,6 @@ deploy/certs/*.pem
 deploy/certs/*.key
 deploy/certs/*.srl
 deploy/certs/server.san
+godot/tests/_recovery*.db*
+godot/tests/_recovery_godot.log
+godot/tests/_recovery_broker.log

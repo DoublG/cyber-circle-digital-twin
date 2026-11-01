@@ -10,6 +10,8 @@ extends Node
 ##                                 server can't be reached - nothing gets lost:
 ##                                 the queue is kept on disk (queue_file(), one
 ##                                 per control server) and sent after a restart too
+## save_checkpoint() / fetch_checkpoint(): the game's state for after a crash
+## (Recovery) - the control server keeps it; only the newest one waits.
 ## refresh() at once when the control server says the database changed
 ## (<prefix>/db over MQTT: a question edited, a player renamed, the ranking),
 ## else every REFRESH_TIME.
@@ -30,6 +32,7 @@ var _game_ids := {}               # temporary id -> the server's id
 var _next_temp := -1
 var _refresh := 0.0
 var _refreshing := false
+var _db_id := ""                  # the control server's database (its checkpoints belong to it)
 var _refresh_again := false
 
 
@@ -43,7 +46,44 @@ func open(url: String) -> bool:
 
 ## Writes not on the server yet (0 = in sync).
 func pending() -> int:
-	return _queue.filter(func(i): return not i.has("refresh")).size()
+	return _queue.filter(func(i): return not i.has("refresh") and not i.has("checkpoint")).size()
+
+
+func db_id() -> String:
+	return _db_id
+
+
+## The game state for after a crash: the newest replaces one still waiting
+## (not the one being sent right now).
+func save_checkpoint(data: Dictionary) -> void:
+	var keep := []
+	for i in _queue.size():
+		if not _queue[i].has("checkpoint") or (i == 0 and _busy):
+			keep.append(_queue[i])
+	_queue = keep
+	_queue.append({"method": HTTPClient.METHOD_PUT, "path": "/api/checkpoint", "body": {"checkpoint": data},
+		"checkpoint": true})
+	_save_queue()
+	_pump()
+
+
+## {db, checkpoint}: what the control server keeps; null when it can't be reached.
+func fetch_checkpoint():
+	var r = await _http_get("/api/checkpoint")
+	if r is Dictionary:
+		_db_id = str(r.get("db", ""))
+		_save_queue()
+	return r
+
+
+## The server's id for a game started while it was away (a temporary id until then).
+func server_game_id(id: int) -> int:
+	return _game_ids.get(id, id)
+
+
+## The game is (or will be) in the database: a real id, or one still to be sent.
+func knows_game(id: int) -> bool:
+	return id > 0 or _game_ids.has(id) or _queue.any(func(i): return i.get("start") == id)
 
 
 func is_open() -> bool:
@@ -158,7 +198,7 @@ func _save_queue() -> void:
 	var f := FileAccess.open(queue_file(), FileAccess.WRITE)
 	if f:
 		f.store_string(JSON.stringify({"queue": _queue.filter(func(i): return not i.has("refresh")),
-			"game_ids": _game_ids, "next_temp": _next_temp}))
+			"game_ids": _game_ids, "next_temp": _next_temp, "db_id": _db_id}))
 
 
 func _load_queue() -> void:
@@ -175,6 +215,7 @@ func _load_queue() -> void:
 	for k in d.get("game_ids", {}):
 		_game_ids[int(k)] = int(d.game_ids[k])
 	_next_temp = mini(_next_temp, int(d.get("next_temp", -1)))
+	_db_id = str(d.get("db_id", ""))
 	if not _queue.is_empty():
 		print("control server: %d writes from before the restart still to send" % pending())
 

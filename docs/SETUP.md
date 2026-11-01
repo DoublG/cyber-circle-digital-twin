@@ -177,6 +177,8 @@ Options (everything after `--`):
 | `--mqtt-user=…` `--mqtt-password=…` | broker login |
 | `--sim-tiles` | with MQTT, still simulate the tile logic (no real tiles) |
 | `--control=URL` | **installation**: the control server, e.g. `http://192.168.1.10:8080` – questions, players, ranking and scores through its API |
+| `--no-restore` | after a crash / power cut: a fresh start instead of back where it was (see *Crash / power cut* below) |
+| `--restore-max-age=S` | an older checkpoint is a previous day's game: a fresh start (default 3600 s) |
 | `--ca=FILE` | trust this CA for `wss://` (broker) and `https://` (control server): the installation's own (`deploy/certs/ca.pem`, §12); default the system's |
 | `--db=PATH` | standalone / testing: open a SQLite file directly; `none` = no database (questions from `questions.json`, nothing saved) |
 | `--node=NAME` | this process' name in the web interface (default `godot-<ip>`) |
@@ -187,6 +189,28 @@ Options (everything after `--`):
 
 Without any options the game starts in preview mode, without MQTT, with the
 demo database `godot/data/cybercircle.db`.
+
+**Crash / power cut.** The game comes back where it was. At every stable
+moment – a player invited, activated or leaving, a round starting, the end of
+a round, the lives given and taken – it saves a checkpoint (at most twice a
+second): to the **control server**, which keeps the game state in its database
+(it survives the control server restarting, and a replaced screen PC gets it
+too), and to a local file (`user://checkpoint_*.json`, written to a temporary
+file and renamed: never half a file) for when the control server can't be
+reached. At the start the game takes the newest:
+
+* **in the lobby**: the players on their tiles with their lives, the invites
+  (a fresh minute to activate);
+* **during a round**: that round never counted (lives only change at its end) –
+  the scoreboard, then the same round again from its intro;
+* **on the scoreboard**: the lives that were about to change change now
+  (exterminations too), then the next round.
+
+The game in the database goes on (the same game, rounds saved once), as do the
+plan of the coming rounds and the question memory. A checkpoint belongs to one
+database: a test server's never comes back in the installation. Older than an
+hour (`--restore-max-age`): yesterday's game – a fresh start. `--no-restore`:
+always a fresh start.
 
 **Sound.** Every game event plays a random file from
 `godot/data/sounds/<event>/` (`.ogg`, `.wav` or `.mp3`): `charge` (the robot
@@ -322,6 +346,7 @@ Prefix `cybercircle` (setting `topic_prefix` on the *Mqtt* node). Payloads are J
 | `cybercircle/activated` | game → app | `{"tile": 3, "player": "Erik"}` |
 | `cybercircle/status` | game → all | `online` / `offline` (retained) |
 | `cybercircle/node/<id>` | game → all | retained announcement: role, address, screens, fps (every 10 s) |
+| (HTTP) `GET` / `PUT /api/checkpoint` | game ↔ control | the game state after a crash: the control server keeps the newest checkpoint (`{db, checkpoint}`) |
 | `cybercircle/db` | control → game | `{"changed": "players" \| "questions" \| "ranking"}`: the database changed (web interface, website sync, a result) – the game fetches it again at once |
 | `cybercircle/state` | game → all | retained game state for the web interface (players, plan, mode, …) |
 | `cybercircle/event` | game → all | the event feed |
@@ -654,7 +679,10 @@ when there are enough others.
 command). Interactive documentation: **http://\<overview pc\>:8080/docs**.
 
 Test: `control/.venv/bin/python control/test_e2e.py` (broker + control server
-+ game, driven through the API).
++ game, driven through the API). Crash / power cut: `control/.venv/bin/python control/test_recovery.py`
+kills the game (`kill -9`) in the lobby, during a round, on the scoreboard and
+with the control server down too, and checks it comes back where it was;
+`godot/tests/test_recovery.tscn` and `test_control_queue.tscn` test the parts.
 
 ## 11. Gamemaster app
 

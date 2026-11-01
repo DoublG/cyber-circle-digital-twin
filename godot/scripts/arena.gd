@@ -340,6 +340,26 @@ func join(tile_id: int, player := "", age := 0, player_id := 0) -> void:
 	game.on_players_changed()
 
 
+## After a crash (Recovery): a player back on their tile as they were - no
+## invite, no greeting; the game calls on_players_changed once afterwards.
+func restore_player(tile_id: int, player: String, age: int, player_id: int, lives: int, max_lives: int) -> void:
+	var tile := tiles[tile_id - 1]
+	_players[tile_id] = {"name": player, "age": age, "player_id": player_id}
+	tile.revive(max_lives)
+	tile.health = clampi(lives, 0, CyberTile.HEART_COUNT)
+	tile.idle = false
+	set_cable_flow(tile_id, cable_color)
+
+
+## After a crash: an invite waiting for its player again (a fresh time to activate).
+func restore_invite(tile_id: int, player: String, color: Color, age: int, player_id: int) -> void:
+	var tile := tiles[tile_id - 1]
+	_pending[tile_id] = {"name": player, "color": color, "age": age, "player_id": player_id,
+		"time_left": activation_timeout}
+	tile.start_activation(color)
+	set_cable_flow(tile_id, color, 0.5)
+
+
 ## The player leaves: back to the idle animation, view removed from the screen.
 func leave(tile_id: int) -> void:
 	_hits_on_way.erase(tile_id)
@@ -588,6 +608,8 @@ func _update_packets(delta: float) -> void:
 ##   --control=URL        the control server (installation): questions, players and scores
 ##                        through its HTTP API, e.g. --control=http://192.168.1.10:8080
 ##   --ca=FILE            trust this CA for wss:// and https:// (the installation's own, deploy/certs/ca.pem)
+##   --no-restore         after a crash: a fresh start (default: back where it was, see Recovery)
+##   --restore-max-age=S  an older checkpoint is a previous day's game (default 3600)
 ##   --db=PATH            standalone: the SQLite file itself ("none": no database)
 ##   --no-sound           no sound effects
 ##   --sounds=DIR         extra sound files: DIR/<event>/*.ogg (see SoundBoard)
@@ -647,6 +669,10 @@ func _apply_command_line() -> void:
 				game.control_url = value
 			"--ca":
 				TlsTrust.load_ca(value)
+			"--no-restore":
+				game.restore = false
+			"--restore-max-age":
+				game.restore_max_age = float(value)
 			"--texts":                                     # the operator's texts as JSON (Texts)
 				var t = JSON.parse_string(FileAccess.get_file_as_string(value))
 				if t is Dictionary:

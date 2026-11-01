@@ -8,6 +8,7 @@ path: tests, trying things out). The tables match ../godot/data/schema.sql
 import datetime
 import json
 import os
+import uuid
 
 from sqlalchemy import (Column, DateTime, Float, ForeignKey, Index, Integer, MetaData, String, Table, Text,
                         create_engine, func, inspect, select, text, update, insert, delete, event)
@@ -93,7 +94,7 @@ gamemasters_t = Table(
 settings_t = Table(
     "settings", meta,
     Column("key", String(191), primary_key=True),              # e.g. "mode": setup / closed / open / paused
-    Column("value", Text, nullable=False))
+    Column("value", Text(16_000_000), nullable=False))           # (MySQL: MEDIUMTEXT - the game's checkpoint)
 
 # columns added after the first installations: (table, column, SQL type) - added when missing
 LATER_COLUMNS = (("questions", "image", "VARCHAR(255) NOT NULL DEFAULT ''"),
@@ -128,6 +129,11 @@ class Database:
             for table, column, sqltype in LATER_COLUMNS:       # databases from before these columns
                 if column not in cols[table]:
                     con.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {sqltype}"))
+        if self.engine.dialect.name == "mysql":
+            vtype = next(c["type"] for c in inspect(self.engine).get_columns("settings") if c["name"] == "value")
+            if type(vtype).__name__ == "TEXT":          # (a database from before the checkpoint)
+                with self.engine.begin() as con:
+                    con.execute(text("ALTER TABLE settings MODIFY value MEDIUMTEXT NOT NULL"))
         if "card" not in cols["players"]:          # (and its index, before the QR cards)
             with self.engine.begin() as con:
                 con.execute(text("CREATE UNIQUE INDEX players_card ON players (card)"))
@@ -156,6 +162,15 @@ class Database:
             if con.execute(update(settings_t).where(settings_t.c.key == key).values(value=str(value))).rowcount == 0:
                 if con.execute(select(settings_t.c.key).where(settings_t.c.key == key)).first() is None:
                     con.execute(insert(settings_t).values(key=key, value=str(value)))
+
+    def instance_id(self):
+        """This database's own id: the game's checkpoints belong to it (a test
+        database's never come back in the installation)."""
+        v = self.setting("db_id")
+        if not v:
+            v = uuid.uuid4().hex
+            self.set_setting("db_id", v)
+        return v
 
     # ------------------------------------------------------------ tiles (places around the robot)
 

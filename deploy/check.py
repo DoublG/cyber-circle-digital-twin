@@ -139,6 +139,17 @@ r = subprocess.run(["docker", "exec", "cybercircle-mysql-1", "sh", "-c",
                     'mysql -N -ucybercircle -p"$MYSQL_PASSWORD" cybercircle -e "SELECT COUNT(*) FROM players WHERE name = \'%s\'"' % name],
                    capture_output=True, text=True)
 check(r.stdout.strip() == "1", "'%s' is stored in MySQL (players: %s)" % (name, r.stdout.strip() or r.stderr.strip()[-80:]))
+
+print("the game crashes and comes back from the control server's copy (a new container: no local file):")
+lives = next(p["lives"] for p in live()["state"]["players"] if p["tile"] == 1)
+time.sleep(1.5)                                 # (a checkpoint every 0.5 s at most)
+compose = ["docker", "compose", "--project-directory", HERE]
+subprocess.run(compose + ["rm", "-sf", "game"], capture_output=True)
+since = call("GET", "/api/mqtt/log?limit=1")["seq"]
+subprocess.run(compose + ["up", "-d", "game"], capture_output=True)
+until(lambda: call("GET", "/api/mqtt/log?since=%d&filter=cybercircle/state" % since)["messages"], 90)
+back = until(lambda: next((p for p in live()["state"]["players"] if p["tile"] == 1 and p["name"] == name), None), 30)
+check(bool(back) and back["lives"] == lives, "'%s' back on T01 with %s lives after the game was recreated" % (name, lives))
 call("POST", "/api/tiles/1/leave")
 print("DONE: %d failure(s)" % fails)
 sys.exit(1 if fails else 0)

@@ -585,6 +585,21 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
 
     # ------------------------------------------------------------ games and scores (game master)
 
+    # ------------------------------------------------------------ the game state (crash / power cut)
+
+    @app.get("/api/checkpoint")
+    def get_checkpoint():
+        """The game's last checkpoint (Recovery in the game): the control server
+        keeps the game state - after a crash the game continues from it."""
+        raw = db.setting("checkpoint")
+        return {"db": db.instance_id(), "checkpoint": json.loads(raw) if raw else None}
+
+    @app.put("/api/checkpoint")
+    async def put_checkpoint(request: Request):
+        body = await request.json()
+        db.set_setting("checkpoint", json.dumps(body.get("checkpoint")))
+        return {"ok": True}
+
     @app.post("/api/games")
     def start_game():
         return {"id": db.start_game()}

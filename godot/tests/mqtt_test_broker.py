@@ -49,7 +49,7 @@ def ws_frame(data):
 async def send(writer, header, body):
     packet = mqtt_packet(header, body)
     writer.write(packet if writer in raw else ws_frame(packet))
-    await writer.drain()
+    await asyncio.wait_for(writer.drain(), 2)       # (a killed client must not block the others)
 
 
 async def publish(topic, payload, retain):
@@ -61,8 +61,9 @@ async def publish(topic, payload, retain):
         if any(match(s, topic) for s in subs):
             try:
                 await send(w, 0x30, body)
-            except Exception:
-                pass
+            except Exception:                    # gone (killed): forget it
+                clients.pop(w, None)
+                w.close()
 
 
 async def handle_mqtt(writer, header, body):
