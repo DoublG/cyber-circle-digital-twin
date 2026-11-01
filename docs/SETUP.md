@@ -361,6 +361,13 @@ cd tile_firmware && pio run -e native
 .pio/build/native/program --mac 02:00:00:00:00:01 --host 127.0.0.1 --port 1883 [--user u --password p]
 ```
 
+Add `--web 8090` for the tile's top in the browser at `http://localhost:8090`:
+the drawing of the real tile (`tile_firmware/emulator/tile_top.svg`, the
+measurements of the 3D model; `make_tile_svg.py` regenerates it) with every
+LED, heart and icon lit live – click and hold an icon to stand on it (or keys
+1–4 in the page). `python3 tile_firmware/test/emulator_e2e.py` runs two
+emulated tiles against the whole stack.
+
 It needs a broker with plain MQTT: Mosquitto's `listener 1883`, or for a
 quick try the test broker: `python3 godot/tests/mqtt_test_broker.py 9001 --tcp 1883`
 (start the game with `--mqtt=ws://127.0.0.1:9001` and the control server

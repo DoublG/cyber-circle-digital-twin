@@ -1,11 +1,13 @@
 // The tile emulator: the real firmware (src/) built for Linux (pio run -e native).
 //   .pio/build/native/program [--mac 02:00:00:00:00:03] [--host 127.0.0.1] [--port 1883]
-//                             [--user u] [--password p]
+//                             [--user u] [--password p] [--web 8090]
 // Draws the tile in the terminal (the ring as seen from above, LED_00 at the
 // top = the robot side, then clockwise; the hearts, the 4 icons, the status
 // LED) and turns keys 1-4 into presses on the icons (q: quit). It connects to
 // the MQTT broker like a real tile: plain MQTT (Mosquitto 1883, or the test
 // broker: python3 godot/tests/mqtt_test_broker.py 9001 --tcp 1883).
+// --web 8090: the tile's top (tile_top.svg) live at http://localhost:8090,
+// click or hold an icon to stand on it.
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -26,6 +28,7 @@
 #include "FastLED.h"
 #include "WiFi.h"
 #include "config.h"
+#include "web.h"
 
 void setup();
 void loop();
@@ -36,6 +39,8 @@ const char *emu_user = "";
 const char *emu_password = "";
 static std::string emu_mac;
 static uint32_t pressUntil[4];
+static bool webHeld[4];                           // icons held down in the browser
+static int webPort = 0;
 static bool running = true;
 static std::deque<std::string> logLines;
 static termios savedTerm;
@@ -57,7 +62,7 @@ void delay(uint32_t ms) { usleep(ms * 1000); }
 
 int analogRead(int pin) {                         // a key = the icon pressed for a moment
     for (int i = 0; i < 4; i++)
-        if (SENSOR_PINS[i] == pin) return millis() < pressUntil[i] ? 3000 : 100;
+        if (SENSOR_PINS[i] == pin) return webHeld[i] || millis() < pressUntil[i] ? 3000 : 100;
     return 0;
 }
 
@@ -177,6 +182,7 @@ void CFastLED::show() {
         if (ch >= '1' && ch <= '4') pressUntil[ch - '1'] = millis() + 180;
         if (ch == 'q' || ch == 'Q') running = false;
     }
+    webPoll(ledBuf, ledCount, emu_mac, logLines, webHeld);
     if (millis() - last < 50 || !ledBuf) return;
     last = millis();
     const int W = 49, H = 21, cx = 24, cy = 10;
@@ -229,6 +235,7 @@ int main(int argc, char **argv) {
         else if (k == "--port") emu_port = atoi(argv[i + 1]);
         else if (k == "--user") emu_user = argv[i + 1];
         else if (k == "--password") emu_password = argv[i + 1];
+        else if (k == "--web") webPort = atoi(argv[i + 1]);
     }
     tcgetattr(STDIN_FILENO, &savedTerm);
     termios raw = savedTerm;
@@ -237,6 +244,11 @@ int main(int argc, char **argv) {
     fcntl(STDIN_FILENO, F_SETFL, fcntl(STDIN_FILENO, F_GETFL) | O_NONBLOCK);
     atexit(restoreTerminal);
     signal(SIGINT, [](int) { running = false; });
+    if (webPort && !webStart(webPort)) {
+        fprintf(stderr, "port %d is taken\n", webPort);
+        return 1;
+    }
+    if (webPort) log("web view: http://localhost:" + std::to_string(webPort));
     fputs("\x1b[2J\x1b[?25l", stdout);
     setup();
     while (running) {
