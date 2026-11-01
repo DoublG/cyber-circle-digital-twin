@@ -32,10 +32,11 @@ import uvicorn
 from urllib.parse import urlparse, urlunparse
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import questions_csv
 from db import FLOOR_TILES, PLACES, Database
 from mqtt_link import MqttLink
 
@@ -475,6 +476,29 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB) -> FastAPI:
     def update_question(qid: int, q: QuestionIn):
         db.save_question(q.model_dump(), qid)
         return {"ok": True}
+
+    @app.post("/api/questions/import")
+    async def import_questions(request: Request):
+        """A CSV (questions_csv.py: header row, `;` or `,`): every row added, or
+        updated when its id exists. Bad rows are skipped and reported."""
+        body = (await request.body()).decode("utf-8", errors="replace")
+        rows, errors = questions_csv.parse(body)
+        existing = {q["id"]: q for q in db.question_rows()}
+        added = updated = 0
+        for qid, q in rows:
+            if qid in existing:
+                db.save_question({**q, "slug": existing[qid]["slug"]}, qid)
+                updated += 1
+            else:
+                db.save_question({**q, "slug": None})
+                added += 1
+        return {"added": added, "updated": updated, "errors": [{"line": n, "error": e} for n, e in errors]}
+
+    @app.get("/api/questions.csv")
+    def export_questions():
+        """Every question as CSV (the format to upload: edit in Excel, upload again)."""
+        return Response(questions_csv.export(db.question_rows()), media_type="text/csv; charset=utf-8",
+                        headers={"Content-Disposition": 'attachment; filename="cybercircle-vragen.csv"'})
 
     @app.delete("/api/questions/{qid}")
     def delete_question(qid: int):

@@ -489,6 +489,15 @@ or a new master continues in the same mode.
 * **Processen** – every Godot process (name, role, address, screens, fps);
   choose the master here.
 * **Spelers** – search / add players, assign one to a tile.
+* **Vragen** – **CSV importeren / downloaden**: many questions at once from a
+  spreadsheet (Excel: save as CSV; `;` or `,`). Columns (header row): `vraag`,
+  `antwoord1`–`antwoord4`, `juist` (1–4: square, triangle, cross, circle)
+  required; optional `id` (that question is updated, else added),
+  `categorie`, `min_leeftijd`, `max_leeftijd`, `tijd`, `extra_tekst`,
+  `uitleg`, `video`, `video_wanneer` (voor / tijdens), `afbeelding`, `actief`
+  (1 / 0). Bad rows are skipped and listed (row number, why). *CSV
+  downloaden* gives all questions in that format: edit and upload again.
+  Questions are managed here only (not in the gamemaster app).
 * **Vragen** – add / edit / hide questions (answer 1–4 = square, triangle,
   cross, circle; ages; video; a picture next to the question – a file in
   `godot/data/images/`, `.png`/`.jpg`/`.webp`/`.svg`; explanation). On the
@@ -551,7 +560,7 @@ when there are enough others.
 `PUT /api/layout {t01_clock}` · `GET|POST /api/gamemasters`, `PUT|DELETE /api/gamemasters/<id> {name, color}` ·
 `POST /api/session {device, gamemaster}` (the app's sign of life) · `POST /api/players {name, age}` → `{id}` ·
 `POST /api/players/<id>/assign {tile, gamemaster}` (tile 0 = a free floor tile, 14–18 = M1–M5) ·
-`GET /api/questions` · `GET /api/ranking` · `POST /api/games` · `POST /api/games/<id>/rounds|results|end` ·
+`GET /api/questions` · `POST /api/questions/import` (CSV) · `GET /api/questions.csv` · `GET /api/ranking` · `POST /api/games` · `POST /api/games/<id>/rounds|results|end` ·
 `GET /api/master` · `POST /api/mode {mode}` · `GET|PUT /api/settings` · · `POST /api/plan {slot, round, options}` ·
 `POST /api/tiles/<n>/points|lives|leave|revive|attack|attacked|fire` · `POST /api/cmd {...}` (any game
 command). Interactive documentation: **http://\<overview pc\>:8080/docs**.

@@ -324,6 +324,16 @@ $("#questions").onclick = e => {
   const b = e.target.closest("button[data-qid]");
   if (b) openQuestion(questions.find(q => q.id == b.dataset.qid));
 };
+$("#csv-file").onchange = async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const r = await fetch("/api/questions/import", { method: "POST", headers: { "Content-Type": "text/csv" }, body: await file.text() });
+  const res = await r.json();
+  $("#csv-result").innerHTML = `<b>${esc(file.name)}</b>: ${res.added} toegevoegd, ${res.updated} bijgewerkt` +
+    (res.errors.length ? `, ${res.errors.length} overgeslagen:<br>` + res.errors.map(x => `regel ${x.line}: ${esc(x.error)}`).join("<br>") : "");
+  e.target.value = "";
+  loadQuestions();
+};
 $("#new-question").onclick = () => openQuestion({ min_age: 0, max_age: 99, correct: 0, time: 0, active: 1, video_when: "before" });
 $("#question-form").onsubmit = async e => {
   if (e.submitter?.value !== "save") return;

@@ -148,6 +148,28 @@ try:
     check(live()["gamemasters_online"] == [], "Erik logged out")
     call("POST", "/api/tiles/16/leave")
 
+    print("--- questions as CSV: export, import (added, updated, bad rows reported)")
+    before = len(call("GET", "/api/questions/all"))
+    with urllib.request.urlopen(BASE + "/api/questions.csv", timeout=5) as r:
+        exported = r.read().decode("utf-8-sig")
+    check(exported.startswith("id;categorie;") and exported.count("\n") == before + 1, f"export: {before} questions + header")
+    first = call("GET", "/api/questions/all")[0]
+    csv_text = ("vraag;antwoord1;antwoord2;antwoord3;antwoord4;juist;categorie;min_leeftijd;id\n"
+                "Hoeveel is 2+2?;3;4;5;22;2;Rekenen;6;\n"
+                f"{first['question']} (nieuw);a;b;c;d;1;Computers;10;{first['id']}\n"
+                "Zonder antwoorden?;;;;;1;;;\n"
+                "Fout juist;a;b;c;d;7;;;\n")
+    req = urllib.request.Request(BASE + "/api/questions/import", data=csv_text.encode(), method="POST",
+                                 headers={"Content-Type": "text/csv"})
+    with urllib.request.urlopen(req, timeout=5) as r:
+        res = json.loads(r.read())
+    check(res["added"] == 1 and res["updated"] == 1 and [e["line"] for e in res["errors"]] == [4, 5],
+          f"import: 1 added, 1 updated, lines 4 and 5 rejected ({res})")
+    qs = call("GET", "/api/questions/all")
+    new = next(q for q in qs if q["question"] == "Hoeveel is 2+2?")
+    check(new["correct"] == 1 and new["category"] == "Rekenen" and new["min_age"] == 6, "the new question: 4 is right (juist 2)")
+    check(next(q for q in qs if q["id"] == first["id"])["question"].endswith("(nieuw)"), "the existing one updated")
+
     print("--- operator: lives, round plan")
     call("POST", "/api/tiles/4/lives", {"lives": 2})
     check(until(lambda: player(4)["lives"] == 2), "lives set to 2")

@@ -90,7 +90,12 @@
 </section>
 
 <section id="tab-questions" class="tab">
-  <div class="row"><button id="new-question">+ Vraag</button></div>
+  <div class="row"><button id="new-question">+ Vraag</button>
+    <label class="button-like">CSV importeren <input type="file" id="csv-file" accept=".csv,text/csv" hidden></label>
+    <a href="/api/questions.csv" class="button-like">CSV downloaden</a>
+    <span class="hint">Kolommen: vraag; antwoord1-4; juist (1-4); optioneel id, categorie, min_leeftijd, max_leeftijd,
+      tijd, extra_tekst, uitleg, video, video_wanneer, afbeelding, actief. Met id: die vraag wordt bijgewerkt.</span></div>
+  <div id="csv-result" class="hint"></div>
   <table id="questions"><thead><tr><th>#</th><th>Categorie</th><th>Leeftijd</th><th>Vraag</th><th>Actief</th><th></th></tr></thead><tbody></tbody></table>
   <dialog id="question-dialog">
     <form id="question-form" method="dialog">

@@ -76,6 +76,9 @@ dialog label input, dialog label textarea, dialog label select { display: block;
 .settings input.changed { border-color: var(--orange); color: var(--amber); }
 .settings em { font-style: normal; color: var(--dim); font-size: 13px; }
 .changed-hint { color: var(--amber); }
+.button-like { font: inherit; background: var(--panel); color: var(--cream); border: 2px solid var(--orange);
+  padding: 6px 14px; cursor: pointer; text-decoration: none; }
+.button-like:hover { background: var(--orange); color: var(--bg); }
 .gm-online { display: flex; gap: 10px; flex-wrap: wrap; }
 .gm-online .gm { border: 2px solid var(--line); padding: 4px 10px; background: var(--panel); font-weight: bold; }
 .layout { align-items: flex-start; } .layout p { max-width: 520px; }
