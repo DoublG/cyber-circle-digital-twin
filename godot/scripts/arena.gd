@@ -565,6 +565,7 @@ func _update_packets(delta: float) -> void:
 ##   --demo[=N]           N (default 6) bot players keep the game going (showing it without visitors)
 ##   --demo-idle=S        the bots only walk up after S seconds (the game idles until then)
 ##   --rounds=quiz,simon  only these round types (cyclone, quiz, reaction, rhythm, simon, zwarte_piet)
+##   --texts=FILE         texts (JSON, see Texts): {"cta": "...", "rules.quiz": "...", ...}
 ##   --control=URL        the control server (installation): questions, players and scores
 ##                        through its HTTP API, e.g. --control=http://192.168.1.10:8080
 ##   --db=PATH            standalone: the SQLite file itself ("none": no database)
@@ -624,6 +625,12 @@ func _apply_command_line() -> void:
 				game.db_path = "" if value == "none" else value
 			"--control":
 				game.control_url = value
+			"--texts":                                     # the operator's texts as JSON (Texts)
+				var t = JSON.parse_string(FileAccess.get_file_as_string(value))
+				if t is Dictionary:
+					Texts.apply(t)
+				else:
+					push_warning("--texts: no JSON object in %s" % value)
 			"--no-sound":
 				sound.enabled = false
 			"--sounds":

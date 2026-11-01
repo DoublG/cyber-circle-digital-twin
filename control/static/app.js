@@ -28,7 +28,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button, .tab").forEach(e => e.classList.remove("active"));
   b.classList.add("active");
   $(`#tab-${b.dataset.tab}`).classList.add("active");
-  ({ gamemasters: loadGamemasters, players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: loadTiles, settings: loadSettings })[b.dataset.tab]?.();
+  ({ website: loadWebsite, texts: loadTexts, gamemasters: loadGamemasters, players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: loadTiles, settings: loadSettings })[b.dataset.tab]?.();
 });
 
 // ---------------------------------------------------------------- live
@@ -44,7 +44,10 @@ function renderLive() {
   $("#status").textContent = s.round && s.state !== "LOBBY" ? `${st}: ${String(s.round).toUpperCase()}` : st;
   $("#timer").textContent = s.timer || "";
   const master = live.master?.node ? `master: ${live.master.node}` : "geen master gekozen";
-  $("#links").textContent = `MQTT ${live.mqtt ? "✓" : "✗"} · ${master}`;
+  const w = live.website || {};
+  $("#links").innerHTML = `MQTT ${live.mqtt ? "✓" : "✗"} · <span class="${w.status === "down" ? "bad" : ""}">website ${
+    w.status === "ok" ? "✓" : w.status === "down" ? "✗ OFFLINE" : "?"}</span> · ${esc(master)}`;
+  if ($("#tab-website").classList.contains("active")) loadWebsite();
   $("#mode").textContent = MODE_NAMES[live.mode] || live.mode;
   $("#mode").className = `mode ${live.mode}`;
   $("#mode-buttons").innerHTML = (MODE_ACTIONS[live.mode] || []).map(([m, label, ask]) =>
@@ -226,6 +229,79 @@ $("#tile-table").onclick = async e => {
   if (t.enabled && !confirm(`${label(t.number)} buiten gebruik zetten? Een speler die erop staat gaat eruit.`)) return;
   await api("PUT", `/api/tiles/${t.number}`, { enabled: !t.enabled });
   loadTiles();
+};
+
+// ---------------------------------------------------------------- website (registrations)
+const ago = s => s === null || s === undefined ? "nog niet" : s < 60 ? `${s} s geleden` : s < 3600 ? `${Math.round(s / 60)} min geleden` : `${Math.round(s / 3600)} u geleden`;
+async function loadWebsite() {
+  const w = await api("GET", "/api/website");
+  const up = w.status === "ok", down = w.status === "down";
+  $("#website").innerHTML = `<div class="site ${up ? "up" : down ? "down" : ""}">
+      <div class="big">${up ? "✓ BEREIKBAAR" : down ? "✗ NIET BEREIKBAAR" : "… NOG NIET GECONTROLEERD"}</div>
+      ${down ? `<div class="bad">Nieuwe registraties komen niet binnen. ${esc(w.error)}</div>` : ""}
+      <table>
+        <tr><td>Health endpoint</td><td>${esc(w.url)}${w.mock ? ` <span class="hint">(mock: nog geen echte website ingesteld, --website=URL)</span>` : ""}</td></tr>
+        <tr><td>Laatst gecontroleerd</td><td>${ago(w.checked_ago)} (elke ${w.interval} s)${w.latency_ms !== null ? ` · ${w.latency_ms} ms` : ""}</td></tr>
+        <tr><td>Laatst bereikbaar</td><td>${ago(w.last_ok_ago)}</td></tr>
+        <tr><td>Laatste registratie binnen</td><td>${ago(w.last_sync_ago)} · ${w.syncs} sinds de start</td></tr>
+      </table>
+      ${w.mock ? `<div class="row"><button data-mock="${w.mock_up ? "0" : "1"}">${w.mock_up ? "Mock: zet website uit (test)" : "Mock: zet website aan"}</button></div>` : ""}
+    </div>`;
+  $("#website-history").innerHTML = w.history.map(h => `<li><span class="t">${esc(h.time)}</span>
+    <span class="${h.ok ? "" : "bad"}">${h.ok ? `✓ ${h.ms} ms` : `✗ ${esc(h.error)}`}</span></li>`).join("");
+}
+$("#website").onclick = async e => {
+  const b = e.target.closest("button[data-mock]");
+  if (b) { await api("POST", "/api/website/mock", { up: b.dataset.mock === "1" }); loadWebsite(); }
+};
+
+// ---------------------------------------------------------------- texts
+const GAME_ORDER = ["quiz", "cyclone", "reaction", "simon", "zwarte_piet", "rhythm"];
+
+async function loadTexts() {
+  const { defaults, values } = await api("GET", "/api/texts");
+  if (!Object.keys(defaults).length) {
+    $("#texts").innerHTML = `<p class="hint">Nog geen master verbonden: de standaardteksten komen van het spel.</p>`;
+    return;
+  }
+  const field = (key, label, rows) => {
+    const v = values[key] ?? "", d = defaults[key] ?? "";
+    const input = rows
+      ? `<textarea data-key="${key}" rows="${rows}" placeholder="${esc(d)}" class="${v ? "changed" : ""}">${esc(v)}</textarea>`
+      : `<input data-key="${key}" placeholder="${esc(d)}" value="${esc(v)}" class="${v ? "changed" : ""}">`;
+    return `<label><span>${label} <a href="#" data-default="${key}" class="hint">standaard</a></span>${input}</label>`;
+  };
+  const games = GAME_ORDER.filter(t => defaults["title." + t] !== undefined);
+  $("#texts").innerHTML =
+    `<fieldset><legend>Oproepen en meedoen</legend>
+      ${field("cta", "Oproepen (één per regel, ze wisselen elkaar af)", 6)}
+      ${field("join_steps", "Hoe doe je mee? (overzichtsscherm)", 6)}
+      ${field("join_text", "Op het scherm van een vrije tegel", 0)}</fieldset>` +
+    games.map(t => `<fieldset><legend>${esc(defaults["title." + t])}</legend>
+      ${field("title." + t, "Naam", 0)}${field("rules." + t, "Uitleg (intro, overzichtsscherm)", 6)}</fieldset>`).join("");
+  $("#texts-msg").textContent = "";
+}
+$("#texts").oninput = e => e.target.classList.toggle("changed", e.target.value.trim() !== "");
+$("#texts").onclick = e => {
+  const a = e.target.closest("a[data-default]");
+  if (!a) return;
+  e.preventDefault();
+  const el = $(`#texts [data-key="${a.dataset.default}"]`);
+  el.value = "";
+  el.classList.remove("changed");
+};
+$("#texts-save").onclick = async () => {
+  const values = {};
+  document.querySelectorAll("#texts [data-key]").forEach(el => { if (el.value.trim()) values[el.dataset.key] = el.value; });
+  await api("PUT", "/api/texts", values);
+  await loadTexts();
+  $("#texts-msg").textContent = "Opgeslagen ✓";
+};
+$("#texts-reset").onclick = async () => {
+  if (!confirm("Alle teksten terug naar de standaard?")) return;
+  await api("PUT", "/api/texts", {});
+  await loadTexts();
+  $("#texts-msg").textContent = "Alles standaard ✓";
 };
 
 // ---------------------------------------------------------------- gamemasters

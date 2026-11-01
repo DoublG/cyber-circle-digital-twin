@@ -33,6 +33,7 @@ class MqttLink:
         self.on_change = on_change or (lambda kind: None)
         self.nodes = {}                      # id -> announcement + "seen"
         self.schema = []                     # the game's settings (settings/schema)
+        self.text_defaults = {}              # the game's texts as they are without changes (texts/defaults)
         self.devices = {}                    # physical tile id -> hello + "seen"
         self.state = {}
         self.events = deque(maxlen=60)
@@ -68,7 +69,7 @@ class MqttLink:
     def _on_connect(self, client, userdata, flags, reason, props):
         self.online = not reason.is_failure
         for t in ("node/+", "device/+/hello", "state", "event", "master", "registered", "activated", "status",
-                  "settings/schema"):
+                  "settings/schema", "texts/defaults"):
             client.subscribe(f"{self.prefix}/{t}")
         self.on_change("mqtt")
 
@@ -104,6 +105,9 @@ class MqttLink:
             elif topic == "settings/schema":
                 self.schema = data or []
                 kind = "settings"
+            elif topic == "texts/defaults":
+                self.text_defaults = data or {}
+                kind = "texts"
             elif topic == "master":
                 self.master = data or {}
                 kind = "master"
@@ -148,6 +152,9 @@ class MqttLink:
 
     def publish_mode(self, mode):
         self.client.publish(f"{self.prefix}/mode", json.dumps({"mode": mode}), retain=True)
+
+    def publish_texts(self, values):
+        self.client.publish(f"{self.prefix}/texts", json.dumps(values), retain=True)
 
     def publish_settings(self, values):
         self.client.publish(f"{self.prefix}/settings", json.dumps(values), retain=True)

@@ -22,6 +22,8 @@
   <button data-tab="players">Spelers</button>
   <button data-tab="gamemasters">Gamemasters</button>
   <button data-tab="questions">Vragen</button>
+  <button data-tab="texts">Teksten</button>
+  <button data-tab="website">Website</button>
   <button data-tab="ranking">Ranglijst</button>
   <button data-tab="settings">Instellingen</button>
 </nav>
@@ -124,6 +126,24 @@
         <button id="delete-question" type="button" class="danger">Verwijderen</button></div>
     </form>
   </dialog>
+</section>
+
+<section id="tab-texts" class="tab">
+  <p class="hint">De teksten op de schermen. Leeg = de standaardtekst (grijs). Oproepen en hoe je meedoet gelden
+    meteen; de naam en uitleg van een spel vanaf zijn volgende ronde. De standaarduitleg past zich aan de
+    <b>Instellingen</b> aan (punten, tijden) - een gewijzigde tekst niet.</p>
+  <div class="row"><button id="texts-save">Opslaan</button><button id="texts-reset" class="danger">Alles standaard</button>
+    <span id="texts-msg" class="hint"></span></div>
+  <div id="texts" class="texts"></div>
+</section>
+
+<section id="tab-website" class="tab">
+  <p class="hint">Bezoekers registreren zich met hun QR-kaart op de website; die stuurt de registraties door naar
+    deze server. Is de website niet bereikbaar, dan komen er geen nieuwe registraties binnen - de gamemasters zien
+    dat ook in hun app.</p>
+  <div id="website" class="website"></div>
+  <h2>Laatste controles</h2>
+  <ul id="website-history" class="events"></ul>
 </section>
 
 <section id="tab-ranking" class="tab">

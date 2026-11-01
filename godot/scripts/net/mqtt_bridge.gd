@@ -60,6 +60,7 @@ func setup(arena_node: Node3D) -> void:
 	subscribe(topic_prefix + "/tiles")
 	subscribe(topic_prefix + "/mode")
 	subscribe(topic_prefix + "/settings")
+	subscribe(topic_prefix + "/texts")
 	arena.game.settings_changed.connect(_publish_settings)
 	start()
 
@@ -69,6 +70,7 @@ func setup(arena_node: Node3D) -> void:
 func _publish_settings() -> void:
 	if role == "master":
 		publish_json(topic_prefix + "/settings/schema", arena.game.settings_schema(), true)
+		publish_json(topic_prefix + "/texts/defaults", Texts.defaults(arena.game), true)   # (rules follow the settings)
 
 
 func _on_message(topic: String, payload: PackedByteArray) -> void:
@@ -81,6 +83,10 @@ func _on_message(topic: String, payload: PackedByteArray) -> void:
 		return
 	if topic == topic_prefix + "/settings":              # the operator's settings
 		arena.game.apply_settings(data)
+		return
+	if topic == topic_prefix + "/texts":                 # the operator's texts (Texts)
+		Texts.apply(data)
+		arena.screen_wall.refresh()                      # (free tiles: their line)
 		return
 	if topic == topic_prefix + "/tiles":                 # tiles in / out of service
 		var enabled: Dictionary = data.get("enabled", {})

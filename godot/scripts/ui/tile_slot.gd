@@ -8,7 +8,6 @@ extends Control
 ##                 and a bar pulsing in the colour they picked, "DRUK OP DE 4 ICONEN"
 ## Plain 2D (no 3D view): cheap to draw.
 
-const JOIN_TEXT := "HAAL EEN QR-KAART EN MELD JE BIJ DE GAMEMASTER"
 
 var tile_id := 0
 var player := ""                  # "" = free tile
@@ -52,7 +51,7 @@ func _ready() -> void:
 		var cta := CallToAction.new(52)
 		cta.custom_minimum_size.y = 200
 		box.add_child(cta)
-		box.add_child(_wrapped(JOIN_TEXT, 32, Retro.CREAM))
+		box.add_child(_wrapped(Texts.join_text(), 32, Retro.CREAM))
 	add_child(Retro.ViewFrame.new())
 	set_process(invited)
 

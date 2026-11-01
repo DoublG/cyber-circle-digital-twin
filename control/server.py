@@ -11,10 +11,13 @@ Gamemaster app in a browser (iPhone): http://<this pc>:8080/gm/ (the Flutter web
                POST /api/games, POST /api/games/{id}/rounds|results|end
   displays     GET /api/master        (where the master is: the Pis connect to it)
   app          POST /api/players {name, color, age, card?} -> {id};  POST /api/players/{id}/assign {tile?}
+  website      GET /api/website (is the registration website up? --website=URL of its health endpoint,
+               none: a mock - POST /api/website/mock {"up": false} to test), the last registration in
   website sync PUT /api/cards/{code} {name, age, email?} (visitors register on the website with their card;
                the gamemaster app the same for a visitor without a phone)
   setup        PUT /api/layout {t01_clock} (where T01 is, as on a clock; the entrance at 6)
                GET|POST /api/gamemasters, PUT|DELETE /api/gamemasters/{id} {name, color}
+               GET|PUT /api/texts (the slogans, how to join, per game its name and rules)
   gamemaster   POST /api/session {device, gamemaster} (sign of life: who is logged in, on the dashboard)
   gamemaster   GET /api/config (where MQTT, the layout), GET /api/cards/{code} (who has this QR card),
                POST /api/players {..., card}, POST /api/players/{id}/assign, POST /api/tiles/{n}/leave
@@ -37,6 +40,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import questions_csv
+from website import Website
 from db import FLOOR_TILES, PLACES, Database
 from mqtt_link import MqttLink
 
@@ -146,7 +150,8 @@ class TileIn(BaseModel):
 GM_WEB = os.path.join(HERE, "..", "gamemaster_app", "build", "web")
 
 
-def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB) -> FastAPI:
+def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website | None = None) -> FastAPI:
+    site = site or Website()
     listeners: set[asyncio.Queue] = set()
     loop: dict = {}
 
@@ -156,6 +161,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB) -> FastAPI:
         if kind == "mqtt":
             link.publish_mode(db.setting("mode", "setup"))
             link.publish_settings(game_settings())
+            link.publish_texts(texts())
         if "loop" in loop:
             for q in list(listeners):
                 loop["loop"].call_soon_threadsafe(q.put_nowait, kind)
@@ -166,7 +172,10 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB) -> FastAPI:
     async def lifespan(app):
         loop["loop"] = asyncio.get_running_loop()
         link.start()
+        site.on_change = lambda: changed("website")
+        site.start()
         yield
+        site.stop()
         link.stop()
 
     app = FastAPI(title="Cyber Circle control", lifespan=lifespan)
@@ -176,6 +185,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB) -> FastAPI:
         return {"mqtt": link.online, "state": link.state, "nodes": link.node_list(), "master": link.master,
                 "events": list(link.events), "devices": link.device_list(), "mode": db.setting("mode", "setup"),
                 "t01_clock": float(db.setting("t01_clock", "12") or 12),
+                "website": {k: v for k, v in site.snapshot().items() if k != "history"},
                 "gamemasters_online": online_ref[0]() if online_ref else []}
 
     # ------------------------------------------------------------ live (web interface)
@@ -313,6 +323,30 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB) -> FastAPI:
         link.publish_settings(clean)
         return {"values": clean}
 
+    def texts():
+        try:
+            return json.loads(db.setting("texts", "{}"))
+        except ValueError:
+            return {}
+
+    @app.get("/api/texts")
+    def get_texts():
+        """The texts on the screens: what the game has without changes
+        (defaults, from the master) and the changed ones (values)."""
+        return {"defaults": link.text_defaults, "values": texts()}
+
+    @app.put("/api/texts")
+    def put_texts(values: dict):
+        """{"cta": "...", "join_steps": "...", "join_text": "...", "title.quiz": "...",
+        "rules.quiz": "...", ...}: only changed texts (empty = the default); the game
+        uses them at once (a game's name and rules from its next round)."""
+        defaults = link.text_defaults
+        clean = {k: v.replace("\r\n", "\n").strip() for k, v in values.items()
+                 if isinstance(v, str) and v.strip() and v.strip() != str(defaults.get(k, "")).strip()}
+        db.set_setting("texts", json.dumps(clean))
+        link.publish_texts(clean)
+        return {"values": clean}
+
     @app.get("/api/master")
     def get_master():
         return link.master
@@ -346,7 +380,24 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB) -> FastAPI:
         gamemaster for a visitor without a phone."""
         if not code.strip() or not c.name.strip():
             raise HTTPException(422, "card code and name needed")
+        site.synced()
         return {"id": db.upsert_card(code.strip(), c.name.strip(), c.age, (c.email or "").strip() or None)}
+
+    @app.get("/api/website")
+    def website():
+        """The connection with the registration website: its health endpoint
+        (checked every few seconds) and the last registration that came in."""
+        return site.snapshot()
+
+    @app.post("/api/website/mock")
+    def website_mock(body: dict):
+        """Without --website: switch the mock website off / on ({"up": false}) - to
+        see what the crew sees when registrations stop coming in."""
+        if not site.mock:
+            raise HTTPException(409, "a real website is configured (--website)")
+        site.mock_up = bool(body.get("up", True))
+        site.check()
+        return site.snapshot()
 
     # ------------------------------------------------------------ gamemasters (the helpers with the app)
 
@@ -560,6 +611,8 @@ def main():
     ap.add_argument("--ssl-cert", default="", help="https (the gamemaster web app's camera on iPhones): certificate ...")
     ap.add_argument("--ssl-key", default="", help="... and its key (tools/make_cert.sh makes a self-signed pair)")
     ap.add_argument("--gm-web", default=GM_WEB, help="the gamemaster app's web build, served at /gm/")
+    ap.add_argument("--website", default="", help="the registration website's health endpoint (none: a mock)")
+    ap.add_argument("--website-interval", type=float, default=15.0, help="s between its checks")
     a = ap.parse_args()
     db = Database(a.db)
     if not db.question_rows():               # a fresh database: start with the example questions
@@ -567,7 +620,8 @@ def main():
     link = MqttLink(a.mqtt, a.prefix, a.mqtt_user, a.mqtt_password)
     scheme = "https" if a.ssl_cert else "http"
     print(f"control: database {os.path.normpath(a.db)}, MQTT {a.mqtt}, web {scheme}://{a.host}:{a.port}/")
-    uvicorn.run(create_app(db, link, a.gm_web), host=a.host, port=a.port, log_level="warning",
+    site = Website(a.website, a.website_interval)
+    uvicorn.run(create_app(db, link, a.gm_web, site), host=a.host, port=a.port, log_level="warning",
                 ssl_certfile=a.ssl_cert or None, ssl_keyfile=a.ssl_key or None)
 
 

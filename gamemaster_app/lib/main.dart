@@ -88,6 +88,14 @@ class _HomePageState extends State<HomePage> {
                 child: const Text('GEEN VERBINDING - zit je op de wifi van de installatie? (probeert opnieuw)',
                     textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ),
+            if (app.online && app.website == 'down')            // registrations stop coming in
+              Container(
+                width: double.infinity,
+                color: Retro.amber,
+                padding: const EdgeInsets.all(6),
+                child: const Text('WEBSITE OFFLINE - nieuwe registraties komen niet binnen',
+                    textAlign: TextAlign.center, style: TextStyle(color: Retro.bg, fontWeight: FontWeight.bold)),
+              ),
             Expanded(
               child: login
                   ? LoginPage(app: app, onSettings: () => setState(() => _tab = 2))

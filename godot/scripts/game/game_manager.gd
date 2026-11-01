@@ -271,6 +271,7 @@ func _next_round() -> void:
 			var v = current.get(t.key) / tempo
 			current.set(t.key, roundi(v) if current.get(t.key) is int else v)
 	current.prepare(self, arena.player_ids().filter(func(id): return not arena.tiles[id - 1].is_dead))
+	Texts.dress(current, round_type_name(_last_type))   # the operator's name and rules for this game
 	_set_state(State.INTRO)
 	_timer = intro_time / tempo
 	screen_wall.set_timer("")

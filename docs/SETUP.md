@@ -489,6 +489,19 @@ or a new master continues in the same mode.
 * **Processen** – every Godot process (name, role, address, screens, fps);
   choose the master here.
 * **Spelers** – search / add players, assign one to a tile.
+* **Teksten** – the texts on the screens: the calls to action (rotating
+  slogans, one per line), "Hoe doe je mee?" on the overview, the line on a
+  free tile, and per game its name and rules (intro, overview). Empty = the
+  default (shown in grey); a game's name and rules from its next round. The
+  default rules follow the settings (points, times) – a changed text does
+  not. Standalone: `--texts=FILE` (JSON, `godot/scripts/data/texts.gd`).
+* **Website** – the connection with the registration website (visitors
+  register there with their card; it syncs them here): its health endpoint
+  is checked every 15 s (`--website=https://…/health` when starting the
+  control server; without it a **mock** you can switch off and on to test),
+  the last check, the last registration that came in, a history. When it is
+  down the top bar says *website ✗ OFFLINE* and the gamemaster app shows an
+  amber banner: new registrations don't come in.
 * **Vragen** – **CSV importeren / downloaden**: many questions at once from a
   spreadsheet (Excel: save as CSV; `;` or `,`). Columns (header row): `vraag`,
   `antwoord1`–`antwoord4`, `juist` (1–4: square, triangle, cross, circle)

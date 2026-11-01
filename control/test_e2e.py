@@ -170,6 +170,23 @@ try:
     check(new["correct"] == 1 and new["category"] == "Rekenen" and new["min_age"] == 6, "the new question: 4 is right (juist 2)")
     check(next(q for q in qs if q["id"] == first["id"])["question"].endswith("(nieuw)"), "the existing one updated")
 
+    print("--- texts: the game's defaults; changed ones reach the game")
+    t = until(lambda: call("GET", "/api/texts")["defaults"].get("title.quiz") and call("GET", "/api/texts"))
+    check(t and t["defaults"]["title.quiz"] == "Quiz" and "Haal een QR-codekaart" in t["defaults"]["join_steps"],
+          "the game published its texts (defaults)")
+    call("PUT", "/api/texts", {"cta": "KOM SPELEN!\nWIN VAN DE ROBOT!", "title.quiz": "De Grote Quiz",
+                               "join_text": t["defaults"]["join_text"]})      # (the same as the default: not kept)
+    check(call("GET", "/api/texts")["values"] == {"cta": "KOM SPELEN!\nWIN VAN DE ROBOT!", "title.quiz": "De Grote Quiz"},
+          "changed texts kept (a text equal to the default is not)")
+
+    print("--- the registration website: health (mock), the last registration in")
+    w = until(lambda: call("GET", "/api/website")["status"] != "unknown" and call("GET", "/api/website"))
+    check(w and w["status"] == "ok" and w["mock"] and w["syncs"] >= 1, f"website up (mock), registrations came in ({w and w['syncs']})")
+    call("POST", "/api/website/mock", {"up": False})
+    check(live()["website"]["status"] == "down", "mock off: the dashboard shows the website down")
+    call("POST", "/api/website/mock", {"up": True})
+    check(live()["website"]["status"] == "ok", "back up")
+
     print("--- operator: lives, round plan")
     call("POST", "/api/tiles/4/lives", {"lives": 2})
     check(until(lambda: player(4)["lives"] == 2), "lives set to 2")

@@ -14,7 +14,6 @@ extends Control
 ## to watch, a GEËXTERMINEERD popup). After every round the UITSLAG and the
 ## scoreboard (the same as on the player screens) take the page.
 
-const LOBBY_RULES := "1. Haal een QR-codekaart.\n2. Registreer je met je gsm.\n3. Ga naar een gamemaster: die laat je toe tot het spel.\n4. Zoek de tegel in jouw kleur en druk op de 4 iconen.\n5. Blijf zo lang mogelijk in het spel!"
 const MAX_EVENTS := 9
 const TOP := 10
 const MARGIN := 40               # px around the page
@@ -152,9 +151,7 @@ func _ready() -> void:
 	cb.add_child(_center_body)
 	_center.visible = false
 	add_child(_center)
-	for t in GameManager.ROUND_TYPES:
-		var r: GameRound = t.new()
-		_games.append({"title": r.title, "rules": r.rules})
+	_load_games()
 	_scene_left = scenes[0][1]
 	wall.arena.game.game_event.connect(_on_event)
 	wall.arena.game.scores_shown.connect(_show_board)
@@ -246,9 +243,21 @@ func _next_scene() -> void:
 	_start_scene()
 
 
+## Every game's name and rules (with the operator's texts: Texts).
+func _load_games() -> void:
+	var game: GameManager = wall.arena.game
+	_games.clear()
+	for t in GameManager.ROUND_TYPES:
+		var r: GameRound = t.new()
+		r.prepare(game, [])
+		Texts.dress(r, game.round_type_name(t))
+		_games.append({"title": r.title, "rules": r.rules})
+
+
 func _start_scene() -> void:
 	_scene_left = scenes[_scene][1]
 	_game = 0
+	_load_games()                                   # (the texts may have changed)
 	if scene_name() == "games":                     # the game being played now first
 		var game: GameManager = wall.arena.game
 		if game.current and game.state in [GameManager.State.INTRO, GameManager.State.PLAYING]:
@@ -282,7 +291,7 @@ func _apply_scene() -> void:
 		_center_sub.text = "DOE MEE!"
 		_center_sub.add_theme_color_override("font_color", Retro.TEAL)
 		_center_title.text = "HOE DOE JE MEE?"
-		_center_body.text = LOBBY_RULES
+		_center_body.text = Texts.join_steps()
 
 
 func _process(delta: float) -> void:
@@ -326,7 +335,7 @@ func _update() -> void:
 		_rules.text = game.current.rules
 	else:
 		_rules_title.text = "HOE DOE JE MEE?"
-		_rules.text = LOBBY_RULES
+		_rules.text = Texts.join_steps()
 	_timer.text = wall.timer_text()
 	_timer.visible = _timer.text != ""
 	for c in _list.get_children():

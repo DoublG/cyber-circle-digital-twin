@@ -26,6 +26,9 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// session: scan, scan, scan); off: choose the place for every visitor.
   bool quickAssign = true;
   Gamemaster? gamemaster;          // who uses the app now (null: choose)
+  /// The registration website (the control server checks it): 'down' = new
+  /// registrations don't come in - the crew must know (a banner).
+  String website = 'unknown';
   int lastGamemaster = 0;          // (the one to suggest)
   List<Gamemaster> gamemasters = [];
   Api? api;
@@ -141,10 +144,14 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       await connect();
       return;
     }
-    final gm = gamemaster;
-    if (gm == null) return;
     try {
-      await api!.session(device, gm.id);
+      final w = await api!.websiteStatus();
+      if (w != website) {
+        website = w;
+        notifyListeners();
+      }
+      final gm = gamemaster;
+      if (gm != null) await api!.session(device, gm.id);
     } catch (_) {
       config = null;                             // (the next beat reconnects)
       notifyListeners();

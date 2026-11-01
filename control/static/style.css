@@ -76,6 +76,19 @@ dialog label input, dialog label textarea, dialog label select { display: block;
 .settings input.changed { border-color: var(--orange); color: var(--amber); }
 .settings em { font-style: normal; color: var(--dim); font-size: 13px; }
 .changed-hint { color: var(--amber); }
+.bad { color: var(--bad); }
+.site { background: var(--panel); border: 3px solid var(--line); padding: 14px 18px; max-width: 900px; }
+.site.up { border-color: var(--good); } .site.down { border-color: var(--bad); }
+.site .big { font-size: 26px; font-weight: bold; margin-bottom: 6px; }
+.site.up .big { color: var(--good); } .site.down .big { color: var(--bad); }
+.site table { width: auto; } .site td:first-child { color: var(--dim); padding-right: 24px; }
+.texts { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; }
+.texts fieldset { background: var(--panel); border: 2px solid var(--line); margin: 0; padding: 8px 12px 12px; }
+.texts legend { color: var(--teal); font-weight: bold; padding: 0 6px; }
+.texts label { display: block; margin: 6px 0; color: var(--dim); }
+.texts label span { display: flex; justify-content: space-between; }
+.texts input, .texts textarea { display: block; width: 100%; color: var(--cream); }
+.texts .changed { border-color: var(--orange); color: var(--amber); }
 .button-like { font: inherit; background: var(--panel); color: var(--cream); border: 2px solid var(--orange);
   padding: 6px 14px; cursor: pointer; text-decoration: none; }
 .button-like:hover { background: var(--orange); color: var(--bg); }

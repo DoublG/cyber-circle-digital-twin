@@ -162,6 +162,13 @@ class Api {
     return [for (final g in j) Gamemaster.fromJson(g as Map<String, dynamic>)];
   }
 
+  /// Is the registration website up? 'ok' / 'down' / 'unknown' (the control
+  /// server checks its health endpoint).
+  Future<String> websiteStatus() async {
+    final j = await _send('GET', '/api/website') as Map<String, dynamic>?;
+    return '${j?['status'] ?? 'unknown'}';
+  }
+
   /// Sign of life: this device, used by this gamemaster now (0 = logged out).
   Future<void> session(String device, int gamemaster) =>
       _send('POST', '/api/session', {'device': device, 'gamemaster': gamemaster});
