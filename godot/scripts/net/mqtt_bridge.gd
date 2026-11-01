@@ -18,6 +18,7 @@ extends MqttClient
 ##   <prefix>/state            game -> all    retained game state (GameManager.status()) for the web interface
 ##   <prefix>/event            game -> all    {text, color}: the event feed
 ##   <prefix>/tiles            control -> game  retained {"enabled": {"3": false, ...}}: tiles out of service
+##   <prefix>/db               control -> game  {"changed": "players" | "questions" | "ranking"}: fetch again
 ##   <prefix>/mode             control -> game  retained {"mode": "setup" | "closed" | "open" | "paused"}
 ## Leave url empty to run without MQTT.
 
@@ -71,6 +72,7 @@ func setup(arena_node: Node3D) -> void:
 	subscribe(topic_prefix + "/mode")
 	subscribe(topic_prefix + "/settings")
 	subscribe(topic_prefix + "/texts")
+	subscribe(topic_prefix + "/db")
 	arena.game.settings_changed.connect(_publish_settings)
 	start()
 
@@ -90,6 +92,10 @@ func _on_message(topic: String, payload: PackedByteArray) -> void:
 		return
 	if topic == topic_prefix + "/mode":                  # the operator's operating mode
 		arena.apply_command({"game": "mode", "mode": data.get("mode", "")})
+		return
+	if topic == topic_prefix + "/db":                    # the database changed: fetch it again now
+		if arena.game.db and arena.game.db.has_method("refresh"):
+			arena.game.db.refresh()
 		return
 	if topic == topic_prefix + "/settings":              # the operator's settings
 		arena.game.apply_settings(data)
@@ -140,7 +146,8 @@ func _announce() -> void:
 	publish_json(topic_prefix + "/node/" + node_id, {"id": node_id, "role": role, "host": _lan_address(),
 		"port": enet_port, "screens": range(1, arena.screen_wall.groups().size() + 1),
 		"version": ProjectSettings.get_setting("application/config/version", ""),
-		"fps": Engine.get_frames_per_second()}, true)
+		"fps": Engine.get_frames_per_second(),
+		"db_pending": arena.game.db.pending() if arena.game.db and arena.game.db.has_method("pending") else 0}, true)
 
 
 ## This machine's address on the LAN (the first private IPv4 address).

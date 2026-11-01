@@ -7,7 +7,12 @@ extends Node
 ##   fetch_player(id)              await it: asks the server
 ##   start_game(), save_round(), save_result(), end_game()
 ##                                 queued and sent in order, retried while the
-##                                 server can't be reached - nothing gets lost
+##                                 server can't be reached - nothing gets lost:
+##                                 the queue is kept on disk (queue_file(), one
+##                                 per control server) and sent after a restart too
+## refresh() at once when the control server says the database changed
+## (<prefix>/db over MQTT: a question edited, a player renamed, the ranking),
+## else every REFRESH_TIME.
 ## start_game() returns a temporary (negative) id at once; the queued requests
 ## use the server's real id as soon as it is known.
 
@@ -24,12 +29,21 @@ var _busy := false
 var _game_ids := {}               # temporary id -> the server's id
 var _next_temp := -1
 var _refresh := 0.0
+var _refreshing := false
+var _refresh_again := false
 
 
 func open(url: String) -> bool:
 	base_url = url.trim_suffix("/")
+	_load_queue()
 	refresh()
+	_pump()
 	return true
+
+
+## Writes not on the server yet (0 = in sync).
+func pending() -> int:
+	return _queue.filter(func(i): return not i.has("refresh")).size()
 
 
 func is_open() -> bool:
@@ -45,6 +59,11 @@ func leaderboard() -> Array:
 
 
 func refresh() -> void:
+	if _refreshing:                       # (one at a time; a change during it: once more after)
+		_refresh_again = true
+		return
+	_refreshing = true
+	_refresh = REFRESH_TIME
 	var q = await _http_get("/api/questions")
 	if q is Array:
 		_questions = q
@@ -52,6 +71,10 @@ func refresh() -> void:
 	if r is Array:
 		_ranking = r
 		changed.emit()
+	_refreshing = false
+	if _refresh_again:
+		_refresh_again = false
+		refresh()
 
 
 func fetch_player(id: int) -> Dictionary:
@@ -63,6 +86,7 @@ func start_game() -> int:
 	var temp := _next_temp
 	_next_temp -= 1
 	_queue.append({"method": HTTPClient.METHOD_POST, "path": "/api/games", "body": {}, "start": temp})
+	_save_queue()
 	_pump()
 	return temp
 
@@ -78,18 +102,19 @@ func save_round(game_id: int, round: int, round_type: String, rows: Array) -> vo
 func save_result(game_id: int, r: Dictionary) -> void:
 	_enqueue("/api/games/{game}/results", {"rows": [r]}, game_id)
 	_queue.append({"refresh": true})      # the ranking changed
+	_save_queue()
 	_pump()
 
 
 func _process(delta: float) -> void:
 	_refresh -= delta
 	if _refresh <= 0.0 and is_open():
-		_refresh = REFRESH_TIME
-		refresh()                         # questions edited in the web interface, ranking
+		refresh()                         # (a fallback: normally <prefix>/db says when)
 
 
 func _enqueue(path: String, body: Dictionary, game_id: int) -> void:
 	_queue.append({"method": HTTPClient.METHOD_POST, "path": path, "body": body, "game": game_id})
+	_save_queue()
 	_pump()
 
 
@@ -119,7 +144,39 @@ func _pump() -> void:
 		if item.has("start"):
 			_game_ids[item.start] = int(result.get("id", 0))
 		_queue.pop_front()
+		_save_queue()
 	_busy = false
+
+
+## The queue on disk: what the server hasn't got yet survives a restart. One
+## file per server (a test server's writes never go to the installation's).
+func queue_file() -> String:
+	return "user://control_queue_%s.json" % base_url.md5_text().left(12)
+
+
+func _save_queue() -> void:
+	var f := FileAccess.open(queue_file(), FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify({"queue": _queue.filter(func(i): return not i.has("refresh")),
+			"game_ids": _game_ids, "next_temp": _next_temp}))
+
+
+func _load_queue() -> void:
+	if not FileAccess.file_exists(queue_file()):
+		return
+	var d = JSON.parse_string(FileAccess.get_file_as_string(queue_file()))
+	if not d is Dictionary:
+		return
+	for item in d.get("queue", []):        # (JSON numbers come back as floats)
+		for k in ["method", "game", "start"]:
+			if item.has(k):
+				item[k] = int(item[k])
+		_queue.append(item)
+	for k in d.get("game_ids", {}):
+		_game_ids[int(k)] = int(d.game_ids[k])
+	_next_temp = mini(_next_temp, int(d.get("next_temp", -1)))
+	if not _queue.is_empty():
+		print("control server: %d writes from before the restart still to send" % pending())
 
 
 func _http_get(path: String):

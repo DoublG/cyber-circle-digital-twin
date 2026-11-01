@@ -141,6 +141,11 @@ class MqttLink:
         """A physical tile lights up so the crew can find it (also before it has a place)."""
         self.client.publish(f"{self.prefix}/device/{device}/identify", json.dumps({"seconds": seconds}))
 
+    def db_changed(self, what):
+        """The database changed (players, questions, ranking): the game fetches
+        it again right away instead of at its next refresh."""
+        self.client.publish(f"{self.prefix}/db", json.dumps({"changed": what, "time": time.time()}))
+
     def command(self, msg):
         self.client.publish(f"{self.prefix}/cmd", json.dumps(msg))
 

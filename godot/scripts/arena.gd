@@ -212,6 +212,20 @@ func assign(player_id: int, tile_id := 0, color = null) -> int:
 	return register(tile_id, p.name, color if color is Color else Color(p.color), int(p.age), player_id)
 
 
+## The tile a database player is on now (invited or playing), or 0. A player
+## (one QR card) plays on one tile at a time - and comes back as often as they like.
+func tile_of_player(player_id: int) -> int:
+	if player_id <= 0:
+		return 0
+	for id in _pending:
+		if _pending[id].player_id == player_id:
+			return id
+	for id in _players:
+		if _players[id].player_id == player_id:
+			return id
+	return 0
+
+
 func player_ids() -> Array:
 	var ids := _players.keys()
 	ids.sort()
@@ -236,6 +250,10 @@ func pending_info(tile_id: int) -> Dictionary:
 func register(tile_id: int, player: String, color := Color(1.0, 0.8, 0.1), age := 0, player_id := 0) -> int:
 	if not game.accepting_players():
 		push_warning("register %s: the game is not open (%s)" % [player, game.mode_name()])
+		return 0
+	var already := tile_of_player(player_id)
+	if already:                         # (two gamemasters scanning the same card at once)
+		push_warning("register %s: already on tile %d" % [player, already])
 		return 0
 	if tile_id <= 0:
 		var free := tiles.filter(func(t): return t.idle and not is_pending(t.tile_id) and is_enabled(t.tile_id) and not t is DroneTile)

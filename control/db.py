@@ -203,10 +203,14 @@ class Database:
     # ------------------------------------------------------------ players
 
     def add_player(self, name, color="#ffcc00", age=0, card=None):
-        """card: the QR card's code (unique; a card used again is moved to this player)."""
+        """card: the QR card's code. A card belongs to one player for good: a
+        card that is linked already gives that player (they come back and play
+        again - their plays add up), no new one."""
+        if card:
+            p = self.player_by_card(card)
+            if p:
+                return p["id"]
         with self.engine.begin() as con:
-            if card:
-                con.execute(update(players).where(players.c.card == card).values(card=None))
             res = con.execute(insert(players).values(name=name, color=color, age=int(age), card=card or None))
             return res.inserted_primary_key[0]
 

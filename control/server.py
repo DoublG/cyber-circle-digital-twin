@@ -181,6 +181,21 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         link.stop()
 
     app = FastAPI(title="Cyber Circle control", lifespan=lifespan)
+
+    # what a write to these changes in the database the game works with: it
+    # hears it on <prefix>/db and fetches again (keeps the game in sync)
+    DB_WRITES = (("/api/players", "players"), ("/api/cards/", "players"), ("/api/questions", "questions"),
+                 ("/api/games/", "ranking"))
+
+    @app.middleware("http")
+    async def notify_db_writes(request: Request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if request.method in ("POST", "PUT", "DELETE") and response.status_code < 300 and not path.endswith("/assign"):
+            what = next((w for prefix, w in DB_WRITES if path.startswith(prefix)), None)
+            if what and not (what == "ranking" and path.endswith("/rounds")):
+                link.db_changed(what)
+        return response
     online_ref = []                          # (the gamemasters online: defined with their routes below)
 
     def live_snapshot():

@@ -322,6 +322,7 @@ Prefix `cybercircle` (setting `topic_prefix` on the *Mqtt* node). Payloads are J
 | `cybercircle/activated` | game → app | `{"tile": 3, "player": "Erik"}` |
 | `cybercircle/status` | game → all | `online` / `offline` (retained) |
 | `cybercircle/node/<id>` | game → all | retained announcement: role, address, screens, fps (every 10 s) |
+| `cybercircle/db` | control → game | `{"changed": "players" \| "questions" \| "ranking"}`: the database changed (web interface, website sync, a result) – the game fetches it again at once |
 | `cybercircle/state` | game → all | retained game state for the web interface (players, plan, mode, …) |
 | `cybercircle/event` | game → all | the event feed |
 | `cybercircle/mode` | control → game | retained operating mode: `setup` / `closed` / `open` / `paused` |
@@ -417,6 +418,15 @@ standalone `--db=FILE` and `tools/cybercircle_db.py` (schema
   .ogv), important content in the middle 600 px wide strip: it fills the
   player's slot (627×1060 with 3 per screen, 945×1060 with 2) and the sides
   are cut off. Any length; its last frame stays until `clip_time` is over.
+* **QR cards**: a card belongs to one player for good. The player comes back
+  with it as often as they like (every return is the same player; their plays
+  add up, the ranking takes their best), but is on one tile at a time.
+* **In sync**: the game writes every game, round and result through the
+  control server, in order; while the server can't be reached the writes wait
+  in a queue on disk (`user://control_queue_*.json`, one per server) and are
+  sent once it is back – also after the game restarts. The *Processen* page
+  shows writes still waiting. Changes made elsewhere reach the game at once
+  (`cybercircle/db`).
 * **Players** (what the app does): `python3 tools/cybercircle_db.py add-player Erik "#ff8800" 10`
   prints the id and the MQTT message to send.
 * **Overall ranking**: `SELECT name, MAX(score) FROM results JOIN players ON players.id = player_id GROUP BY player_id, name ORDER BY 2 DESC`.

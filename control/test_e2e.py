@@ -113,6 +113,14 @@ try:
     check(until(lambda: player(4)), "Tess plays on T04")
     check(player(4)["player_id"] == pid, "linked to her player id")
 
+    print("--- the game keeps up with the database: a change elsewhere reaches it at once (<prefix>/db)")
+    gid = call("POST", "/api/games", {})["id"]
+    t0 = time.time()
+    call("POST", f"/api/games/{gid}/results", {"rows": [{"player_id": pid, "tile": 4, "name": "Tess", "score": 7,
+                                                         "lives": 0, "exterminated": True, "rank": None}]})
+    check(until(lambda: player(4)["record"] == 7, 10), "Tess's record from the database (7) in the game after %.1f s"
+          % (time.time() - t0))
+
     print("--- a mobile player: set up at the station, assigned to drone M2 (tile 15)")
     check(len(call("GET", "/api/tiles")["tiles"]) == 18, "18 places: T01-T13 and M1-M5")
     check(status("PUT", "/api/tiles/15", {"device": "hand-1"}) == 409, "locked: no handheld swap on M2 in service")
@@ -147,7 +155,8 @@ try:
     up = call("PUT", "/api/cards/CC-0042", {"name": "Noor V.", "age": 10, "email": "noor@example.org"})["id"]
     check(up == pid4 and call("GET", "/api/cards/CC-0042")["name"] == "Noor V.", "the website sync updates the card's player")
     pid5 = call("POST", "/api/players", {"name": "Sem", "card": "CC-0042"})["id"]
-    check(call("GET", "/api/cards/CC-0042")["id"] == pid5, "a card handed out again: the new player")
+    check(pid5 == pid4 and call("GET", "/api/cards/CC-0042")["name"] == "Noor V.",
+          "a card belongs to one player for good: adding it again gives Noor, no new player")
     call("POST", f"/api/players/{pid5}/assign", {"tile": 16, "gamemaster": gm})
     check(until(lambda: any(p["tile"] == 16 and p["color"] == "#00ffcc" for p in state()["pending"])),
           "assigned to M3 by Erik: in Erik's colour")
@@ -155,6 +164,27 @@ try:
     call("POST", "/api/session", {"device": "phone-1", "gamemaster": 0})
     check(live()["gamemasters_online"] == [], "Erik logged out")
     call("POST", "/api/tiles/16/leave")
+    check(until(lambda: not any(p["tile"] == 16 for p in state()["pending"])), "Noor's invite on M3 cancelled")
+
+    print("--- Noor comes back with her card: plays, leaves, plays again - never on two tiles at once")
+    def noor_plays(tile):
+        call("POST", f"/api/players/{pid4}/assign", {"tile": tile})
+        until(lambda: any(p["tile"] == tile for p in state()["pending"]))
+        for b in ("Square", "Triangle", "Cross", "Circle"):
+            call("POST", "/api/cmd", {"tile": tile, "press": b})
+            time.sleep(0.3)
+        return until(lambda: player(tile) and player(tile)["player_id"] == pid4)
+    check(noor_plays(6), "Noor plays on T06")
+    call("POST", f"/api/players/{pid4}/assign", {"tile": 7})       # (a second gamemaster scans her card)
+    time.sleep(1.5)
+    check(not any(p["tile"] == 7 for p in state()["pending"]) and not player(7), "not on T07 too: one tile at a time")
+    call("POST", "/api/tiles/6/leave")
+    check(until(lambda: not player(6)), "Noor leaves (her play is saved)")
+    check(noor_plays(8), "Noor is back: plays again on T08, the same player")
+    call("POST", "/api/tiles/8/leave")
+    check(until(lambda: not player(8)), "Noor leaves again")
+    noors = call("GET", "/api/players?search=Noor")
+    check([p["id"] for p in noors] == [pid4], "still one Noor: every return is the same player (her plays add up there)")
 
     print("--- questions as CSV: export, import (added, updated, bad rows reported)")
     before = len(call("GET", "/api/questions/all"))
@@ -242,7 +272,7 @@ try:
     call("POST", "/api/mode", {"mode": "closed"})
     check(until(lambda: state()["state"] == "LOBBY" and state()["mode"] == "closed"), "stopped: closed, lobby")
     rank = until(lambda: [r for r in call("GET", "/api/ranking") if r["player_id"] == pid], 15)
-    check(bool(rank) and rank[0]["plays"] == 1, "Tess' play saved: in the overall ranking (rounds survived)")
+    check(bool(rank) and rank[0]["plays"] == 2, "Tess' play saved: in the overall ranking (+ the sync test's play)")
     events = [e["text"] for e in live()["events"]]
     check(any("TESS" in e for e in events), "event feed arrived in the web interface")
 finally:

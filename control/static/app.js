@@ -155,7 +155,7 @@ function renderNodes() {
     const isMaster = live.master?.node === n.id;
     return `<tr class="${isMaster ? "master" : ""}"><td>${esc(n.id)}</td><td>${esc(isMaster ? "MASTER" : n.role)}</td>
       <td>${esc(n.host)}${n.port ? ":" + n.port : ""}</td><td>${esc((n.screens || []).join(", ") || "-")}</td>
-      <td><span class="dot ${n.online ? "on" : ""}"></span> ${n.online ? "online" : "offline"}${n.fps ? ` · ${n.fps} fps` : ""}</td>
+      <td><span class="dot ${n.online ? "on" : ""}"></span> ${n.online ? "online" : "offline"}${n.fps ? ` · ${n.fps} fps` : ""}${n.db_pending ? ` · <b class="bad">database: ${n.db_pending} writes waiting</b>` : ""}</td>
       <td>${isMaster || !n.online ? "" : `<button class="small" data-master="${esc(n.id)}">Maak master</button>`}</td></tr>`;
   }).join("") || `<tr><td colspan="6" class="hint">Nog geen processen gezien.</td></tr>`;
   $("#master").textContent = live.master?.node
