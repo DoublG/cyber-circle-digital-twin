@@ -28,7 +28,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button, .tab").forEach(e => e.classList.remove("active"));
   b.classList.add("active");
   $(`#tab-${b.dataset.tab}`).classList.add("active");
-  ({ mqtt: startMqttLog, website: loadWebsite, texts: loadTexts, gamemasters: loadGamemasters, players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: loadTiles, settings: loadSettings })[b.dataset.tab]?.();
+  ({ recovery: renderRecovery, mqtt: startMqttLog, website: loadWebsite, texts: loadTexts, gamemasters: loadGamemasters, players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: loadTiles, settings: loadSettings })[b.dataset.tab]?.();
 });
 
 // ---------------------------------------------------------------- live
@@ -59,6 +59,7 @@ function renderLive() {
     `<li><span class="t">${esc(e.time)}</span><span style="color:${esc(e.color || "")}">${esc(e.text)}</span></li>`).join("");
   renderNodes();
   if ($("#tab-tiles").classList.contains("active")) { renderTileTable(); renderLayout(); }
+  if ($("#tab-recovery").classList.contains("active")) renderRecovery();
 }
 
 // the live places: the floor tiles, then the mobile players (drones)
@@ -166,6 +167,68 @@ $("#nodes").onclick = e => {
   const b = e.target.closest("button[data-master]");
   if (b && confirm(`${b.dataset.master} wordt de master. De schermen verbinden opnieuw.`))
     api("POST", "/api/master", { node: b.dataset.master });
+};
+
+// ---------------------------------------------------------------- Herstel: the saved game state
+const PHASES = { LOBBY: "lobby", INTRO: "uitleg van een ronde", PLAYING: "een ronde bezig", SCOREBOARD: "scorebord" };
+function restartWould(cp) {
+  const n = cp.round, people = cp.players.length + cp.invites.length;
+  if (!people) return "Geen spel bezig: een herstart begint leeg.";
+  if (cp.state === "LOBBY") return "Na een herstart: de spelers terug op hun tegel, de uitnodigingen opnieuw.";
+  if (cp.state === "INTRO" || cp.state === "PLAYING")
+    return `Ronde ${n} is bezig en telt nog niet. Na een herstart: het scorebord, dan ronde ${n} opnieuw vanaf de uitleg, met dezelfde levens.`;
+  const changes = Object.entries(cp.pending_lives || {}).filter(([, d]) => d);
+  if (changes.length) return `Einde van ronde ${n}: de levens veranderen zo (${changes.map(([t, d]) =>
+    `${label(Number(t))} ${d > 0 ? "+1" : "−1"}`).join(", ")}). Na een herstart gebeurt dat meteen (ook exterminaties), dan ronde ${n + 1}.`;
+  return `Na ronde ${n}. Na een herstart: het scorebord, dan ronde ${n + 1}.`;
+}
+function renderRecovery() {
+  const info = live.checkpoint || {}, cp = info.data, s = live.state || {};
+  const title = t => (s.round_types || []).find(r => r.type === t)?.title || t;
+  if (!cp) {
+    $("#recovery").className = "site";
+    $("#recovery").innerHTML = `<div class="big">GEEN BEWAARDE STATUS</div><div>${info.cleared_ago != null
+      ? `Gewist ${ago(Math.round(info.cleared_ago))}: de volgende start van het spel begint leeg.`
+      : "Het spel heeft nog niets bewaard (nog geen spel met --control gestart)."}</div>`;
+    ["#recovery-players tbody", "#recovery-invites", "#recovery-plan"].forEach(q => $(q).innerHTML = "");
+  } else {
+    const old = info.age > 3600;
+    // in line with the game: the same players on the same tiles, the same round
+    const liveTiles = (s.players || []).map(p => p.tile).sort().join(), cpTiles = cp.players.filter(p => !p.dead).map(p => p.tile).sort().join();
+    const inLine = !s.state || (liveTiles === cpTiles && (s.round_number ?? cp.round) === cp.round);
+    const behind = !inLine && info.age > 15;
+    $("#recovery").className = `site ${old || behind ? "warn" : "up"}`;
+    $("#recovery").innerHTML = `<div class="big">${old ? "TE OUD – EEN HERSTART BEGINT LEEG" : behind ? "LOOPT ACHTER OP HET SPEL" : "✓ BEWAARD"}</div>
+      <div>${esc(old ? "Ouder dan een uur: het spel van gisteren." : restartWould(cp))}</div>
+      <table>
+        <tr><td>Laatst bewaard</td><td>${ago(Math.round(info.age))} (${new Date(cp.time * 1000).toLocaleTimeString("nl-BE")})</td></tr>
+        <tr><td>Toestand</td><td>${esc(PHASES[cp.state] || cp.state)}${cp.round ? ` · ronde ${cp.round}` : ""}${cp.current?.type ? ` (${esc(title(cp.current.type))})` : ""}</td></tr>
+        <tr><td>Spel in de database</td><td>${cp.game_id > 0 ? `#${cp.game_id}` : cp.game_id < 0 ? "nog niet op de server (wacht)" : "–"}</td></tr>
+        <tr><td>Database</td><td>${esc(String(cp.db || "").slice(0, 12)) || "?"}</td></tr>
+      </table>
+      <div class="row"><button class="danger" id="recovery-clear">Vergeet bewaarde status</button>
+        <span class="hint">De volgende start van het spel begint dan leeg (een lopend spel bewaart bij zijn volgende stap opnieuw).</span></div>`;
+    $("#recovery-players tbody").innerHTML = cp.players.map(p => `<tr><td>${label(p.tile)}</td><td>${esc(p.name)}</td>
+      <td class="hearts">${"♥".repeat(Math.max(p.lives, 0))}<span class="hint">${"♡".repeat(Math.max(p.max_lives - p.lives, 0))}</span></td>
+      <td>${p.survived}</td><td>${p.dead ? `<span class="bad">geëxtermineerd – zijn spel eindigt</span>` : p.started || cp.state === "LOBBY" ? "speelt" : "wacht op de volgende ronde"}</td></tr>`).join("")
+      || `<tr><td colspan="5" class="hint">Geen spelers.</td></tr>`;
+    $("#recovery-invites").innerHTML = cp.invites.map(p => `<li><span class="t">${label(p.tile)}</span>
+      <span><span class="swatch" style="background:#${esc(p.color)}"></span>${esc(p.name)}</span></li>`).join("") || `<li class="hint">Geen.</li>`;
+    $("#recovery-plan").innerHTML = (cp.current?.type && (cp.state === "INTRO" || cp.state === "PLAYING")
+      ? [`<li>${esc(title(cp.current.type))} <span class="hint">(opnieuw)</span></li>`] : []).concat(
+      cp.upcoming.map(u => `<li>${esc(title(u.type))}${u.forced ? ` <span class="hint">(gekozen)</span>` : ""}</li>`)).join("");
+  }
+  const games = (live.nodes || []).filter(n => n.role === "master" || n.id === live.master?.node);
+  const notice = info.db_notice;
+  $("#recovery-sync").innerHTML = (games.map(n => `<div>${esc(n.id)}: ${!n.online ? `<span class="hint">offline</span>`
+    : n.db_pending ? `<b class="bad">${n.db_pending} schrijfacties wachten op de server</b> (worden verstuurd zodra hij bereikbaar is)`
+    : `<span class="good">✓ alles op de server</span>`}</div>`).join("") || `<div class="hint">Geen spel verbonden.</div>`)
+    + `<div class="hint">${notice ? `Laatste wijziging aan het spel gemeld: ${esc({ players: "spelers", questions: "vragen", ranking: "ranglijst" }[notice.what] || notice.what)}, ${ago(Math.round(notice.ago))}.` : "Nog geen wijzigingen gemeld."}
+      Wijzigingen (vragen, spelers, ranglijst) gaan meteen naar het spel.</div>`;
+}
+$("#recovery").onclick = e => {
+  if (e.target.id === "recovery-clear" && confirm("De bewaarde spelstatus vergeten? De volgende start van het spel begint leeg."))
+    api("DELETE", "/api/checkpoint");
 };
 
 // ---------------------------------------------------------------- tiles: places and physical tiles

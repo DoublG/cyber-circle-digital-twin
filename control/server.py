@@ -198,8 +198,17 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         return response
     online_ref = []                          # (the gamemasters online: defined with their routes below)
 
+    def checkpoint_info():
+        """The saved game state for the web interface (Herstel): what a restart of the game would bring back."""
+        data = saved["checkpoint"]
+        now = time.time()
+        return {"data": data, "age": now - data["time"] if data else None,
+                "received_ago": now - saved["received"] if saved["received"] else None,
+                "cleared_ago": now - float(saved["cleared"]) if saved["cleared"] else None,
+                "db_notice": {**link.db_notice, "ago": now - link.db_notice["time"]} if link.db_notice else None}
+
     def live_snapshot():
-        return {"mqtt": link.online, "state": link.state, "nodes": link.node_list(), "master": link.master,
+        return {"checkpoint": checkpoint_info(),"mqtt": link.online, "state": link.state, "nodes": link.node_list(), "master": link.master,
                 "events": list(link.events), "devices": link.device_list(), "mode": db.setting("mode", "setup"),
                 "t01_clock": float(db.setting("t01_clock", "12") or 12),
                 "website": {k: v for k, v in site.snapshot().items() if k != "history"},
@@ -587,17 +596,35 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
 
     # ------------------------------------------------------------ the game state (crash / power cut)
 
+    raw = db.setting("checkpoint")
+    saved = {"checkpoint": json.loads(raw) if raw else None, "received": None,
+             "cleared": db.setting("checkpoint_cleared")}
+
     @app.get("/api/checkpoint")
     def get_checkpoint():
         """The game's last checkpoint (Recovery in the game): the control server
-        keeps the game state - after a crash the game continues from it."""
-        raw = db.setting("checkpoint")
-        return {"db": db.instance_id(), "checkpoint": json.loads(raw) if raw else None}
+        keeps the game state - after a crash the game continues from it.
+        cleared: the operator chose a fresh start (older local copies too)."""
+        return {"db": db.instance_id(), "checkpoint": saved["checkpoint"],
+                "cleared": float(saved["cleared"]) if saved["cleared"] else None}
 
     @app.put("/api/checkpoint")
     async def put_checkpoint(request: Request):
         body = await request.json()
-        db.set_setting("checkpoint", json.dumps(body.get("checkpoint")))
+        saved["checkpoint"] = body.get("checkpoint")
+        saved["received"] = time.time()
+        db.set_setting("checkpoint", json.dumps(saved["checkpoint"]))
+        changed("checkpoint")
+        return {"ok": True}
+
+    @app.delete("/api/checkpoint")
+    def clear_checkpoint():
+        """Operator: forget the saved game state - the next start of the game is a fresh one."""
+        saved["checkpoint"] = None
+        saved["cleared"] = str(time.time())
+        db.set_setting("checkpoint", "null")
+        db.set_setting("checkpoint_cleared", saved["cleared"])
+        changed("checkpoint")
         return {"ok": True}
 
     @app.post("/api/games")

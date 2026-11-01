@@ -19,6 +19,7 @@
   <button data-tab="game" class="active">Spel</button>
   <button data-tab="tiles">Tegels</button>
   <button data-tab="nodes">Processen</button>
+  <button data-tab="recovery">Herstel</button>
   <button data-tab="players">Spelers</button>
   <button data-tab="gamemasters">Gamemasters</button>
   <button data-tab="questions">Vragen</button>
@@ -69,6 +70,35 @@
     database, tegels); de schermen verbinden met die master.</p>
   <table id="nodes"><thead><tr><th>Proces</th><th>Rol</th><th>Adres</th><th>Schermen</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
   <p id="master" class="hint"></p>
+</section>
+
+<section id="tab-recovery" class="tab">
+  <p class="hint">De bewaarde spelstatus: wat het spel terugzet na een crash of stroomuitval. Het spel bewaart bij
+    elke vaste stap (uitnodiging, activatie, vertrek, begin en einde van een ronde, de levens) – hier, in de
+    database, en op de eigen pc.</p>
+  <div id="recovery" class="site"></div>
+  <div class="cols">
+    <div><h2>Spelers die terugkomen</h2><table id="recovery-players"><thead><tr><th>Plaats</th><th>Naam</th>
+      <th>Levens</th><th>Rondes</th><th>Status</th></tr></thead><tbody></tbody></table>
+      <h2>Uitnodigingen</h2><ul id="recovery-invites" class="events"></ul></div>
+    <div><h2>Database in lijn</h2><div id="recovery-sync"></div>
+      <h2>Volgende rondes</h2><ol id="recovery-plan"></ol></div>
+  </div>
+  <h2>Zo werkt het</h2>
+  <ul class="explain">
+    <li><b>In de lobby</b> – de spelers komen terug op hun tegel met hun levens; uitnodigingen opnieuw, met een
+      nieuwe minuut om te activeren.</li>
+    <li><b>Tijdens een ronde</b> – die ronde telt nog niet (levens veranderen pas op het einde): eerst het
+      scorebord, dan dezelfde ronde opnieuw vanaf de uitleg, met dezelfde levens.</li>
+    <li><b>Op het scorebord</b> – de levens die op het punt stonden te veranderen, veranderen nu (ook
+      exterminaties), dan de volgende ronde.</li>
+    <li>Het spel in de database loopt door: hetzelfde spel, elke ronde één keer bewaard. Ook de planning en het
+      vragengeheugen komen terug.</li>
+    <li>Kan de controller niet bereikt worden, dan neemt het spel zijn eigen kopie. Een bewaarde status hoort bij
+      één database: die van een testserver komt nooit terug in de installatie.</li>
+    <li>Ouder dan een uur: het spel van gisteren – een herstart begint leeg. Een QR-kaart hoort voor altijd bij één
+      speler: wie terugkomt speelt opnieuw als dezelfde speler (één tegel tegelijk).</li>
+  </ul>
 </section>
 
 <section id="tab-players" class="tab">

@@ -588,6 +588,14 @@ or a new master continues in the same mode.
   leaves).
 * **Processen** – every Godot process (name, role, address, screens, fps);
   choose the master here.
+* **Herstel** – the saved game state (*Crash / power cut*, §4): when it was
+  last saved and what a restart of the game would do now (lobby, a round
+  played again, the lives about to change), the players who would come back
+  with their lives and rounds survived, the invites, the coming rounds, the
+  game in the database; per game process whether its database writes are all
+  on the server; *Vergeet bewaarde status* – the next start of the game is a
+  fresh one (also when the game's own copy is newer). Red-orange when it falls
+  behind the game.
 * **Spelers** – search / add players, assign one to a tile.
 * **Teksten** – the texts on the screens: the calls to action (rotating
   slogans, one per line), "Hoe doe je mee?" on the overview, the line on a

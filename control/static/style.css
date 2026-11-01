@@ -76,7 +76,7 @@ dialog label input, dialog label textarea, dialog label select { display: block;
 .settings input.changed { border-color: var(--orange); color: var(--amber); }
 .settings em { font-style: normal; color: var(--dim); font-size: 13px; }
 .changed-hint { color: var(--amber); }
-.bad { color: var(--bad); }
+.bad { color: var(--bad); } .good { color: var(--good); }
 .mqtt-log { background: #050403; border: 1px solid var(--line); height: 68vh; overflow: auto; padding: 6px 8px;
   font-size: 13px; }
 .mqtt-log .m { padding: 2px 0; border-bottom: 1px solid #120e0a; word-break: break-all; }
@@ -91,6 +91,11 @@ dialog label input, dialog label textarea, dialog label select { display: block;
 .site .big { font-size: 26px; font-weight: bold; margin-bottom: 6px; }
 .site.up .big { color: var(--good); } .site.down .big { color: var(--bad); }
 .site table { width: auto; } .site td:first-child { color: var(--dim); padding-right: 24px; }
+.site.warn { border-color: var(--amber, #ffb000); } .site.warn .big { color: var(--amber, #ffb000); }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 32px; max-width: 1100px; }
+.hearts { letter-spacing: 2px; color: var(--bad); }
+.explain { max-width: 900px; line-height: 1.5; } .explain li { margin-bottom: 6px; }
+.swatch { display: inline-block; width: 12px; height: 12px; border: 1px solid var(--line); vertical-align: middle; margin-right: 6px; }
 .texts { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 12px; }
 .texts fieldset { background: var(--panel); border: 2px solid var(--line); margin: 0; padding: 8px 12px 12px; }
 .texts legend { color: var(--teal); font-weight: bold; padding: 0 6px; }

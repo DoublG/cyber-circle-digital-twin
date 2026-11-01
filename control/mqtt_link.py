@@ -40,6 +40,7 @@ class MqttLink:
         self.traffic = deque(maxlen=1000)    # the raw messages (web interface: MQTT): {seq, time, topic, payload, retained}
         self.traffic_seq = 0
         self.master = {}
+        self.db_notice = {}
         self.online = False
         self.lock = threading.Lock()
         u = urlparse(url)
@@ -145,6 +146,7 @@ class MqttLink:
         """The database changed (players, questions, ranking): the game fetches
         it again right away instead of at its next refresh."""
         self.client.publish(f"{self.prefix}/db", json.dumps({"changed": what, "time": time.time()}))
+        self.db_notice = {"what": what, "time": time.time()}     # (the web interface: Herstel)
 
     def command(self, msg):
         self.client.publish(f"{self.prefix}/cmd", json.dumps(msg))

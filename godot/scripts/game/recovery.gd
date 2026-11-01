@@ -123,6 +123,8 @@ func restore() -> void:
 		if remote is Dictionary:
 			if cp and cp.get("db") != remote.get("db"):
 				cp = null                                 # another database's (a test server's)
+			if cp and remote.get("cleared") != null and float(remote.cleared) >= float(cp.time):
+				cp = null                                 # the operator chose a fresh start (Herstel)
 			var r = remote.get("checkpoint")
 			if r is Dictionary and r.get("db") == remote.get("db") and (cp == null or r.time >= cp.time):
 				cp = r

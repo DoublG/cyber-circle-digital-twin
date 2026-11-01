@@ -108,8 +108,8 @@ try:
     call("PUT", "/api/settings", {"game": {"tempo": 3.0, "auto_start_delay": 0}, "quiz": {"question_time": 6}})
 
     print("--- the lobby: a player on T03, an invite on T05 - crash")
-    anna = call("POST", "/api/players", {"name": "Anna", "age": 12, "card": "R-1"})["id"]
-    bram = call("POST", "/api/players", {"name": "Bram", "age": 9, "card": "R-2"})["id"]
+    anna = call("POST", "/api/players", {"name": "Anna", "age": 16, "card": "R-1"})["id"]
+    bram = call("POST", "/api/players", {"name": "Bram", "age": 17, "card": "R-2"})["id"]   # (ages above every question's min_age: no shield)
     call("POST", f"/api/players/{anna}/assign", {"tile": 3, "color": "#ff44cc"})
     until(lambda: any(p["tile"] == 3 for p in state()["pending"]))
     press_all(3)
