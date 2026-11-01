@@ -40,7 +40,7 @@ static void pFill(CRGB c) { for (CRGB &l : pRing) l = c; }
 static void pIconsOnly(int lit, CRGB c) { for (int k = 0; k < 4; k++) pIcons[k] = k == lit ? c : CRGB::Black; }
 
 static void result(JsonDocument &r, bool counted) {
-    r["program"] = id;
+    r["program"] = id.c_str();
     if (counted) r["n"] = ++n;
     sendResult(r);
 }

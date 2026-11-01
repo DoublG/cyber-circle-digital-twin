@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Tiny MQTT 3.1.1 broker over WebSocket, Python stdlib only - for tests.
-QoS 0, retained messages, + and # wildcards. Not for production: use
-Mosquitto / EMQX etc. with a websocket listener on the installation.
+"""Tiny MQTT 3.1.1 broker over WebSocket (and plain TCP: the tiles), Python
+stdlib only - for tests and the tile emulator. QoS 0, retained messages,
++ and # wildcards. Not for production: use Mosquitto / EMQX etc. on the
+installation.
 
-    python3 tests/mqtt_test_broker.py [port]      (default 9001, path ignored)
+    python3 tests/mqtt_test_broker.py [port] [--tcp PORT]   (default 9001, path ignored;
+                                                             --tcp 1883: plain MQTT too)
 """
 import asyncio, base64, hashlib, struct, sys
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 clients = {}      # writer -> list of topic filters
+raw = set()       # writers on plain TCP (no websocket frames)
 retained = {}     # topic -> payload
 
 
@@ -44,7 +47,8 @@ def ws_frame(data):
 
 
 async def send(writer, header, body):
-    writer.write(ws_frame(mqtt_packet(header, body)))
+    packet = mqtt_packet(header, body)
+    writer.write(packet if writer in raw else ws_frame(packet))
     await writer.drain()
 
 
@@ -85,6 +89,15 @@ async def handle_mqtt(writer, header, body):
         p = 2 + n + (2 if (header >> 1) & 3 else 0)
         print("publish", topic, body[p:].decode(errors="replace")[:120], flush=True)
         await publish(topic, body[p:], header & 1)
+    elif kind == 10:                                # UNSUBSCRIBE
+        pid, p = body[:2], 2
+        while p < len(body):
+            n = struct.unpack("!H", body[p:p + 2])[0]
+            topic = body[p + 2:p + 2 + n].decode()
+            p += 2 + n
+            if topic in clients.get(writer, []):
+                clients[writer].remove(topic)
+        await send(writer, 0xB0, pid)
     elif kind == 12:                                # PINGREQ
         await send(writer, 0xD0, b"")
 
@@ -137,11 +150,50 @@ async def client(reader, writer):
     writer.close()
 
 
+async def tcp_client(reader, writer):
+    """Plain MQTT over TCP (the tiles): the same packets, no websocket frames."""
+    raw.add(writer)
+    buf = bytearray()
+    try:
+        while True:
+            data = await reader.read(4096)
+            if not data:
+                break
+            buf += data
+            while len(buf) >= 2:
+                length, mult, i = 0, 1, 1
+                while True:
+                    if i >= len(buf):
+                        break
+                    length += (buf[i] & 0x7F) * mult
+                    mult *= 128
+                    i += 1
+                    if not buf[i - 1] & 0x80:
+                        break
+                if len(buf) < i + length:
+                    break
+                header, body = buf[0], bytes(buf[i:i + length])
+                del buf[:i + length]
+                if header >> 4 == 14:               # DISCONNECT
+                    raise ConnectionError
+                await handle_mqtt(writer, header, body)
+    except (asyncio.IncompleteReadError, ConnectionError):
+        pass
+    clients.pop(writer, None)
+    raw.discard(writer)
+    writer.close()
+
+
 async def main():
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 9001
+    args = [a for i, a in enumerate(sys.argv[1:], 1) if not a.startswith("--") and sys.argv[i - 1] != "--tcp"]
+    port = int(args[0]) if args else 9001
     server = await asyncio.start_server(client, "127.0.0.1", port)
     print("mqtt test broker on ws://127.0.0.1:%d" % port, flush=True)
-    async with server:
-        await server.serve_forever()
+    servers = [server]
+    if "--tcp" in sys.argv:
+        tcp = int(sys.argv[sys.argv.index("--tcp") + 1])
+        servers.append(await asyncio.start_server(tcp_client, "0.0.0.0", tcp))
+        print("mqtt test broker on mqtt://0.0.0.0:%d (plain: the tiles)" % tcp, flush=True)
+    await asyncio.gather(*(s.serve_forever() for s in servers))
 
 asyncio.run(main())

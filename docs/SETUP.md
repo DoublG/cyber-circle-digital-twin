@@ -348,7 +348,25 @@ binary and a pressed icon flashes (the sensor test); `identify` makes it light
 up. The status LED: blue = wifi, amber = MQTT but no place yet, green = ready,
 red = no wifi. Build and flash: `cd tile_firmware && pio run -t upload`
 (the sensors calibrate at power-up: nobody on the tile then).
-**Emulator** (no hardware): [Wokwi](https://wokwi.com) runs the real
+**Tile emulator on this PC** (no hardware, no account): the same firmware
+built for Linux with stand-ins for Arduino, FastLED and wifi
+(`tile_firmware/emulator/`), the tile drawn in the terminal – the ring seen
+from above (LED_00 at the top, the robot side), the hearts, the 4 icons, the
+status LED – and keys **1 2 3 4** press the icons (**q** quits). Start as many
+as you like, each with its own MAC address; they behave like real tiles
+(place them in the app / web interface, play):
+
+```bash
+cd tile_firmware && pio run -e native
+.pio/build/native/program --mac 02:00:00:00:00:01 --host 127.0.0.1 --port 1883 [--user u --password p]
+```
+
+It needs a broker with plain MQTT: Mosquitto's `listener 1883`, or for a
+quick try the test broker: `python3 godot/tests/mqtt_test_broker.py 9001 --tcp 1883`
+(start the game with `--mqtt=ws://127.0.0.1:9001` and the control server
+with `--mqtt ws://127.0.0.1:9001`).
+
+**Emulator in the browser / VS Code**: [Wokwi](https://wokwi.com) runs the real
 firmware on a simulated ESP32 with a 48-LED ring, a strip with the 5 hearts,
 the 4 icon LEDs and the status LED, and 4 buttons in the icon colours as the
 pressure sensors (`tile_firmware/diagram.json`). Build it with

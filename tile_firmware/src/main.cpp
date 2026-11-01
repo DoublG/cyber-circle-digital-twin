@@ -59,9 +59,9 @@ void sendResult(JsonDocument &result) {
 
 static void hello() {
     JsonDocument doc;
-    doc["device"] = deviceId;
+    doc["device"] = deviceId.c_str();
     doc["fw"] = FW_VERSION;
-    doc["ip"] = WiFi.localIP().toString();
+    doc["ip"] = WiFi.localIP().toString().c_str();
     doc["rssi"] = WiFi.RSSI();
     doc["leds"] = RING_COUNT;
     String out;
