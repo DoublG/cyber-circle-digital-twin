@@ -180,7 +180,8 @@ static std::string dot(const CRGB &c, const char *on, const char *off = "·") {
 void CFastLED::show() {
     static uint32_t last = 0;
     char ch;
-    while (read(STDIN_FILENO, &ch, 1) == 1) {     // keys: 1-4 press the icons, q quits
+    while (term && read(STDIN_FILENO, &ch, 1) == 1) {   // keys: 1-4 press the icons, q quits (the terminal only:
+                                                        //  stdin is non-blocking there, not with --no-term)
         if (ch >= '1' && ch <= '4') pressUntil[ch - '1'] = millis() + 180;
         if (ch == 'q' || ch == 'Q') running = false;
     }

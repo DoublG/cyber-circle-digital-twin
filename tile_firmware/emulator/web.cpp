@@ -9,9 +9,12 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <vector>
 
+#include "Arduino.h"
 #include "FastLED.h"
 #include "config.h"
 #include "tile_top_svg.h"
@@ -118,38 +121,71 @@ static void reply(int fd, const char *type, const std::string &body) {
     }
 }
 
+// One open connection: its request head so far (a browser opens connections
+// before it knows what to ask - answer only a complete request).
+struct Conn {
+    int fd;
+    std::string req;
+    uint32_t since;
+};
+static std::vector<Conn> conns;
+
+static void answer(int fd, const std::string &req, const CRGB *leds, const std::string &mac,
+                   const std::deque<std::string> &log, bool held[4]) {
+    std::string path = req.substr(req.find(' ') + 1);
+    path = path.substr(0, path.find(' '));
+    if (path.rfind("/state", 0) == 0 && leds) {
+        auto arr = [&](int first, int n) {
+            std::string s = "[";
+            for (int i = 0; i < n; i++) s += (i ? ",\"" : "\"") + hex(leds[first + i]) + "\"";
+            return s + "]";
+        };
+        std::string lg = "[";
+        for (auto &l : log) lg += (lg.size() > 1 ? "," : "") + jsonStr(l);
+        reply(fd, "application/json",
+              "{\"mac\":" + jsonStr(mac) + ",\"ring\":" + arr(RING_FIRST, RING_COUNT) + ",\"hearts\":" + arr(HEART_FIRST, HEART_COUNT) +
+                  ",\"icons\":" + arr(ICON_FIRST, 4) + ",\"status\":\"" + hex(leds[STATUS_LED]) + "\",\"log\":" + lg + "]}");
+    } else if (path.rfind("/press", 0) == 0) {
+        int i = -1, down = 0;
+        sscanf(path.c_str(), "/press?i=%d&down=%d", &i, &down);
+        if (i >= 0 && i < 4) held[i] = down;
+        reply(fd, "application/json", "{}");
+    } else {
+        reply(fd, "text/html; charset=utf-8", std::string(PAGE_HEAD) + TILE_TOP_SVG + PAGE_TAIL);
+    }
+}
+
+static void finish(int fd) {
+    char buf[2048];
+    shutdown(fd, SHUT_WR);                        // (unread bytes at close() reset the connection:
+    while (recv(fd, buf, sizeof buf, MSG_DONTWAIT) > 0) {}   //  the browser would drop the reply)
+    close(fd);
+}
+
 void webPoll(const CRGB *leds, int count, const std::string &mac, const std::deque<std::string> &log, bool held[4]) {
     if (listenFd < 0) return;
-    for (int k = 0; k < 8; k++) {                 // a few requests per frame
-        int fd = accept(listenFd, nullptr, nullptr);
-        if (fd < 0) return;
-        timeval tv{0, 200000};
-        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
-        char buf[2048];
-        ssize_t n = recv(fd, buf, sizeof buf - 1, 0);
-        buf[n > 0 ? n : 0] = 0;
-        std::string req(buf);
-        std::string path = req.substr(req.find(' ') + 1);
-        path = path.substr(0, path.find(' '));
-        if (path.rfind("/state", 0) == 0 && leds) {
-            auto arr = [&](int first, int n) {
-                std::string s = "[";
-                for (int i = 0; i < n; i++) s += (i ? ",\"" : "\"") + hex(leds[first + i]) + "\"";
-                return s + "]";
-            };
-            std::string lg = "[";
-            for (auto &l : log) lg += (lg.size() > 1 ? "," : "") + jsonStr(l);
-            reply(fd, "application/json",
-                  "{\"mac\":" + jsonStr(mac) + ",\"ring\":" + arr(RING_FIRST, RING_COUNT) + ",\"hearts\":" + arr(HEART_FIRST, HEART_COUNT) +
-                      ",\"icons\":" + arr(ICON_FIRST, 4) + ",\"status\":\"" + hex(leds[STATUS_LED]) + "\",\"log\":" + lg + "]}");
-        } else if (path.rfind("/press", 0) == 0) {
-            int i = -1, down = 0;
-            sscanf(path.c_str(), "/press?i=%d&down=%d", &i, &down);
-            if (i >= 0 && i < 4) held[i] = down;
-            reply(fd, "application/json", "{}");
+    for (int fd; conns.size() < 32 && (fd = accept(listenFd, nullptr, nullptr)) >= 0;) {
+        fcntl(fd, F_SETFL, O_NONBLOCK);
+        conns.push_back({fd, "", millis()});
+    }
+    char buf[4096];
+    for (size_t k = 0; k < conns.size();) {      // never waits: what has come in, per connection
+        Conn &c = conns[k];
+        ssize_t n;
+        while ((n = recv(c.fd, buf, sizeof buf, 0)) > 0) c.req.append(buf, n);
+        bool complete = c.req.find("\r\n\r\n") != std::string::npos;
+        bool gone = n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK);
+        if (complete) {
+            int flags = fcntl(c.fd, F_GETFL);
+            fcntl(c.fd, F_SETFL, flags & ~O_NONBLOCK);   // (the reply: all of it)
+            answer(c.fd, c.req, leds, mac, log, held);
+            finish(c.fd);
+        } else if (gone || millis() - c.since > 10000 || c.req.size() > 16384) {
+            close(c.fd);                          // closed, idle too long, or no HTTP
         } else {
-            reply(fd, "text/html; charset=utf-8", std::string(PAGE_HEAD) + TILE_TOP_SVG + PAGE_TAIL);
+            k++;
+            continue;
         }
-        close(fd);
+        conns.erase(conns.begin() + k);
     }
 }

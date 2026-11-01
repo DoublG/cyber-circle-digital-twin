@@ -67,7 +67,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     lastGamemaster = p.getInt('gamemaster') ?? 0;
     device = p.getString('device') ?? '';
     if (device.isEmpty) {
-      device = 'gm-${Random().nextInt(1 << 32).toRadixString(16)}';
+      device = 'gm-${Random().nextInt(0x7fffffff).toRadixString(16)}';   // (not 1 << 32: 0 in the browser)
       await p.setString('device', device);
     }
     notifyListeners();

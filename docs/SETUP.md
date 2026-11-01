@@ -494,6 +494,17 @@ tools/make_clips.sh                  # all clips -> movies/gameplay/<clip>.mp4 a
 tools/make_clips.sh full mobile      # only these
 ```
 
+**Screenshots** (`movies/gallery/`): the game's screens in every state, and
+everything around it from one real run – the gamemaster app on a phone, every
+tab of the web interface, the tile emulator's top (three emulated tiles on
+T01–T03: setup, invite, activation, a round on the tiles, the website down):
+
+```bash
+cd godot && godot-4 --path . --resolution 1920x1080 --fixed-fps 30 --disable-vsync \
+    res://movie/clips.tscn -- --clip=gallery --shots=$PWD/../movies/gallery   # the game: NN_<state>*.jpg
+python3 tools/make_gallery.py        # -> movies/gallery/app/, controller/, tegel/ (playwright + Chrome)
+```
+
 ```bash
 godot-4 --path . --resolution 1920x1080 --fixed-fps 30 --disable-vsync \
     --write-movie movie/observer_demo.avi res://movie/observer_demo.tscn
