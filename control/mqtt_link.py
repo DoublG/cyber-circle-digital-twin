@@ -37,6 +37,8 @@ class MqttLink:
         self.devices = {}                    # physical tile id -> hello + "seen"
         self.state = {}
         self.events = deque(maxlen=60)
+        self.traffic = deque(maxlen=1000)    # the raw messages (web interface: MQTT): {seq, time, topic, payload, retained}
+        self.traffic_seq = 0
         self.master = {}
         self.online = False
         self.lock = threading.Lock()
@@ -68,9 +70,7 @@ class MqttLink:
 
     def _on_connect(self, client, userdata, flags, reason, props):
         self.online = not reason.is_failure
-        for t in ("node/+", "device/+/hello", "state", "event", "master", "registered", "activated", "status",
-                  "settings/schema", "texts/defaults"):
-            client.subscribe(f"{self.prefix}/{t}")
+        client.subscribe(f"{self.prefix}/#")   # everything: the topics below + the raw traffic log
         self.on_change("mqtt")
 
     def _on_disconnect(self, client, userdata, flags, reason, props):
@@ -78,6 +78,10 @@ class MqttLink:
         self.on_change("mqtt")
 
     def _on_message(self, client, userdata, msg):
+        self.traffic_seq += 1
+        self.traffic.append({"seq": self.traffic_seq, "time": time.strftime("%H:%M:%S") + ".%03d" % (time.time() % 1 * 1000),
+                             "topic": msg.topic, "payload": msg.payload[:4000].decode(errors="replace"),
+                             "retained": bool(msg.retain)})
         topic = msg.topic.removeprefix(self.prefix + "/")
         try:
             data = json.loads(msg.payload.decode() or "null")

@@ -2,7 +2,10 @@ class_name MqttBridge
 extends MqttClient
 ## Connects the game to the installation over MQTT (WebSocket). Topics
 ## (prefix = topic_prefix, payloads are JSON):
-##   <prefix>/tile/<n>/cmd     game -> tile   programs, start, stop ({"program": ...})
+##   <prefix>/tile/<n>/cmd     game -> tile   programs, start, stop ({"program": ...}),
+##                                            one-off effects {"fx": "hit", "color": "#ff1a0d"}
+##   <prefix>/tile/<n>/state   game -> tile   retained: what it shows (CyberTile.display_state:
+##                                            mode, lives, shield, icon colours, number)
 ##   <prefix>/tile/<n>/event   tile -> game   {"result": {...}}, {"press": "Cross"},
 ##                                            {"pressure": {"Cross": 0.8}}, ...
 ##                                            (any apply_command fields; "tile" is added)
@@ -26,6 +29,8 @@ extends MqttClient
 
 var _state_json := ""
 var _state_timer := 0.0
+var _tile_states := {}           # tile_id -> last published display state (JSON)
+var _tile_timer := 0.0
 var _announce_timer := 0.0
 
 var arena: Node3D
@@ -45,9 +50,14 @@ func setup(arena_node: Node3D) -> void:
 		publish(topic_prefix + "/status", "online", true)
 		_announce()
 		_publish_settings()
-		_state_json = "")
+		_state_json = ""
+		_tile_states.clear())                         # (the tiles' displays again)
 	arena.tile_message.connect(func(id, msg):
 		publish_json("%s/tile/%d/cmd" % [topic_prefix, id], msg))
+	for t in arena.tiles:                               # one-off effects for the real tiles
+		t.fx.connect(func(id, name, color):
+			if online:
+				publish_json("%s/tile/%d/cmd" % [topic_prefix, id], {"fx": name, "color": "#" + color.to_html(false)}))
 	arena.registered.connect(func(id, who, color):
 		publish_json(topic_prefix + "/registered",
 			{"tile": id, "player": who, "color": "#" + color.to_html(false)}))
@@ -103,6 +113,14 @@ func _on_message(topic: String, payload: PackedByteArray) -> void:
 
 func _process(delta: float) -> void:
 	super(delta)
+	_tile_timer -= delta
+	if online and role == "master" and _tile_timer <= 0.0:   # the real tiles' displays, on every change
+		_tile_timer = 0.1
+		for t in arena.tiles:
+			var json := JSON.stringify(t.display_state())
+			if json != _tile_states.get(t.tile_id, ""):
+				_tile_states[t.tile_id] = json
+				publish("%s/tile/%d/state" % [topic_prefix, t.tile_id], json, true)
 	if not online:
 		return
 	_announce_timer -= delta

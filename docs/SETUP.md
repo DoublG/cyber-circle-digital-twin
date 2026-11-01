@@ -313,7 +313,8 @@ Prefix `cybercircle` (setting `topic_prefix` on the *Mqtt* node). Payloads are J
 | topic | direction | |
 |---|---|---|
 | `cybercircle/cmd` | app/operator → game | `{"assign": 42, "tile": 3}`, `{"game": "start"}`, … |
-| `cybercircle/tile/<n>/cmd` | game → tile | `{"program": {...}}`, `{"start": "<id>"}`, `{"stop": true}` |
+| `cybercircle/tile/<n>/cmd` | game → tile | `{"program": {...}}`, `{"start": "<id>"}`, `{"stop": true}`, `{"pause": true}`, `{"piet": {"on": true, "speed": 20, "color": "#ff2a00"}}`, effects `{"fx": "attack" \| "hit" \| "block" \| "life" \| "doomed" \| "death", "color": "#rrggbb"}` |
+| `cybercircle/tile/<n>/state` | game → tile | retained: what the tile shows – `{"mode": "off" \| "setup" \| "pending" \| "idle" \| "dead" \| "playing", "number": n, "color": "#…" (pending), "lives", "max_lives", "shield", "buttons": {"Square": "#…" \| "", …}}` |
 | `cybercircle/tile/<n>/event` | tile → game | `{"press": "Cross"}`, `{"pressure": {...}}`, `{"result": {...}}` |
 | `cybercircle/registered` | game → app | `{"tile": 3, "player": "Erik", "color": "#ff8800"}` |
 | `cybercircle/activated` | game → app | `{"tile": 3, "player": "Erik"}` |
@@ -333,6 +334,21 @@ Prefix `cybercircle` (setting `topic_prefix` on the *Mqtt* node). Payloads are J
 The tile programs and results for Cyclone, Reaction and Simon are described
 in the header of `godot/scripts/tile_firmware.gd` – that file is also the
 reference implementation for the tile firmware.
+
+**Tile firmware** (`tile_firmware/`, PlatformIO, ESP32 with FastLED, the 4
+pressure sensors on ADC1 pins): one firmware for every tile. Wifi, the broker
+(plain MQTT, port 1883), the LED chain (ring 48, hearts 5, icon LEDs 4, status
+LED) and the sensor thresholds are in `include/config.h`. It announces itself
+with its MAC address (`device/<mac>/hello`, every 10 s), gets its place from
+the control server (`device/<mac>/config`) and then shows `tile/<n>/state`,
+plays the effects and runs the tile programs – Reactie, Simon, Cyclone and
+Zwarte Piet, a 1:1 port of `godot/scripts/tile_firmware.gd` – and sends
+`{"press": …}` and the results. In SETUP the hearts show its place number in
+binary and a pressed icon flashes (the sensor test); `identify` makes it light
+up. The status LED: blue = wifi, amber = MQTT but no place yet, green = ready,
+red = no wifi. Build and flash: `cd tile_firmware && pio run -t upload`
+(the sensors calibrate at power-up: nobody on the tile then).
+**MQTT** in the web interface shows the raw traffic live (filter by topic).
 
 ## 6. Database
 

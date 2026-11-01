@@ -24,6 +24,7 @@
   <button data-tab="questions">Vragen</button>
   <button data-tab="texts">Teksten</button>
   <button data-tab="website">Website</button>
+  <button data-tab="mqtt">MQTT</button>
   <button data-tab="ranking">Ranglijst</button>
   <button data-tab="settings">Instellingen</button>
 </nav>
@@ -144,6 +145,18 @@
   <div id="website" class="website"></div>
   <h2>Laatste controles</h2>
   <ul id="website-history" class="events"></ul>
+</section>
+
+<section id="tab-mqtt" class="tab">
+  <p class="hint">Het ruwe MQTT-verkeer (alles onder <code>cybercircle/</code>, de laatste 1000 berichten): wat de
+    tegels, het spel, de apps en deze server elkaar sturen. R = retained.</p>
+  <div class="row">
+    <input id="mqtt-filter" placeholder="filter op topic, bv. tile/3 of device/">
+    <label><input type="checkbox" id="mqtt-quiet" checked> statusberichten verbergen</label>
+    <button id="mqtt-pause">⏸ Pauze</button><button id="mqtt-clear">Wissen</button>
+    <span id="mqtt-count" class="hint"></span>
+  </div>
+  <div id="mqtt-log" class="mqtt-log"></div>
 </section>
 
 <section id="tab-ranking" class="tab">

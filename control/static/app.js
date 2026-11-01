@@ -28,7 +28,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button, .tab").forEach(e => e.classList.remove("active"));
   b.classList.add("active");
   $(`#tab-${b.dataset.tab}`).classList.add("active");
-  ({ website: loadWebsite, texts: loadTexts, gamemasters: loadGamemasters, players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: loadTiles, settings: loadSettings })[b.dataset.tab]?.();
+  ({ mqtt: startMqttLog, website: loadWebsite, texts: loadTexts, gamemasters: loadGamemasters, players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: loadTiles, settings: loadSettings })[b.dataset.tab]?.();
 });
 
 // ---------------------------------------------------------------- live
@@ -230,6 +230,38 @@ $("#tile-table").onclick = async e => {
   await api("PUT", `/api/tiles/${t.number}`, { enabled: !t.enabled });
   loadTiles();
 };
+
+// ---------------------------------------------------------------- MQTT traffic
+// (the game's state every 0.5 s, the tiles' displays, the announcements: "status" - hidden by default)
+const QUIET = [/\/state$/, /\/node\//, /\/device\/[^/]+\/hello$/, /\/settings\/schema$/, /\/texts\/defaults$/];
+let mqttSeq = 0, mqttPaused = false, mqttTimer = null, mqttRows = [];
+function startMqttLog() {
+  if (mqttTimer) return;
+  mqttTimer = setInterval(pollMqtt, 1000);
+  pollMqtt();
+}
+async function pollMqtt() {
+  if (!$("#tab-mqtt").classList.contains("active")) { clearInterval(mqttTimer); mqttTimer = null; return; }
+  if (mqttPaused) return;
+  const r = await fetch(`/api/mqtt/log?since=${mqttSeq}&filter=${encodeURIComponent($("#mqtt-filter").value)}`);
+  const res = await r.json();
+  mqttSeq = res.seq;
+  const quiet = $("#mqtt-quiet").checked;
+  mqttRows = mqttRows.concat(res.messages.filter(m => !quiet || !QUIET.some(q => q.test(m.topic)))).slice(-500);
+  $("#mqtt-count").textContent = `${mqttRows.length} berichten`;
+  const box = $("#mqtt-log");
+  const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
+  box.innerHTML = mqttRows.map(m => `<div class="m"><span class="t">${esc(m.time)}</span>
+    <span class="topic ${/\/(event|cmd)$/.test(m.topic) ? "hot" : ""}">${esc(m.topic)}</span>${m.retained ? '<span class="r">R</span>' : ""}
+    <span class="p">${esc(m.payload)}</span></div>`).join("");
+  if (atBottom) box.scrollTop = box.scrollHeight;
+}
+$("#mqtt-pause").onclick = e => {
+  mqttPaused = !mqttPaused;
+  e.target.textContent = mqttPaused ? "▶ Verder" : "⏸ Pauze";
+};
+$("#mqtt-clear").onclick = () => { mqttRows = []; $("#mqtt-log").innerHTML = ""; };
+$("#mqtt-filter").oninput = $("#mqtt-quiet").onchange = () => { mqttRows = []; mqttSeq = 0; };
 
 // ---------------------------------------------------------------- website (registrations)
 const ago = s => s === null || s === undefined ? "nog niet" : s < 60 ? `${s} s geleden` : s < 3600 ? `${Math.round(s / 60)} min geleden` : `${Math.round(s / 3600)} u geleden`;

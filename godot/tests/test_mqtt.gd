@@ -35,6 +35,7 @@ func _ready() -> void:
 	add_child(tile)
 	tile.message.connect(_on_tile_message)
 	tile.subscribe("cybercircle/tile/3/cmd")
+	tile.subscribe("cybercircle/tile/3/state")
 	tile.subscribe("cybercircle/registered")
 	tile.subscribe("cybercircle/activated")
 	tile.start()
@@ -43,6 +44,11 @@ func _ready() -> void:
 
 func _on_tile_message(topic: String, payload: PackedByteArray) -> void:
 	var msg = JSON.parse_string(payload.get_string_from_utf8())
+	if topic.ends_with("/state"):                  # what the real tile shows
+		states.append(msg)
+		return
+	if msg.has("fx"):
+		effects.append(msg.fx)
 	if topic.ends_with("/registered") or topic.ends_with("/activated"):
 		app_heard.append(topic.get_file())
 		return
@@ -50,6 +56,10 @@ func _on_tile_message(topic: String, payload: PackedByteArray) -> void:
 		program = msg.program
 	if msg.has("start") and msg.start == program.get("id"):
 		started = true
+
+
+var states := []
+var effects := []
 
 
 func _run() -> void:
@@ -62,10 +72,20 @@ func _run() -> void:
 	tile.publish_json("cybercircle/cmd", {"assign": tess, "tile": 3})
 	await _until(func(): return arena.is_pending(3))
 	check(arena.is_pending(3) and arena.pending_info(3).name == "Tess", "tile 3 waits for activation (Tess, from the database)")
+	await _wait(0.4)                                 # (the tile shows the invite)
 	for b in ["Square", "Triangle", "Cross", "Circle"]:  # the real tile reports presses
 		tile.publish_json("cybercircle/tile/3/event", {"press": b})
 	await _until(func(): return arena.is_playing(3))
 	check(arena.is_playing(3), "Tess activated by presses from the tile")
+	await _wait(0.5)
+	var modes := states.map(func(st): return st.mode)
+	check("pending" in modes and modes.back() == "playing", "tile/3/state: idle -> pending -> playing (%s)" % [modes])
+	check(states.any(func(st): return st.mode == "pending" and st.color == "#00ff88"), "pending in the player's colour")
+	check(states.back().lives == arena.tiles[2].health and states.back().buttons.size() == 4,
+		"playing: lives %d and the 4 icon colours" % states.back().lives)
+	arena.robot_attack([3], Color.RED, [], false)
+	await _until(func(): return "hit" in effects, 10.0)
+	check("hit" in effects, "the robot's hit: tile/3/cmd {fx: hit}")
 	await _wait(0.5)
 	check("registered" in app_heard and "activated" in app_heard, "app was told: registered + activated")
 

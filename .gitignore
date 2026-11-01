@@ -22,3 +22,6 @@ movies/gameplay/
 movies/drones.mp4
 movies/13_players_end_of_round.mp4
 movies/gallery_old/
+
+# PlatformIO build output
+tile_firmware/.pio/

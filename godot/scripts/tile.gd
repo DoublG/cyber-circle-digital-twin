@@ -20,6 +20,9 @@ signal button_released(tile_id: int, button: StringName)
 signal pressure_changed(tile_id: int, button: StringName, value: float)
 signal died(tile_id: int)   # health went from >0 to 0
 signal health_changed(tile_id: int, health: int)
+## A one-off effect, for the real tile (MqttBridge: tile/<n>/cmd {"fx": name, "color"}):
+## attack, hit, block, life, doomed, death.
+signal fx(tile_id: int, name: String, color: Color)
 
 const TILE_SCENE := preload("res://models/tile.glb")
 const LED_COUNT := 48           # LED_00 faces the robot, counting clockwise from above
@@ -63,6 +66,7 @@ var _idle_time := 0.0
 var pending := false
 var _activation_pressed: Array[StringName] = []
 var _activation_color := Color.WHITE
+var _button_colors := {}          # button -> the colour its LED shows now (display_state)
 var show_number := false: set = set_show_number   # setup: the hearts show tile_id in binary
 ## Protected (e.g. the question is too hard for the player's age): attacks are
 ## blocked. Twin: energy dome over the tile. Real tile: the LED ring glows blue.
@@ -298,6 +302,7 @@ func set_health(value: int) -> void:
 ## Death effect on the tile: red wipe around the ring, blinking, then dark.
 ## Exterminated, waiting for the robot: the whole ring blinks red (until play_death).
 func blink_doomed() -> void:
+	fx.emit(tile_id, "doomed", Color.RED)
 	is_dead = true
 	shielded = false
 	_doomed = true
@@ -311,6 +316,7 @@ func blink_doomed() -> void:
 
 
 func play_death() -> void:
+	fx.emit(tile_id, "death", Color.RED)
 	_doomed = false
 	is_dead = true
 	shielded = false
@@ -469,6 +475,7 @@ func _explode() -> void:
 ## Attack towards the robot: two lights run from the back of the ring along
 ## both sides to LED_00 (the robot side). Returns when they meet.
 func play_attack(color := Color(0.2, 1.0, 0.3)) -> void:
+	fx.emit(tile_id, "attack", color)
 	var half := LED_COUNT / 2
 	for step in half + 1:
 		clear_ring()
@@ -488,6 +495,7 @@ func play_attack(color := Color(0.2, 1.0, 0.3)) -> void:
 ## Hit by the robot: red runs from LED_00 (robot side) along both sides to the
 ## back of the ring, then the whole ring flashes.
 func play_hit(color := Color(1.0, 0.1, 0.05)) -> void:
+	fx.emit(tile_id, "hit", color)
 	var half := LED_COUNT / 2
 	for step in half + 1:
 		clear_ring()
@@ -555,6 +563,7 @@ func _shield_glow() -> void:
 ## An attack hits the shield: red stops at the front of the ring, the ring
 ## flashes blue and the dome ripples from the robot side. No life lost.
 func play_block(color := Color(1.0, 0.1, 0.05)) -> void:
+	fx.emit(tile_id, "block", color)
 	_shield.visible = true
 	_shield_mat.set_shader_parameter("flash", 1.0)
 	var t := create_tween().set_parallel()
@@ -586,7 +595,36 @@ func revive(lives := -1) -> void:
 
 ## Colour of the RGB LED under a button symbol (Color.BLACK = off).
 func set_button_led(button: StringName, color: Color) -> void:
+	_button_colors[button] = color
 	_paint(_button_leds[button], color)
+
+
+## What the real tile should show, as data (MqttBridge: tile/<n>/state, retained):
+##   mode     off (out of service) / setup (hearts: the number) / pending (the
+##            invite's colour, the tile lights the pressed icons itself) /
+##            idle / dead / playing
+##   color    pending: the gamemaster's colour
+##   lives / max_lives, shield, buttons {Square: "#rrggbb" ("" = off), ...}
+## Rings during the tile games and Zwarte Piet: the tile's own programs.
+func display_state() -> Dictionary:
+	var mode := "playing"
+	if out_of_service:
+		mode = "off"
+	elif show_number:
+		mode = "setup"
+	elif pending:
+		mode = "pending"
+	elif idle:
+		mode = "idle"
+	elif is_dead:
+		mode = "dead"
+	var buttons := {}
+	for b in BUTTONS:
+		var c: Color = _button_colors.get(b, Color.BLACK)
+		buttons[str(b)] = "#" + c.to_html(false) if c.v > 0.01 else ""
+	return {"mode": mode, "number": tile_id, "color": "#" + _activation_color.to_html(false),
+		"lives": health, "max_lives": max_health, "shield": shielded,
+		"buttons": buttons if mode == "playing" else {}}
 
 
 func set_status(color: Color) -> void:

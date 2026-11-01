@@ -478,6 +478,7 @@ func give_life(tile_id: int) -> void:
 		return
 	tile.max_health = maxi(tile.max_health, tile.health + 1)
 	tile.health += 1
+	tile.fx.emit(tile_id, "life", Color(0.1, 1.0, 0.3))
 	sound.play(&"life")
 	tile.fill_ring(Color(0.1, 1.0, 0.3))
 	get_tree().create_timer(0.5).timeout.connect(func():

@@ -18,6 +18,7 @@ Gamemaster app in a browser (iPhone): http://<this pc>:8080/gm/ (the Flutter web
   setup        PUT /api/layout {t01_clock} (where T01 is, as on a clock; the entrance at 6)
                GET|POST /api/gamemasters, PUT|DELETE /api/gamemasters/{id} {name, color}
                GET|PUT /api/texts (the slogans, how to join, per game its name and rules)
+               GET /api/mqtt/log?since=&filter= (the raw MQTT traffic)
   gamemaster   POST /api/session {device, gamemaster} (sign of life: who is logged in, on the dashboard)
   gamemaster   GET /api/config (where MQTT, the layout), GET /api/cards/{code} (who has this QR card),
                POST /api/players {..., card}, POST /api/players/{id}/assign, POST /api/tiles/{n}/leave
@@ -346,6 +347,13 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         db.set_setting("texts", json.dumps(clean))
         link.publish_texts(clean)
         return {"values": clean}
+
+    @app.get("/api/mqtt/log")
+    def mqtt_log(since: int = 0, filter: str = "", limit: int = 300):
+        """The raw MQTT traffic under the prefix (the last 1000 messages): the
+        ones after `since` (seq), whose topic contains `filter`."""
+        rows = [m for m in list(link.traffic) if m["seq"] > since and filter.lower() in m["topic"].lower()]
+        return {"seq": link.traffic_seq, "messages": rows[-limit:]}
 
     @app.get("/api/master")
     def get_master():

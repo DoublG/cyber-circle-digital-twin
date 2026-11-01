@@ -187,6 +187,14 @@ try:
     call("POST", "/api/website/mock", {"up": True})
     check(live()["website"]["status"] == "ok", "back up")
 
+    print("--- the raw MQTT traffic log")
+    log = call("GET", "/api/mqtt/log?filter=/state")
+    check(any(m["topic"] == "cybercircle/state" for m in log["messages"]), "the game's state messages in the log")
+    seq = log["seq"]
+    call("POST", "/api/cmd", {"game": "noop"})
+    new = until(lambda: [m for m in call("GET", f"/api/mqtt/log?since={seq}&filter=cybercircle/cmd")["messages"]])
+    check(new and '"noop"' in new[-1]["payload"], "a command shows up in the log (since + filter)")
+
     print("--- operator: lives, round plan")
     call("POST", "/api/tiles/4/lives", {"lives": 2})
     check(until(lambda: player(4)["lives"] == 2), "lives set to 2")
