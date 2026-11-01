@@ -364,18 +364,25 @@ in the header of `godot/scripts/tile_firmware.gd` – that file is also the
 reference implementation for the tile firmware.
 
 **Tile firmware** (`tile_firmware/`, PlatformIO, ESP32 with FastLED, the 4
-pressure sensors on ADC1 pins): one firmware for every tile. Wifi, the broker
-(plain MQTT, port 1883), the LED chain (ring 48, hearts 5, icon LEDs 4, status
-LED) and the sensor thresholds are in `include/config.h`. It announces itself
-with its MAC address (`device/<mac>/hello`, every 10 s), gets its place from
-the control server (`device/<mac>/config`) and then shows `tile/<n>/state`,
-plays the effects and runs the tile programs – Reactie, Simon, Cyclone and
-Zwarte Piet, a 1:1 port of `godot/scripts/tile_firmware.gd` – and sends
-`{"press": …}` and the results. In SETUP the hearts show its place number in
-binary and a pressed icon flashes (the sensor test); `identify` makes it light
-up. The status LED: blue = wifi, amber = MQTT but no place yet, green = ready,
-red = no wifi. Build and flash: `cd tile_firmware && pio run -t upload`
-(the sensors calibrate at power-up: nobody on the tile then).
+pressure sensors on ADC1 pins): one firmware for every tile. The ESP32 is a
+module with **wired Ethernet**, socketed on the tile's carrier board: an RMII
+PHY (LAN8720; the defaults are a WT32-ETH01's pins, the Olimex ESP32-POE's are
+noted next to them – set the module's in `include/config.h`, `TILE_ETH_*`; RMII
+takes GPIO 0/17, 18, 19, 21, 22, 23, 25, 26, 27: the LEDs and sensors stay off
+those). The broker (plain MQTT, port 1883), the LED chain (ring 48, hearts 5,
+icon LEDs 4, status LED) and the sensor thresholds are in `include/config.h`
+too. It gets its address from the network's DHCP and announces itself with its
+MAC address (`device/<mac>/hello`, every 10 s: also its IP and the link, e.g.
+`100M full`), gets its place from the control server (`device/<mac>/config`)
+and then shows `tile/<n>/state`, plays the effects and runs the tile programs –
+Reactie, Simon, Cyclone and Zwarte Piet, a 1:1 port of
+`godot/scripts/tile_firmware.gd` – and sends `{"press": …}` and the results.
+In SETUP the hearts show its place number in binary and a pressed icon flashes
+(the sensor test); `identify` makes it light up. The status LED: blue =
+network, amber = MQTT but no place yet, green = ready, red = no network (cable,
+switch, DHCP). Build and flash: `cd tile_firmware && pio run -t upload`; a bare
+ESP32 dev board without Ethernet: `pio run -e esp32dev-wifi -t upload` (wifi,
+`WIFI_SSID` / `WIFI_PASSWORD` in `config.h`) (the sensors calibrate at power-up: nobody on the tile then).
 **Tile emulator on this PC** (no hardware, no account): the same firmware
 built for Linux with stand-ins for Arduino, FastLED and wifi
 (`tile_firmware/emulator/`), the tile drawn in the terminal – the ring seen

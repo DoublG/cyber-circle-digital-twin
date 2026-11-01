@@ -6,7 +6,31 @@
 
 #define FW_VERSION "0.1.0"
 
-// ---- network (the installation's own wifi)
+// ---- network: wired Ethernet - the ESP32 module socketed on the tile's
+// carrier board, an RMII PHY (LAN8720). The pins of the module; defaults: the
+// WT32-ETH01 (Olimex ESP32-POE: ADDR 0, POWER 12, CLOCK ETH_CLOCK_GPIO17_OUT).
+// RMII itself takes GPIO 0 / 17 (clock), 19, 21, 22, 25, 26, 27, MDC and MDIO:
+// keep the LEDs and sensors off those. (-DNET_WIFI: wifi instead - below.)
+#ifndef TILE_ETH_PHY
+#define TILE_ETH_PHY   ETH_PHY_LAN8720
+#endif
+#ifndef TILE_ETH_ADDR
+#define TILE_ETH_ADDR  1                     // the PHY's address on the MDIO bus
+#endif
+#ifndef TILE_ETH_POWER
+#define TILE_ETH_POWER 16                    // the PHY's power / reset pin (-1: none)
+#endif
+#ifndef TILE_ETH_MDC
+#define TILE_ETH_MDC   23
+#endif
+#ifndef TILE_ETH_MDIO
+#define TILE_ETH_MDIO  18
+#endif
+#ifndef TILE_ETH_CLOCK
+#define TILE_ETH_CLOCK ETH_CLOCK_GPIO0_IN    // the 50 MHz RMII clock: from the PHY's oscillator into GPIO0
+#endif
+
+// wifi (only with -DNET_WIFI: a dev board without Ethernet, the emulators)
 #ifndef WIFI_SSID
 #define WIFI_SSID      "cybercircle"
 #endif

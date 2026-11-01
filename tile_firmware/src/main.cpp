@@ -1,5 +1,6 @@
-// Cyber Circle tile (ESP32): wifi + MQTT, the 4 pressure sensors, the LEDs.
-//   announces itself    device/<mac>/hello (retained, every HELLO_MS) {device, fw, ip, rssi}
+// Cyber Circle tile (ESP32): Ethernet (net.cpp; wifi as an option) + MQTT, the
+// 4 pressure sensors, the LEDs.
+//   announces itself    device/<mac>/hello (retained, every HELLO_MS) {device, fw, net, ip, link | rssi}
 //   its place           device/<mac>/config {"tile": n} (the control server: Tegels / the app)
 //   find it             device/<mac>/identify {"seconds": 6}
 //   then, as tile n     tile/<n>/state  (retained) what to show - display.cpp
@@ -7,9 +8,10 @@
 //                       tile/<n>/event  -> {"press": "Cross"}, {"result": {...}}
 // Settings: include/config.h. The protocol's reference: the game's
 // godot/scripts/net/mqtt_bridge.gd and godot/scripts/tile_firmware.gd.
-#include <WiFi.h>
+#include <WiFi.h>                           // (WiFiClient: a TCP socket - over Ethernet too)
 #include <PubSubClient.h>
 #include "display.h"
+#include "net.h"
 #include "programs.h"
 #include "sensors.h"
 #include "tile.h"
@@ -18,8 +20,8 @@ CRGB leds[LED_TOTAL];
 const char *ICON_NAMES[4] = {"Square", "Triangle", "Cross", "Circle"};
 const CRGB ICON_COLORS[4] = {CRGB(255, 89, 191), CRGB(51, 255, 102), CRGB(77, 128, 255), CRGB(255, 38, 38)};
 
-static WiFiClient net;
-static PubSubClient mqtt(net);
+static WiFiClient socket;
+static PubSubClient mqtt(socket);
 static String deviceId;                     // the MAC address
 static int place = 0;                       // 0 = no place yet
 static uint32_t lastHello = 0, lastTry = 0, lastFrame = 0, lastSensorReport = 0;
@@ -61,8 +63,7 @@ static void hello() {
     JsonDocument doc;
     doc["device"] = deviceId.c_str();
     doc["fw"] = FW_VERSION;
-    doc["ip"] = WiFi.localIP().toString().c_str();
-    doc["rssi"] = WiFi.RSSI();
+    net::describe(doc);
     doc["leds"] = RING_COUNT;
     String out;
     serializeJson(doc, out);
@@ -104,7 +105,7 @@ static void onMessage(char *t, byte *payload, unsigned int len) {
 }
 
 static void connect() {
-    if (WiFi.status() != WL_CONNECTED || mqtt.connected() || millis() - lastTry < 2000) return;
+    if (!net::up() || mqtt.connected() || millis() - lastTry < 2000) return;
     lastTry = millis();
     String client = "tile-" + deviceId;
     client.replace(":", "");
@@ -124,10 +125,8 @@ void setup() {
     FastLED.setBrightness(BRIGHTNESS);
     FastLED.clear(true);
     sensors::begin();                       // (nobody on the tile at power-up: the resting values)
-    WiFi.mode(WIFI_STA);
-    WiFi.setAutoReconnect(true);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    deviceId = WiFi.macAddress();
+    net::begin();
+    deviceId = net::mac();
     display::unplaced(0);
     mqtt.setServer(MQTT_HOST, MQTT_PORT);
     mqtt.setBufferSize(8192);               // (a program can be a few kB)
@@ -165,7 +164,7 @@ void loop() {
         if (owned) programs::draw();
         display::draw(owned);
         leds[STATUS_LED] = mqtt.connected() ? (place > 0 ? CRGB(0, 40, 0) : CRGB(40, 30, 0))
-                                            : (WiFi.status() == WL_CONNECTED ? CRGB(0, 0, 50) : CRGB(50, 0, 0));
+                                            : (net::up() ? CRGB(0, 0, 50) : CRGB(50, 0, 0));
         FastLED.show();
     }
 }
