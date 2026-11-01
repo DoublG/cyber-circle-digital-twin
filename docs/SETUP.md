@@ -695,24 +695,24 @@ server with `--ssl-cert control/cert.pem --ssl-key control/key.pem`; open
 Tests: `cd gamemaster_app && flutter test`; the whole flow in a browser with a
 fake camera showing QR cards: `python gamemaster_app/test_browser/scan_flow.py`.
 
-## 12. Docker test setup (gamemaster PC + screen PC)
+## 12. Docker test setup
 
-`deploy/` runs every part in containers on one PC, the way the installation
-splits them, to test the certificates and how the parts find each other:
-
-| | `deploy/gamemaster-pc` | `deploy/screen-pc` |
-|---|---|---|
-| runs | `certs` (makes the CA and the certificate once), `broker` (Mosquitto), `control` (the control server, https, the database in the volume `database`), `tile-1..3` (emulated tiles) | `game` (Godot 4.7.2, headless) |
-| ports on this PC (`.env`, see `.env.example`) | 8443 https web interface + `/gm/`, 1883 MQTT (tiles), 8883 mqtts, 9443 wss, 8191–8193 the tiles' tops | – |
+**For testing only** – the installation itself runs bare on Linux and the
+Raspberry Pis (§3–4). `deploy/docker-compose.yml` starts every part in one go,
+split the way the installation is, to test the certificates and how the parts
+find each other: `certs` (makes the CA and the certificate once), `broker`
+(Mosquitto), `control` (the control server on https, the database in the
+volume `database`), `game` (Godot 4.7.2 headless, as a screen PC runs it) and
+`tile-1..3` (emulated tiles). Ports on this PC (`deploy/.env`, see
+`.env.example`): 8443 https web interface + `/gm/`, 1883 MQTT (tiles), 8883
+mqtts, 9443 wss, 8191–8193 the tiles' tops.
 
 ```bash
-cd deploy/gamemaster-pc && docker compose up -d --build
-cd ../screen-pc && docker compose up -d --build
-python3 deploy/check.py       # certificates, lookup, every link, a visitor on an emulated tile
+cd deploy && docker compose up -d --build
+python3 check.py              # certificates, lookup, every link, a visitor on an emulated tile
 ```
 
-* **Lookup**: both composes share the Docker network `cybercircle`; the
-  services are found by name: `broker`, `control` (`wss://broker:9443/mqtt`,
+* **Lookup**: inside the compose the services are found by name: `broker`, `control` (`wss://broker:9443/mqtt`,
   `https://control:8443`). From this PC: `localhost` and the mapped ports.
 * **Certificates**: `deploy/certs/make_certs.sh` (run by the `certs` service)
   makes an own CA (`ca.pem`, `ca.key`: made once, keep it) and the server
@@ -728,7 +728,7 @@ python3 deploy/check.py       # certificates, lookup, every link, a visitor on a
   (`--public-mqtt`); its web version is `https://localhost:8443/gm/` (build it
   first: §11).
 * **The picture**: the game runs headless (logic, MQTT, no screens). For the
-  6 screens in a window on this desktop: `xhost +local:` then
+  6 screens in a window on this desktop: `xhost +local:` then (in `deploy/`)
   `docker compose -f docker-compose.yml -f display.yml up -d` (OpenGL through
   Mesa – slow without a GPU the container can use).
 

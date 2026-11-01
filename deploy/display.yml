@@ -2,7 +2,7 @@
 # PC's desktop through X11 (XWayland), rendered with OpenGL (Mesa; slow
 # without a GPU the container can use).
 #   xhost +local:      (once per login: let containers open windows)
-#   docker compose -f docker-compose.yml -f display.yml up -d --build
+#   cd deploy && docker compose -f docker-compose.yml -f display.yml up -d --build
 services:
   game:
     command:

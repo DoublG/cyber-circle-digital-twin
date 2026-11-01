@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Checks the compose setup (deploy/gamemaster-pc + deploy/screen-pc) end to
-end: the certificates, the lookup by name and every link between the parts.
-Python standard library + docker; run it on the PC with both composes up:
-    python3 deploy/check.py            (ports: the same as in .env, or the defaults)
+"""Checks the compose test setup (deploy/docker-compose.yml) end to end: the
+certificates, the lookup by name and every link between the parts.
+Python standard library + docker; with the compose up:
+    python3 deploy/check.py            (ports: the same as in deploy/.env, or the defaults)
 """
 import json, os, socket, ssl, subprocess, sys, time, urllib.request
 
@@ -10,9 +10,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CA = os.path.join(HERE, "certs", "ca.pem")
 
 
-def env(name, default):                      # the mapping in deploy/gamemaster-pc/.env
+def env(name, default):                      # the mapping in deploy/.env
     try:
-        for line in open(os.path.join(HERE, "gamemaster-pc", ".env")):
+        for line in open(os.path.join(HERE, ".env")):
             k, _, v = line.strip().partition("=")
             if k == name and v:
                 return v
@@ -85,12 +85,12 @@ try:
 except ssl.SSLCertVerificationError:
     check(True, "a name not in the certificate: refused (hostname check)")
 
-print("lookup by name inside the network 'cybercircle' (from the control container):")
+print("lookup by name inside the compose network (from the control container):")
 probe = ("import socket,ssl;c=ssl.create_default_context(cafile='/certs/ca.pem')\n"
          "for h,p in (('broker',8883),('broker',9443),('control',8443)):\n"
          "  s=c.wrap_socket(socket.create_connection((h,p),5),server_hostname=h);"
          "print(h,p,socket.gethostbyname(h),s.version());s.close()")
-r = subprocess.run(["docker", "exec", "cybercircle-gamemaster-control-1", "python", "-c", probe],
+r = subprocess.run(["docker", "exec", "cybercircle-control-1", "python", "-c", probe],
                    capture_output=True, text=True)
 for line in r.stdout.split("\n"):
     if line.strip():
