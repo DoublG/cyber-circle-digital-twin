@@ -132,6 +132,8 @@ func _request(method: int, path: String, body):
 		return null
 	var http := HTTPRequest.new()
 	http.timeout = 5.0
+	if TlsTrust.options and base_url.begins_with("https"):
+		http.set_tls_options(TlsTrust.options)
 	add_child(http)
 	var data := "" if body == null else JSON.stringify(body)
 	var err := http.request(base_url + path, ["Content-Type: application/json"], method, data)

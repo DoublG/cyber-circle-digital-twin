@@ -176,6 +176,7 @@ Options (everything after `--`):
 | `--mqtt-user=…` `--mqtt-password=…` | broker login |
 | `--sim-tiles` | with MQTT, still simulate the tile logic (no real tiles) |
 | `--control=URL` | **installation**: the control server, e.g. `http://192.168.1.10:8080` – questions, players, ranking and scores through its API |
+| `--ca=FILE` | trust this CA for `wss://` (broker) and `https://` (control server): the installation's own (`deploy/certs/ca.pem`, §12); default the system's |
 | `--db=PATH` | standalone / testing: open a SQLite file directly; `none` = no database (questions from `questions.json`, nothing saved) |
 | `--node=NAME` | this process' name in the web interface (default `godot-<ip>`) |
 | `--settings=FILE` | standalone: game settings as JSON, the same as the web interface's *Instellingen*, e.g. `{"game": {"tempo": 1.2}, "quiz": {"question_time": 20}}` |
@@ -694,7 +695,44 @@ server with `--ssl-cert control/cert.pem --ssl-key control/key.pem`; open
 Tests: `cd gamemaster_app && flutter test`; the whole flow in a browser with a
 fake camera showing QR cards: `python gamemaster_app/test_browser/scan_flow.py`.
 
-## 12. Troubleshooting
+## 12. Docker test setup (gamemaster PC + screen PC)
+
+`deploy/` runs every part in containers on one PC, the way the installation
+splits them, to test the certificates and how the parts find each other:
+
+| | `deploy/gamemaster-pc` | `deploy/screen-pc` |
+|---|---|---|
+| runs | `certs` (makes the CA and the certificate once), `broker` (Mosquitto), `control` (the control server, https, the database in the volume `database`), `tile-1..3` (emulated tiles) | `game` (Godot 4.7.2, headless) |
+| ports on this PC (`.env`, see `.env.example`) | 8443 https web interface + `/gm/`, 1883 MQTT (tiles), 8883 mqtts, 9443 wss, 8191–8193 the tiles' tops | – |
+
+```bash
+cd deploy/gamemaster-pc && docker compose up -d --build
+cd ../screen-pc && docker compose up -d --build
+python3 deploy/check.py       # certificates, lookup, every link, a visitor on an emulated tile
+```
+
+* **Lookup**: both composes share the Docker network `cybercircle`; the
+  services are found by name: `broker`, `control` (`wss://broker:9443/mqtt`,
+  `https://control:8443`). From this PC: `localhost` and the mapped ports.
+* **Certificates**: `deploy/certs/make_certs.sh` (run by the `certs` service)
+  makes an own CA (`ca.pem`, `ca.key`: made once, keep it) and the server
+  certificate for `broker`, `control`, `localhost`, `127.0.0.1` and
+  `CERT_NAMES` (`.env`, e.g. `DNS:gamemaster-pc.lan,IP:192.168.1.10`). The
+  game and the control server trust it with `--ca=ca.pem`; browsers and phones
+  once by importing `ca.pem` (then `https://localhost:8443` has no warning).
+  The tiles use plain MQTT on 1883 (the firmware has no TLS).
+* **The database** is a real one in the volume `database` (the example
+  questions on the first start); it survives restarts and rebuilds
+  (`docker compose down -v` deletes it).
+* **The app**: `/api/config` tells it `wss://<the address it used>:9443/mqtt`
+  (`--public-mqtt`); its web version is `https://localhost:8443/gm/` (build it
+  first: §11).
+* **The picture**: the game runs headless (logic, MQTT, no screens). For the
+  6 screens in a window on this desktop: `xhost +local:` then
+  `docker compose -f docker-compose.yml -f display.yml up -d` (OpenGL through
+  Mesa – slow without a GPU the container can use).
+
+## 13. Troubleshooting
 
 | problem | fix |
 |---|---|

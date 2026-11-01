@@ -1,6 +1,6 @@
 // The tile emulator: the real firmware (src/) built for Linux (pio run -e native).
 //   .pio/build/native/program [--mac 02:00:00:00:00:03] [--host 127.0.0.1] [--port 1883]
-//                             [--user u] [--password p] [--web 8090]
+//                             [--user u] [--password p] [--web 8090] [--no-term]
 // Draws the tile in the terminal (the ring as seen from above, LED_00 at the
 // top = the robot side, then clockwise; the hearts, the 4 icons, the status
 // LED) and turns keys 1-4 into presses on the icons (q: quit). It connects to
@@ -44,6 +44,7 @@ static int webPort = 0;
 static bool running = true;
 static std::deque<std::string> logLines;
 static termios savedTerm;
+static bool term = true;                          // drawn in the terminal (not in a container's log: --no-term)
 
 SerialPort Serial;
 WiFiClass WiFi;
@@ -67,6 +68,7 @@ int analogRead(int pin) {                         // a key = the icon pressed fo
 }
 
 static void log(const std::string &s) {
+    if (!term) printf("[%s] %s\n", emu_mac.c_str(), s.c_str()), fflush(stdout);
     logLines.push_back(s);
     while (logLines.size() > 6) logLines.pop_front();
 }
@@ -183,7 +185,7 @@ void CFastLED::show() {
         if (ch == 'q' || ch == 'Q') running = false;
     }
     webPoll(ledBuf, ledCount, emu_mac, logLines, webHeld);
-    if (millis() - last < 50 || !ledBuf) return;
+    if (!term || millis() - last < 50 || !ledBuf) return;
     last = millis();
     const int W = 49, H = 21, cx = 24, cy = 10;
     std::string grid[H][W];
@@ -228,14 +230,34 @@ int main(int argc, char **argv) {
     char mac[18];
     snprintf(mac, sizeof mac, "02:00:00:%02X:%02X:%02X", rand() & 0xff, rand() & 0xff, rand() & 0xff);
     emu_mac = mac;
-    for (int i = 1; i + 1 < argc; i += 2) {
+    for (int i = 1; i < argc; i++) {
         std::string k = argv[i];
-        if (k == "--mac") emu_mac = argv[i + 1];
-        else if (k == "--host") emu_host = argv[i + 1];
-        else if (k == "--port") emu_port = atoi(argv[i + 1]);
-        else if (k == "--user") emu_user = argv[i + 1];
-        else if (k == "--password") emu_password = argv[i + 1];
-        else if (k == "--web") webPort = atoi(argv[i + 1]);
+        const char *v = i + 1 < argc ? argv[i + 1] : "";
+        if (k == "--no-term") { term = false; continue; }
+        if (k == "--mac") emu_mac = v;
+        else if (k == "--host") emu_host = v;
+        else if (k == "--port") emu_port = atoi(v);
+        else if (k == "--user") emu_user = v;
+        else if (k == "--password") emu_password = v;
+        else if (k == "--web") webPort = atoi(v);
+        else { fprintf(stderr, "unknown option %s\n", k.c_str()); continue; }
+        i++;                                      // (the value)
+    }
+    if (!isatty(STDOUT_FILENO)) term = false;
+    if (!term) {                                  // (a container: the log only, the web view for the LEDs)
+        signal(SIGINT, [](int) { running = false; });
+        signal(SIGTERM, [](int) { running = false; });
+        if (webPort && !webStart(webPort)) {
+            fprintf(stderr, "port %d is taken\n", webPort);
+            return 1;
+        }
+        if (webPort) log("web view on port " + std::to_string(webPort));
+        setup();
+        while (running) {
+            loop();
+            usleep(1000);
+        }
+        return 0;
     }
     tcgetattr(STDIN_FILENO, &savedTerm);
     termios raw = savedTerm;

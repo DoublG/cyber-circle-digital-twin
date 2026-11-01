@@ -1,0 +1,22 @@
+# The game with a picture: the 6 screens in one window (--preview) on this
+# PC's desktop through X11 (XWayland), rendered with OpenGL (Mesa; slow
+# without a GPU the container can use).
+#   xhost +local:      (once per login: let containers open windows)
+#   docker compose -f docker-compose.yml -f display.yml up -d --build
+services:
+  game:
+    command:
+      - --rendering-driver
+      - opengl3
+      - --
+      - --preview
+      - --mqtt=wss://broker:9443/mqtt
+      - --control=https://control:8443
+      - --ca=/certs/ca.pem
+      - --node=screen-pc
+    environment:
+      DISPLAY: ${DISPLAY:-:0}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+    devices:
+      - /dev/dri:/dev/dri

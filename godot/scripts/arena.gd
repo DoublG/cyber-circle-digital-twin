@@ -569,6 +569,7 @@ func _update_packets(delta: float) -> void:
 ##   --texts=FILE         texts (JSON, see Texts): {"cta": "...", "rules.quiz": "...", ...}
 ##   --control=URL        the control server (installation): questions, players and scores
 ##                        through its HTTP API, e.g. --control=http://192.168.1.10:8080
+##   --ca=FILE            trust this CA for wss:// and https:// (the installation's own, deploy/certs/ca.pem)
 ##   --db=PATH            standalone: the SQLite file itself ("none": no database)
 ##   --no-sound           no sound effects
 ##   --sounds=DIR         extra sound files: DIR/<event>/*.ogg (see SoundBoard)
@@ -626,6 +627,8 @@ func _apply_command_line() -> void:
 				game.db_path = "" if value == "none" else value
 			"--control":
 				game.control_url = value
+			"--ca":
+				TlsTrust.load_ca(value)
 			"--texts":                                     # the operator's texts as JSON (Texts)
 				var t = JSON.parse_string(FileAccess.get_file_as_string(value))
 				if t is Dictionary:

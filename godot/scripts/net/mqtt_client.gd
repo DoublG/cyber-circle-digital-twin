@@ -36,7 +36,7 @@ func start() -> void:
 	_ws.supported_protocols = PackedStringArray(["mqtt"])
 	_rx.clear()
 	_was_open = false
-	var err := _ws.connect_to_url(url)
+	var err := _ws.connect_to_url(url, TlsTrust.options if url.begins_with("wss") else null)
 	if err != OK:
 		push_warning("mqtt: cannot connect to %s (%s)" % [url, error_string(err)])
 		_retry = reconnect_delay

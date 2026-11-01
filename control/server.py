@@ -151,7 +151,8 @@ class TileIn(BaseModel):
 GM_WEB = os.path.join(HERE, "..", "gamemaster_app", "build", "web")
 
 
-def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website | None = None) -> FastAPI:
+def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website | None = None,
+               public_mqtt: str = "") -> FastAPI:
     site = site or Website()
     listeners: set[asyncio.Queue] = set()
     loop: dict = {}
@@ -466,6 +467,9 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
     def config(request: Request):
         """For the gamemaster app: where the MQTT broker is (localhost as the
         address the app used for this server), the topic prefix and the places."""
+        if public_mqtt:                       # (behind docker / NAT: --public-mqtt)
+            return {"mqtt": public_mqtt.replace("{host}", request.url.hostname or "localhost"),
+                    "prefix": link.prefix, "floor_tiles": FLOOR_TILES, "places": PLACES, "t01_clock": t01_clock()}
         u = urlparse(link.url)
         host = request.url.hostname if u.hostname in ("localhost", "127.0.0.1", "0.0.0.0") else u.hostname
         return {"mqtt": urlunparse(u._replace(netloc=f"{host}:{u.port}" if u.port else host)),
@@ -613,6 +617,9 @@ def main():
     ap.add_argument("--mqtt", default="ws://localhost:9001", help="broker: ws://host:9001 or mqtt://host:1883")
     ap.add_argument("--mqtt-user", default="")
     ap.add_argument("--mqtt-password", default="")
+    ap.add_argument("--public-mqtt", default="", help="the broker as the gamemaster app reaches it, e.g. "
+                    "wss://{host}:9443 ({host}: the address the app used for this server); default: --mqtt")
+    ap.add_argument("--ca", default="", help="wss:// / mqtts:// broker: trust this CA (deploy/certs/ca.pem; default the system's)")
     ap.add_argument("--prefix", default="cybercircle")
     ap.add_argument("--host", default="0.0.0.0", help="0.0.0.0 = reachable on the LAN")
     ap.add_argument("--port", type=int, default=8080)
@@ -625,11 +632,11 @@ def main():
     db = Database(a.db)
     if not db.question_rows():               # a fresh database: start with the example questions
         print("control: imported %d questions" % db.import_questions(QUESTIONS_JSON))
-    link = MqttLink(a.mqtt, a.prefix, a.mqtt_user, a.mqtt_password)
+    link = MqttLink(a.mqtt, a.prefix, a.mqtt_user, a.mqtt_password, ca=a.ca)
     scheme = "https" if a.ssl_cert else "http"
     print(f"control: database {os.path.normpath(a.db)}, MQTT {a.mqtt}, web {scheme}://{a.host}:{a.port}/")
     site = Website(a.website, a.website_interval)
-    uvicorn.run(create_app(db, link, a.gm_web, site), host=a.host, port=a.port, log_level="warning",
+    uvicorn.run(create_app(db, link, a.gm_web, site, a.public_mqtt), host=a.host, port=a.port, log_level="warning",
                 ssl_certfile=a.ssl_cert or None, ssl_keyfile=a.ssl_key or None)
 
 

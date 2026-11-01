@@ -27,7 +27,7 @@ NODE_TIMEOUT = 30.0                      # s without an announcement: offline
 
 
 class MqttLink:
-    def __init__(self, url, prefix="cybercircle", username="", password="", on_change=None):
+    def __init__(self, url, prefix="cybercircle", username="", password="", on_change=None, ca=""):
         self.url = url                       # (the gamemaster app asks where the broker is)
         self.prefix = prefix
         self.on_change = on_change or (lambda kind: None)
@@ -49,7 +49,7 @@ class MqttLink:
         if ws:
             self.client.ws_set_options(path=u.path or "/mqtt")
         if u.scheme in ("wss", "mqtts"):
-            self.client.tls_set()
+            self.client.tls_set(ca_certs=ca or None)     # ca: the installation's own CA (deploy/certs/ca.pem)
         if username:
             self.client.username_pw_set(username, password)
         self.client.on_connect = self._on_connect

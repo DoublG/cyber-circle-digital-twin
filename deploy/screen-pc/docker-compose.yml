@@ -1,0 +1,31 @@
+# The screen PC: the game (Godot), finding the gamemaster PC's services by
+# name (broker, control) on the network "cybercircle" and trusting the
+# installation's CA (deploy/certs/ca.pem - on a real screen PC: a copy of it).
+#   cd deploy/screen-pc && docker compose up -d --build           (headless: logic, MQTT, no picture)
+#   docker compose -f docker-compose.yml -f display.yml up -d --build
+#                                      (the 6 screens in a window on this desktop: X11 / XWayland)
+# Start the gamemaster PC first (deploy/gamemaster-pc).
+name: cybercircle-screen
+
+services:
+  game:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/game.Dockerfile
+    image: cybercircle-game
+    volumes:
+      - ../certs/ca.pem:/certs/ca.pem:ro
+    restart: unless-stopped
+    command:
+      - --headless
+      - --
+      - --mqtt=wss://broker:9443/mqtt
+      - --control=https://control:8443
+      - --ca=/certs/ca.pem
+      - --node=screen-pc
+
+
+networks:
+  default:
+    name: cybercircle
+    external: true

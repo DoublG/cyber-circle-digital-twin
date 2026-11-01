@@ -1,0 +1,15 @@
+# docker builds (deploy/): only what the images need
+.git
+**/.venv
+**/__pycache__
+**/*.db
+**/*.db-*
+movies
+blender
+godot/.godot
+godot/movie
+godot/tests/shots
+gamemaster_app
+tile_firmware/.pio
+deploy/certs/*.pem
+deploy/certs/*.key

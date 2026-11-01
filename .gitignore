@@ -25,3 +25,9 @@ movies/gallery_old/
 
 # PlatformIO build output
 tile_firmware/.pio/
+
+# deploy: the generated certificates (deploy/certs/make_certs.sh)
+deploy/certs/*.pem
+deploy/certs/*.key
+deploy/certs/*.srl
+deploy/certs/server.san

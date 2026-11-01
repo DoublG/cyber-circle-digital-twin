@@ -1,0 +1,87 @@
+# The gamemaster PC: the CA and certificates, the MQTT broker, the control
+# server (https, the real database in a volume) and three emulated tiles.
+#   cd deploy/gamemaster-pc && docker compose up -d --build
+# Then the screen PC (deploy/screen-pc). The services find each other by name
+# on the network "cybercircle" (broker, control); the ports below are the
+# mapping on this PC - change them in .env (see .env.example).
+name: cybercircle-gamemaster
+
+services:
+  certs:                                   # makes deploy/certs/ca.pem + server.pem once
+    image: alpine:3.20
+    # (the files then belong to whoever owns deploy/certs, not to root)
+    command: sh -c "apk add --no-cache openssl >/dev/null && /certs/make_certs.sh && chown $$(stat -c %u:%g /certs) /certs/*"
+    environment:
+      CERT_DIR: /certs
+      CERT_NAMES: ${CERT_NAMES:-}          # extra names, e.g. DNS:gamemaster-pc.lan,IP:192.168.1.10
+    volumes:
+      - ../certs:/certs
+
+  broker:
+    image: eclipse-mosquitto:2.0.18
+    depends_on:
+      certs:
+        condition: service_completed_successfully
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ../certs:/certs:ro
+    ports:
+      - "${MQTT_PORT:-1883}:1883"          # plain: the tiles
+      - "${MQTTS_PORT:-8883}:8883"         # MQTT over TLS
+      - "${WSS_PORT:-9443}:9443"           # WebSocket over TLS: game, control server, app
+    restart: unless-stopped
+
+  control:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/control.Dockerfile
+    depends_on:
+      certs:
+        condition: service_completed_successfully
+      broker:
+        condition: service_started
+    command:
+      - --db=/data/cybercircle.db          # the real database (a fresh one gets the example questions)
+      - --port=8443
+      - --mqtt=wss://broker:9443/mqtt
+      - --ca=/certs/ca.pem
+      - --ssl-cert=/certs/server.pem
+      - --ssl-key=/certs/server.key
+      - --public-mqtt=wss://{host}:${WSS_PORT:-9443}/mqtt
+      - --gm-web=/gm
+    volumes:
+      - ../certs:/certs:ro
+      - database:/data
+      - ../../gamemaster_app/build/web:/gm:ro   # the app's web build (flutter build web ..., see SETUP §11)
+    ports:
+      - "${CONTROL_PORT:-8443}:8443"       # https://localhost:8443  (web interface, /gm/ = the app)
+    restart: unless-stopped
+
+  # three emulated tiles (the real firmware): place them in the web interface,
+  # their tops at http://localhost:8191 .. 8193
+  tile-1: &tile
+    build:
+      context: ../..
+      dockerfile: deploy/docker/tile.Dockerfile
+    image: cybercircle-tile
+    depends_on: [broker]
+    command: [--mac, "02:00:00:00:00:01", --host, broker, --port, "1883", --web, "8090"]
+    ports: ["${TILE1_PORT:-8191}:8090"]
+    restart: unless-stopped
+  tile-2:
+    <<: *tile
+    build: !reset null
+    command: [--mac, "02:00:00:00:00:02", --host, broker, --port, "1883", --web, "8090"]
+    ports: !override ["${TILE2_PORT:-8192}:8090"]
+  tile-3:
+    <<: *tile
+    build: !reset null
+    command: [--mac, "02:00:00:00:00:03", --host, broker, --port, "1883", --web, "8090"]
+    ports: !override ["${TILE3_PORT:-8193}:8090"]
+
+volumes:
+  database:                                # the SQLite database: survives restarts / rebuilds
+
+networks:
+  default:
+    name: cybercircle                      # the screen PC joins it
