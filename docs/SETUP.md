@@ -603,7 +603,11 @@ card on the website; that is synced to the control server
   is set once in the web interface: **Tegels › Opstelling** – on which hour of a
   clock T01 is (the entrance at 6); every app follows it.
 
-**Android** (`flutter build apk --release`): Instellingen → the control
+**Android** (`flutter build apk --release` → `build/app/outputs/flutter-apk/app-release.apk`,
+Android 6 or newer; needs a full JDK 17 – `JAVA_HOME=<jdk 17>` and
+`GRADLE_OPTS=-Dorg.gradle.java.home=<jdk 17>` – and the Android SDK licenses
+accepted once: `sdkmanager --licenses`; the APK is signed with the debug key:
+install it by hand, "unknown sources"): Instellingen → the control
 server's IP address on the installation's wifi (and the MQTT login); live
 updates come straight from the MQTT broker. **iPhone / any browser**: the
 control server serves the web version at `http://<server ip>:8080/gm/`
