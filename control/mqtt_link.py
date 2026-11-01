@@ -28,6 +28,7 @@ NODE_TIMEOUT = 30.0                      # s without an announcement: offline
 
 class MqttLink:
     def __init__(self, url, prefix="cybercircle", username="", password="", on_change=None):
+        self.url = url                       # (the gamemaster app asks where the broker is)
         self.prefix = prefix
         self.on_change = on_change or (lambda kind: None)
         self.nodes = {}                      # id -> announcement + "seen"
@@ -127,6 +128,10 @@ class MqttLink:
                            for n in self.nodes.values()), key=lambda n: n.get("id", ""))
 
     # ------------------------------------------------------------ outgoing
+
+    def identify(self, device, seconds=6):
+        """A physical tile lights up so the crew can find it (also before it has a place)."""
+        self.client.publish(f"{self.prefix}/device/{device}/identify", json.dumps({"seconds": seconds}))
 
     def command(self, msg):
         self.client.publish(f"{self.prefix}/cmd", json.dumps(msg))

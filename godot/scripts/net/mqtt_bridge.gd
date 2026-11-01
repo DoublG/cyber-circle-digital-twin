@@ -114,7 +114,7 @@ func _process(delta: float) -> void:
 func _announce() -> void:
 	_announce_timer = 10.0
 	publish_json(topic_prefix + "/node/" + node_id, {"id": node_id, "role": role, "host": _lan_address(),
-		"port": enet_port, "screens": range(1, arena.screen_wall.screen_groups.size() + 1),
+		"port": enet_port, "screens": range(1, arena.screen_wall.groups().size() + 1),
 		"version": ProjectSettings.get_setting("application/config/version", ""),
 		"fps": Engine.get_frames_per_second()}, true)
 

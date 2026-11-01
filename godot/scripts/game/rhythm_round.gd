@@ -164,9 +164,9 @@ func button(id: int, b: StringName) -> void:
 func _flash(id: int, color: Color) -> void:
 	var arena := game.arena
 	arena.send_packet(id, color, func():
-		arena.robot.set_side_glow(id - 1, color, 2.0)
+		arena.robot.set_side_glow(arena.robot_side(id), color, 2.0)
 		await arena.get_tree().create_timer(0.15).timeout
-		arena.robot.set_side_glow(id - 1, Color.BLACK))
+		arena.robot.set_side_glow(arena.robot_side(id), Color.BLACK))
 
 
 ## The longest combo of the round in the event feed.

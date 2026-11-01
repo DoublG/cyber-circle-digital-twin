@@ -67,11 +67,11 @@ func _ready() -> void:
 	var repeats := 0
 	for n in 30:
 		var t: Script = game._pick_round_type(game._last_type, 0)
-		repeats += 1 if t == game._last_type else 0
+		repeats += 1 if t == game._last_type and t != QuizRound else 0
 		game._last_type = t
 		types[t.new().title] = true
 	check(types.size() >= 3, "4 players: personal rounds too (%s)" % ", ".join(types.keys()))
-	check(repeats == 0, "never the same round type twice in a row")
+	check(repeats == 0, "never the same round type twice in a row (the quiz can)")
 	for id in extras:
 		arena.leave(id)
 
@@ -83,17 +83,18 @@ func _ready() -> void:
 	await _until(func(): return game.state == GameManager.State.PLAYING)
 	var quiz: QuizRound = game.current
 	check(quiz._questions.all(func(q): return str(q.id).begins_with("db_q")), "quiz uses the database questions")
-	print("--- answer streak: (here) 2 right in a row = +1 life at the end of the round")
+	print("--- answer streak: (here) 2 right in a row = +1 life; the 1st right answer was earlier")
 	game.streak_bonus = 2
+	game.streaks[3] = 1
 	var anna_lives: int = arena.tiles[2].health
-	for n in 2:
-		await _until(func(): return quiz._phase == "question")
-		var right := int(quiz._questions[quiz._index].correct)
-		arena.tiles[2].press_button(QuizRound.ANSWER_BUTTONS[(right + 1) % 4])   # wrong first ...
-		await _wait(0.5)
-		check(quiz._phase == "question", "no reveal before the time is up")
-		arena.tiles[2].press_button(QuizRound.ANSWER_BUTTONS[right])             # ... changed: the last counts
-		await _until(func(): return quiz._phase == "reveal")
+	await _until(func(): return quiz._phase == "question")
+	var right := int(quiz._questions[quiz._index].correct)
+	arena.tiles[2].press_button(QuizRound.ANSWER_BUTTONS[(right + 1) % 4])   # wrong first ...
+	await _wait(0.5)
+	check(quiz._phase == "question", "no reveal before the time is up")
+	arena.tiles[2].press_button(QuizRound.ANSWER_BUTTONS[right])             # ... changed: the last counts
+	await _until(func(): return quiz._phase == "reveal")
+	check(quiz._questions.size() == 1, "a quiz round is one question")
 	check(game.streaks[3] == 2, "Anna: 2 right in a row")
 	# Bram is exterminated during the round
 	arena.tiles[bram_tile - 1].health = 1
@@ -112,8 +113,8 @@ func _ready() -> void:
 	var games := db.select("SELECT * FROM games WHERE id = ?", [gid])
 	print("    round_scores: ", rounds.map(func(r): return [r.round_type, r.tile, r.points, r.score, r.lives]))
 	print("    results:      ", results.map(func(r): return [r.name, r.score, r.lives, r.exterminated, r.rank]))
-	check(rounds.size() == 1 and rounds[0].player_id == anna and rounds[0].round_type == "quiz",
-		"round score saved for Anna (the survivor)")
+	check(rounds.all(func(r): return r.round_type == "quiz" and r.points == 0) and rounds.any(func(r): return r.player_id == anna),
+		"quiz round scores saved (one per question, no points)")
 	var r_anna := results.filter(func(r): return r.player_id == anna)
 	var r_bram := results.filter(func(r): return r.player_id == bram)
 	check(r_anna.size() == 1 and r_anna[0].rank == 1 and r_anna[0].exterminated == 0, "Anna: rank 1")

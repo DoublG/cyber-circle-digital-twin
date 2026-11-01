@@ -32,7 +32,7 @@ func _ready() -> void:
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_theme_constant_override("separation", 28)
 	add_child(box)
-	var badge := Retro.label(56, Retro.BG, "T%02d" % tile_id)
+	var badge := Retro.label(56, Retro.BG, Retro.tile_label(tile_id))
 	badge.add_theme_stylebox_override("normal", Retro.panel(Retro.TEAL if invited else Color(Retro.TEAL, 0.45),
 		Retro.TEAL, 0, 10, 22))
 	badge.size_flags_horizontal = Control.SIZE_SHRINK_CENTER

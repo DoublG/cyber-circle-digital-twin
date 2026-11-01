@@ -6,7 +6,9 @@ extends Node3D
 ## 2.5 m from the robot centre (matches ARENA_R in blender/build_models.py).
 ## The camera "Camera" is the fixed overview of the room, looking at the robot.
 ##
-## Multiplayer: up to 13 players, one per tile. Joining is done by the external
+## Multiplayer: up to 18 players: one per floor tile (1-13) and 5 mobile players
+## (14-18, DroneTile: a drone flying above the tiles, for players who can't
+## stand on a tile - same game, see drone_tile.gd). Joining is done by the external
 ## registration system:
 ##   1. the player scans the QR code with the Android app and picks a colour;
 ##      several people can register at the same time. The app shows the tile
@@ -24,10 +26,14 @@ extends Node3D
 ## Digital twin hook: feed messages from the real installation (MQTT,
 ## WebSocket, ...) into apply_command(). Examples:
 ##   {"tile": 3, "register": "Erik", "color": "#ff8800", "age": 10}
+##   {"tile": 14, "register": "Erik", ...}  (a mobile player: always on a chosen
+##                       drone, 14-18 = M1-M5; set up at their station first)
 ##                       (QR scan; without "tile" a free tile is chosen; "age" is
 ##                        optional and protects young players from too hard questions)
-##   {"assign": 42, "tile": 3}  (player 42 from the database, put there by the app;
-##                        name, colour and age are read from it; "tile" optional)
+##   {"assign": 42, "tile": 3, "color": "#ff8800"}  (player 42 from the database, put
+##                        there by the gamemaster app; name and age are read from it;
+##                        "color": the tile lights up in it so the player finds it;
+##                        "tile" optional)
 ##   {"tile": 3, "join": "Erik", "age": 10}               (activate directly, no presses)
 ##   {"tile": 3, "leave": true}        (also cancels a pending registration)
 ##   {"tile": 3, "enabled": false}     (out of service: skipped by the game; true = back in)
@@ -74,6 +80,7 @@ extends Node3D
 @export var simulate_firmware := true  # run the tiles' own logic in the twin (no real tiles)
 
 const CABLE_SHADER := preload("res://shaders/cable_flow.gdshader")
+const DRONES := 5                       # mobile players (ids after the floor tiles)
 
 @onready var robot: CyberRobot = $Robot
 @onready var room: SpaceshipRoom = $Room
@@ -104,6 +111,14 @@ var _disabled := {}                           # tile_id -> true: out of service 
 
 func _ready() -> void:
 	robot.hit.connect(_on_robot_hit)
+	var floor_tiles: int = $Tiles.get_children().filter(func(c): return c is CyberTile).size()
+	for k in DRONES:                          # the mobile players' drones: ids after the floor tiles
+		var drone := DroneTile.new()
+		drone.name = "Drone_%d" % (k + 1)
+		drone.tile_id = floor_tiles + k + 1
+		drone.slot = k
+		drone.arena = self
+		$Tiles.add_child(drone)
 	for child in $Tiles.get_children():
 		if child is CyberTile:
 			tiles.append(child)
@@ -123,6 +138,8 @@ func _ready() -> void:
 		for mi in $Floor.find_children("*", "MeshInstance3D", true, false):
 			mi.visible = false                  # (keeps the floor collider)
 	for tile in tiles:
+		if tile is DroneTile:                   # (no cable: bolts through the air)
+			continue
 		var strip := floor_model.find_child("Spoke_Light_%02d" % tile.tile_id, true, false) as MeshInstance3D
 		var mat := ShaderMaterial.new()
 		mat.shader = CABLE_SHADER
@@ -163,7 +180,7 @@ func set_tile_enabled(tile_id: int, on: bool) -> void:
 		leave(tile_id)
 	tiles[tile_id - 1].out_of_service = not on
 	set_cable_flow(tile_id, cable_color, 0.15 if on else 0.0)
-	game.log_event("T%02d %s" % [tile_id, "WEER IN GEBRUIK" if on else "BUITEN GEBRUIK"], Retro.DIM)
+	game.log_event("%s %s" % [Retro.tile_label(tile_id), "WEER IN GEBRUIK" if on else "BUITEN GEBRUIK"], Retro.DIM)
 	screen_wall.refresh()
 
 
@@ -187,12 +204,12 @@ func player_db_id(tile_id: int) -> int:
 
 
 ## Register a player the app put in the database ({"assign": id}).
-func assign(player_id: int, tile_id := 0) -> int:
+func assign(player_id: int, tile_id := 0, color = null) -> int:
 	var p: Dictionary = await game.db.fetch_player(player_id) if game.db else {}
 	if p.is_empty():
 		push_warning("assign: player %d not in the database" % player_id)
 		return 0
-	return register(tile_id, p.name, Color(p.color), int(p.age), player_id)
+	return register(tile_id, p.name, color if color is Color else Color(p.color), int(p.age), player_id)
 
 
 func player_ids() -> Array:
@@ -213,18 +230,19 @@ func pending_info(tile_id: int) -> Dictionary:
 ## Step 1 (from the registration system after a QR scan): the tile lights up
 ## in the colour shown in the app (so the player can find it) and waits until
 ## all 4 icons are pressed.
-## tile_id <= 0: pick a free tile. Returns the tile id, or 0 if none is free.
-## player_id: the player's id in the database (0 = not from the database).
+## tile_id <= 0: pick a free floor tile (a mobile player's drone is always
+## chosen by the operator: tile 14-18). Returns the tile id, or 0 if none is
+## free. player_id: the player's id in the database (0 = not from the database).
 func register(tile_id: int, player: String, color := Color(1.0, 0.8, 0.1), age := 0, player_id := 0) -> int:
 	if not game.accepting_players():
 		push_warning("register %s: the game is not open (%s)" % [player, game.mode_name()])
 		return 0
 	if tile_id <= 0:
-		var free := tiles.filter(func(t): return t.idle and not is_pending(t.tile_id) and is_enabled(t.tile_id))
+		var free := tiles.filter(func(t): return t.idle and not is_pending(t.tile_id) and is_enabled(t.tile_id) and not t is DroneTile)
 		if free.is_empty():
 			push_warning("register %s: no free tile" % player)
 			return 0
-		tile_id = free.pick_random().tile_id
+		tile_id = pick_free_tile(free.map(func(t): return t.tile_id))
 	if is_playing(tile_id):
 		push_warning("register %s: tile %d is in use" % [player, tile_id])
 		return 0
@@ -240,9 +258,32 @@ func register(tile_id: int, player: String, color := Color(1.0, 0.8, 0.1), age :
 	tile.start_activation(color)
 	set_cable_flow(tile_id, color, 0.5)
 	registered.emit(tile_id, player, color)
-	game.log_event("%s SCHRIJFT IN OP T%02d" % [player.to_upper(), tile_id], color)
+	game.log_event("%s SCHRIJFT IN OP %s" % [player.to_upper(), Retro.tile_label(tile_id)], color)
 	game.on_players_changed()       # the screens show the invite on this tile
 	return tile_id
+
+
+## "Any free floor tile", fake random: fill the emptiest part of the circle -
+## the free tile furthest (around the circle) from the taken and invited ones,
+## at random among the equally good ones. Players spread out evenly.
+func pick_free_tile(free: Array) -> int:
+	var floor_count := tiles.filter(func(t): return not t is DroneTile).size()
+	var taken := range(1, floor_count + 1).filter(func(id): return is_playing(id) or is_pending(id))
+	if taken.is_empty():
+		return free.pick_random()
+	var best := []
+	var best_d := -1
+	for id in free:
+		var d := floor_count
+		for o in taken:
+			var gap := absi(int(id) - int(o))
+			d = mini(d, mini(gap, floor_count - gap))   # distance around the circle
+		if d > best_d:
+			best_d = d
+			best = [id]
+		elif d == best_d:
+			best.append(id)
+	return best.pick_random()
 
 
 ## Step 2 done: all 4 icons pressed. The player is ready and takes part from
@@ -255,13 +296,13 @@ func _activate(tile_id: int) -> void:
 	_pending.erase(tile_id)
 	join(tile_id, who, age, player_id)
 	activated.emit(tile_id, who)
-	game.log_event("%s DOET MEE (T%02d)" % [who.to_upper(), tile_id], Retro.TEAL)
+	game.log_event("%s DOET MEE (%s)" % [who.to_upper(), Retro.tile_label(tile_id)], Retro.TEAL)
 	var tile := tiles[tile_id - 1]
 	tile.fill_ring(color)
 	get_tree().create_timer(0.6).timeout.connect(func():
 		if not tile.idle and not tile.is_dead:
 			tile.clear_ring())
-	send_packet(tile_id, color, func(): robot.look_at_side(tile_id - 1))
+	send_packet(tile_id, color, func(): robot.look_at_side(robot_side(tile_id)))
 
 
 ## Make a player active on a tile (normally via register + 4 presses).
@@ -315,7 +356,7 @@ func players_attack(tile_ids: Array, everyone := false, color := Color(0.2, 1.0,
 	elif tile_ids.size() > 1:
 		game.log_event("%d SPELERS RAKEN DE ROBOT" % tile_ids.size(), Retro.GOOD)
 	await get_tree().create_timer(0.35).timeout  # the sweeps reach the robot side
-	var sides := tile_ids.map(func(id): return id - 1)
+	var sides := tile_ids.map(func(id): return robot_side(id))
 	var arrived := [0]
 	var on_arrive := func():
 		arrived[0] += 1
@@ -345,12 +386,12 @@ func robot_attack(tile_ids: Array, color := Color(1.0, 0.1, 0.05), shielded: Arr
 	for id in costs_life:
 		_hits_on_way[id] = _hits_on_way.get(id, 0) + 1
 	if targets.size() == 1:
-		robot.look_at_side(targets[0] - 1)
+		robot.look_at_side(robot_side(targets[0]))
 		while not robot.is_facing_target():
 			await get_tree().process_frame
 	_attacks += 1
 	sound.play(&"charge")
-	await robot.charge_attack(targets.map(func(id): return id - 1), color)
+	await robot.charge_attack(targets.map(func(id): return robot_side(id)), color)
 	get_tree().create_timer(3.0).timeout.connect(func(): _attacks -= 1)   # (the shots land in ~1-2 s)
 	if not tile_ids.is_empty():
 		game.log_event("ROBOT RAAKT " + ", ".join(tile_ids.map(func(id): return player_name(id).to_upper())), Retro.BAD)
@@ -401,7 +442,7 @@ func death_clip_pending(tile_id: int) -> bool:
 ## on the scoreboard). The robot already turns to the first one and waits.
 func aim_at_doomed(tile_ids: Array) -> void:
 	if not tile_ids.is_empty():
-		robot.lock_on(int(tile_ids[0]) - 1)
+		robot.lock_on(robot_side(int(tile_ids[0])))
 
 
 ## The exterminations of a round, all at once (the scoreboard shows them):
@@ -455,15 +496,31 @@ func send_to_tile(tile_id: int, msg: Dictionary) -> void:
 
 # ---------------------------------------------------------------- cable lights
 
+## The robot side (0-12) facing a player: a floor tile's own side, for a
+## drone the side it is flying in front of now.
+func robot_side(tile_id: int) -> int:
+	var tile := tiles[tile_id - 1]
+	if tile is DroneTile:
+		var p := robot.to_local(tile.global_position)
+		return CyberRobot.nearest_side(atan2(-p.x, -p.z))
+	return tile_id - 1
+
+
 ## Send a light packet along a tile's cable; on_arrive is called at the end.
-## to_robot = false: from the robot to the tile.
+## to_robot = false: from the robot to the tile. A drone has no cable: a bolt
+## flies through the air.
 func send_packet(tile_id: int, color: Color, on_arrive := Callable(), to_robot := true) -> void:
+	if tiles[tile_id - 1] is DroneTile:
+		(tiles[tile_id - 1] as DroneTile).send_bolt(color, to_robot, on_arrive)
+		return
 	_packets.append({"tile": tile_id, "pos": 0.0, "color": color, "on_arrive": on_arrive,
 		"to_robot": to_robot})
 
 
 ## Idle flow on one cable (e.g. dark red for a dead player).
 func set_cable_flow(tile_id: int, color: Color, strength := 0.5) -> void:
+	if tile_id > _cable_mats.size():           # (a drone: no cable)
+		return
 	var mat := _cable_mats[tile_id - 1]
 	mat.set_shader_parameter("flow_color", color)
 	mat.set_shader_parameter("idle_strength", strength)
@@ -497,6 +554,7 @@ func _update_packets(delta: float) -> void:
 ##   godot-4 --path godot -- --windows --mqtt=ws://broker:9001/mqtt --db=/srv/cc/cybercircle.db
 ##   --windows            the 5 screens (+ overview) as full-screen windows on their monitors
 ##   --screens=1,2,3/4,5,6/7,8,9/10,11/12,13   which tiles each screen shows ("/" between screens)
+##   --mobile-screens=14,15/16,17,18            the same for the mobile players' screens (drones)
 ##   --monitors=0,1,2,3,4,5                     monitor of screen 1, 2, ... and then the overview
 ##   --preview            all screens in one window (default)
 ##   --no-overview        no overview page for visitors
@@ -527,7 +585,9 @@ func _apply_command_line() -> void:
 			"--no-overview":
 				screen_wall.observer_page = false
 			"--screens":
-				screen_wall.screen_groups = _parse_screens(value)
+				screen_wall.screen_groups = _parse_screens(value, false)
+			"--mobile-screens":
+				screen_wall.mobile_groups = _parse_screens(value, true)
 			"--monitors":
 				screen_wall.monitors = Array(value.split(",", false)).map(func(v): return int(v))
 			"--mqtt":
@@ -580,7 +640,7 @@ func _apply_command_line() -> void:
 
 ## "1,2,3/4,5,6/..." -> [[1, 2, 3], [4, 5, 6], ...]; warns about tiles that are
 ## missing or on two screens.
-func _parse_screens(text: String) -> Array:
+func _parse_screens(text: String, mobile: bool) -> Array:
 	var groups := []
 	var seen := {}
 	for part in text.split("/", false):
@@ -596,7 +656,7 @@ func _parse_screens(text: String) -> Array:
 			ids.append(id)
 		groups.append(ids)
 	for t in tiles:
-		if not seen.has(t.tile_id):
+		if not seen.has(t.tile_id) and (t is DroneTile) == mobile:
 			push_warning("--screens: tile %d is on no screen" % t.tile_id)
 	return groups
 
@@ -620,7 +680,7 @@ func _on_button_pressed(tile_id: int, button: StringName) -> void:
 		return
 	var color: Color = CyberTile.BUTTON_COLORS[button]
 	# the press travels down the cable; the robot looks at the player when it arrives
-	send_packet(tile_id, color, func(): robot.look_at_side(tile_id - 1))
+	send_packet(tile_id, color, func(): robot.look_at_side(robot_side(tile_id)))
 	game.on_button(tile_id, button)
 
 
@@ -640,7 +700,7 @@ func _on_tile_died(tile_id: int) -> void:
 	else:                                        # several: a wide view on the robot
 		observer.focus(Vector3.ZERO, 9.0 + dying.size() * 1.5)
 	tile.blink_doomed()
-	robot.queue_death(tile_id - 1, tile.global_position + Vector3(0, 0.05, 0), func():
+	robot.queue_death(robot_side(tile_id), tile.global_position + Vector3(0, 0.05, 0), func():
 		set_cable_flow(tile_id, Color(0.6, 0.0, 0.0), 0.25)
 		_death_sounds()
 		dying[tile_id] = Time.get_ticks_msec()
@@ -656,7 +716,7 @@ func _on_tile_died(tile_id: int) -> void:
 		clip_started.erase(tile_id)
 		if player_name(tile_id) == who:            # still the same player
 			leave(tile_id)
-			game.log_event("T%02d IS WEER VRIJ" % tile_id, Retro.DIM))
+			game.log_event("%s IS WEER VRIJ" % Retro.tile_label(tile_id), Retro.DIM))
 
 
 ## The tile's death (CyberTile.play_death): 1 s electrocution, then the explosion.
@@ -720,7 +780,7 @@ func apply_command(cmd: Dictionary) -> void:
 		robot_attack(cmd.attacked.map(func(v): return int(v)))
 		return
 	if cmd.has("assign"):    # the app put the player in the database: {"assign": id, "tile"?: n}
-		assign(int(cmd.assign), int(cmd.get("tile", 0)))
+		assign(int(cmd.assign), int(cmd.get("tile", 0)), Color(cmd.color) if cmd.has("color") else null)
 		return
 	if cmd.has("register"):  # QR scan: {"register": name, "color": "#rrggbb", "tile"?: n}
 		register(int(cmd.get("tile", 0)), str(cmd.register), Color(cmd.get("color", "#ffcc1a")),
@@ -803,12 +863,12 @@ func apply_command(cmd: Dictionary) -> void:
 				var t := tiles[int(id) - 1]
 				t.is_dead = true
 				var tid := int(id)
-				robot.queue_death(tid - 1, t.global_position + Vector3(0, 0.05, 0), func():
+				robot.queue_death(robot_side(tid), t.global_position + Vector3(0, 0.05, 0), func():
 					_death_sounds()
 					t.play_death()
 					set_cable_flow(tid, Color(0.6, 0.0, 0.0), 0.25))
 		"look_at_tile":
-			robot.look_at_side(int(cmd.tile) - 1)
+			robot.look_at_side(robot_side(int(cmd.tile)))
 		"bulb_effect":
 			robot.set_bulb_effect(str(cmd.effect), float(cmd.get("speed", 1.0)))
 		"bulbs":

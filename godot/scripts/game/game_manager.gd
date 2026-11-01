@@ -7,12 +7,15 @@ extends Node
 ##   INTRO      round title, rules and countdown on all screens
 ##   PLAYING    personal round: every player's own view (split screen)
 ##              shared round:   the same view on all screens
-##   SCOREBOARD ranking of the players in the game, then the next round
+##   SCOREBOARD this round's places with the lives to gain / lose (UITSLAG; not
+##              after the quiz), then the standing of the players in the game
+##              with the lives changing (SCOREBORD), then the next round
 ## When the last player is gone the game goes back to the LOBBY (stop_game
 ## ends it at once). In the database one game = from start to the lobby; every
 ## player's result is saved when they leave.
 ## Counters (names on the screens in brackets):
 ##   points    (PUNTEN)  within one round; they decide the round's places
+##                       (not in the quiz: right = stay, wrong = -1 life)
 ##   lives     (LEVENS)  max 5; change ONLY at the end of a round, by at most 1
 ##                       (GameRound.life_changes: 1st place +1, last -1; the
 ##                       quiz only takes: a wrong answer -1). 0 = exterminated.
@@ -24,7 +27,8 @@ extends Node
 ## Players can play many times (each time from 0).
 ## The next rounds are planned ahead (`upcoming`, shown in the web interface,
 ## which can set them: a chosen round is always played).
-## Round types are picked at random (never the same twice in a row); with fewer
+## Every quiz round is one question. Round types are picked at random (the
+## other games never twice in a row; quiz after quiz can); with fewer
 ## than `personal_min_players` players only shared rounds (the quiz) are played:
 ## personal rounds always have a loser, in the quiz everyone can stay alive.
 ## Questions come from the database, which also keeps the scores (GameDb).
@@ -36,6 +40,7 @@ signal state_changed(state: State)
 signal mode_changed(mode: Mode)
 ## Something worth telling visitors happened (overview page event feed).
 signal game_event(text: String, color: Color)
+signal ranking_shown(title: String, label: String, rows: Array)     # this round's places (UITSLAG)
 signal scores_shown(title: String, subtitle: String, rows: Array)   # the scoreboard after a round
 signal settings_changed
 signal lives_revealed                  # the scoreboard shows the lives changing (+1 / -1 / exterminated)
@@ -60,7 +65,7 @@ const ROUND_TYPES := [preload("res://scripts/game/cyclone_round.gd"),
 const GAME_TUNABLES := [
 	{"key": "tempo", "label": "Tempo (x, alle tijden)", "min": 0.5, "max": 2.0, "step": 0.05, "unit": ""},
 	{"key": "intro_time", "label": "Uitleg voor een ronde", "min": 2, "max": 30, "step": 1, "unit": "s"},
-	{"key": "result_time", "label": "Uitslag eigen spel", "min": 0, "max": 30, "step": 1, "unit": "s"},
+	{"key": "result_time", "label": "Uitslag (plaatsen, levens)", "min": 0, "max": 30, "step": 1, "unit": "s"},
 	{"key": "scoreboard_time", "label": "Scorebord", "min": 2, "max": 30, "step": 1, "unit": "s"},
 	{"key": "clip_time", "label": "Doodsfilmpje op eigen scherm (min.)", "min": 2, "max": 60, "step": 1, "unit": "s"},
 	{"key": "clip_wait", "label": "Doodsfilmpje wacht op eigen scherm max.", "min": 0, "max": 120, "step": 5, "unit": "s"},
@@ -77,7 +82,7 @@ const GAME_TUNABLES := [
 @export var tempo := 1.0
 @export var intro_time := 7.0
 @export var scoreboard_time := 8.0
-@export var result_time := 10.0        # personal rounds: places in the player views first
+@export var result_time := 10.0        # the UITSLAG board (places, lives) before the scoreboard
 @export var lives_delay := 2.5         # s the scoreboard shows before the lives change
 @export var auto_start_delay := 20.0   # seconds after the first player joins; 0 = start manually
 @export var lives := 5                 # lives when the player's age is unknown
@@ -110,7 +115,7 @@ var _last_type: Script
 ## "director", see round_chances): weight per round type (0 = never), the
 ## extra chance per round a type was not played, and how strongly the
 ## players' lives steer it.
-var round_weights := {"cyclone": 1.0, "quiz": 2.0, "reaction": 1.0, "rhythm": 1.0, "simon": 1.0, "zwarte_piet": 1.0}
+var round_weights := {"cyclone": 1.0, "quiz": 5.0, "reaction": 1.0, "rhythm": 1.0, "simon": 1.0, "zwarte_piet": 1.0}
 @export var drought := 0.5
 @export var mercy := 1.0
 var _history: Array[Script] = []           # the round types played, last at the end
@@ -129,6 +134,7 @@ var _started := {}                     # tile_id -> true once the player has had
 var _life_lost := {}                   # tile_id -> round_number in which they lost a life
 var settings := {}                     # operator values: {"game": {key: v}, "<round type>": {key: v}}
 var _game_defaults := {}
+var _result_left := 0.0               # s the UITSLAG board still shows
 var _lives_shown := false              # the scoreboard shows the lives after the change
 var _score_seq := 0                    # (a skipped scoreboard stops its own sequence)
 var _sound_defaults := {}
@@ -232,7 +238,10 @@ func skip() -> void:
 		State.PLAYING:
 			_end_round()
 		_:
-			_timer = 0.0
+			if _result_left > 0.0:
+				_result_left = 0.0                # UITSLAG -> the scoreboard
+			else:
+				_timer = 0.0
 
 
 func stop_game() -> void:
@@ -295,7 +304,8 @@ func _pick(after: Script, n: int) -> Dictionary:
 ## The chance of each round type for the round after `after` - a weighted
 ## random, steered the way games steer their dice:
 ##   weight     per type (settings "Randomizer"; 0 = never)
-##   no repeat  never the same type twice in a row (when there is a choice)
+##   no repeat  never the same type twice in a row (when there is a choice;
+##              the quiz can: it is the backbone, the other games come in between)
 ##   drought    (pity / bad-luck protection) every round a type was not
 ##              played - played or already planned - adds `drought` x its
 ##              weight: nothing stays away for long
@@ -309,7 +319,7 @@ func round_chances(after: Script) -> Dictionary:
 	if options.is_empty():
 		options = round_types.duplicate()
 	if options.size() > 1:
-		options = options.filter(func(t): return t != after)
+		options = options.filter(func(t): return t != after or t.new().can_repeat)
 	var seq: Array = Array(_history) + upcoming.map(func(e): return e.type)
 	var lives_factor := _director()
 	var w := {}
@@ -475,8 +485,12 @@ func status() -> Dictionary:
 	for id in range(1, arena.tiles.size() + 1):
 		var p: Dictionary = arena.pending_info(id)
 		if not p.is_empty():
-			pending.append({"tile": id, "name": p.name, "color": "#" + p.color.to_html(false)})
+			pending.append({"tile": id, "name": p.name, "color": "#" + p.color.to_html(false),
+				"player_id": p.get("player_id", 0)})
 	return {"state": State.keys()[state], "mode": mode_name(), "round": current.title if current else "",
+		"uitslag": _result_left > 0.0,              # SCOREBOARD: still the round's places (UITSLAG)
+		"ranked": current.ranked if current else false,   # the round has points and places (not the quiz)
+		"floor_tiles": Retro.FLOOR_TILES, "tile_count": arena.tiles.size(),
 		"timer": screen_wall.timer_text(), "players": players, "pending": pending,
 		"plan": planned_rounds(), "round_types": ROUND_TYPES.map(func(t): return {
 			"type": round_type_name(t), "title": t.new().title}),
@@ -525,7 +539,8 @@ func _begin_round() -> void:
 
 
 ## The end of a round. Lives only change here, and only on the scoreboard:
-##   (personal rounds: first the places in the player views, result_time)
+##   (rounds with places: first the UITSLAG board, result_time: the places
+##   1, 2, 3 ... and the life each player will gain / lose)
 ##   scoreboard with the lives as they were -> after lives_delay the rows show
 ##   the change (+1 / -1 / exterminated) -> the robot gives / takes the lives:
 ##   whoever reaches 0 is exterminated (the robot turns and fires, the tile's
@@ -554,9 +569,12 @@ func _end_round() -> void:
 		" - BESTE: %s (%+d)" % [best[0].name.to_upper(), best[0].delta] if not best.is_empty() else ""), Retro.AMBER)
 	_set_state(State.SCOREBOARD)
 	_timer = INF                                  # held until the lives are done
-	if current.mode == "personal" and result_time > 0.0:
-		screen_wall.set_timer("")                 # the players still see their own view: places
-		await get_tree().create_timer(result_time / tempo).timeout
+	if current.ranked and result_time > 0.0:
+		_show_round_ranking(changes)
+		_result_left = result_time / tempo
+		while _result_left > 0.0:                 # (skip(): on to the scoreboard)
+			await get_tree().process_frame
+			_result_left -= get_process_delta_time()
 		if state != State.SCOREBOARD or seq != _score_seq:
 			return
 	_show_scores("Scorebord", current.title, current.points, changes)
@@ -713,6 +731,8 @@ func set_mode(m: Mode) -> void:
 		Mode.OPEN:
 			if was == Mode.PAUSED:
 				_tiles_paused(false)
+	for t in arena.tiles:                # setup: every tile's hearts show its number (binary)
+		t.show_number = m == Mode.SETUP
 	log_event({Mode.SETUP: "SETUP", Mode.CLOSED: "SPEL GESLOTEN", Mode.OPEN: "SPEL OPEN",
 		Mode.PAUSED: "PAUZE"}[m], Retro.AMBER)
 	screen_wall.refresh()
@@ -865,6 +885,26 @@ func _ranking(round_points: Dictionary, changes := {}) -> Array:
 	return rows
 
 
+## The UITSLAG board: this round's places (shared when equal), what decided
+## them (points / level / ...) and the life each player will gain or lose.
+func _show_round_ranking(changes: Dictionary) -> void:
+	var places := current.places()
+	var rows := []
+	for id in places:
+		var d: int = changes.get(id, 0)
+		rows.append({"name": arena.player_name(id), "tile": id, "place": places[id],
+			"score": current.progress(id), "change": d, "doomed": arena.tiles[id - 1].health + d <= 0})
+	rows.sort_custom(func(a, b): return a.place < b.place if a.place != b.place else a.tile < b.tile)
+	var title := current.title
+	var label := current.progress_label
+	screen_wall.set_timer("")
+	screen_wall.show_shared(func():
+		var v := RankingView.new()
+		v.show_ranking(title, label, rows)
+		return v)
+	ranking_shown.emit(title, label, rows)
+
+
 func _show_scores(title: String, subtitle: String, round_points: Dictionary, changes := {}) -> void:
 	var rows := _ranking(round_points, changes)
 	screen_wall.set_timer("")
@@ -890,7 +930,7 @@ func _celebrate_leader() -> void:
 	var rows := _ranking({})
 	if rows.is_empty():
 		return
-	var side: int = rows[0].tile - 1
+	var side: int = arena.robot_side(rows[0].tile)
 	arena.robot.set_bulb_effect("none")
 	arena.robot.set_all_bulbs(Color.BLACK)
 	arena.robot.set_side_bulbs(side, Color(1.0, 0.75, 0.2))

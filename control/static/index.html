@@ -20,6 +20,7 @@
   <button data-tab="tiles">Tegels</button>
   <button data-tab="nodes">Processen</button>
   <button data-tab="players">Spelers</button>
+  <button data-tab="gamemasters">Gamemasters</button>
   <button data-tab="questions">Vragen</button>
   <button data-tab="ranking">Ranglijst</button>
   <button data-tab="settings">Instellingen</button>
@@ -31,18 +32,30 @@
     <button data-game="next" title="Intro overslaan / ronde beëindigen / scores overslaan">⏭ Volgende fase</button>
     <button data-game="start" title="Niet wachten op de automatische start">▶ Start ronde nu</button>
   </div>
+  <h2>Gamemasters ingelogd</h2>
+  <div id="gm-online" class="gm-online"></div>
   <h2>Volgende rondes</h2>
   <div id="plan" class="plan"></div>
-  <h2>Tegels</h2>
+  <h2>Tegels <span id="tiles-count" class="hint"></span></h2>
   <div id="tiles" class="tiles"></div>
+  <h2>Mobiele spelers (drones) <span id="mobile-count" class="hint"></span></h2>
+  <div id="mobile-tiles" class="tiles"></div>
   <h2>Gebeurtenissen</h2>
   <ul id="events" class="events"></ul>
 </section>
 
 <section id="tab-tiles" class="tab">
-  <p class="hint">Elke fysieke tegel meldt zich aan met zijn eigen id. Zet hem op een plaats (1–13) rond de robot.
+  <p class="hint">Elke fysieke tegel meldt zich aan met zijn eigen id. Zet hem op een plaats: T01–T13 rond de
+    robot, of M1–M5 voor de <b>handtegel van een mobiele speler</b> (rolstoel, blind, tablet: in het spel een drone).
     Een tegel wisselen = de nieuwe tegel op die plaats zetten. Een plaats <b>buiten gebruik</b> wordt in het spel
     overgeslagen (een speler die erop staat gaat eruit).</p>
+  <h2>Opstelling</h2>
+  <div class="row layout">
+    <svg id="layout-plan" viewBox="-120 -120 240 240" width="260" height="260"></svg>
+    <div><p class="hint">Hoe de cirkel in deze zaal staat, zoals een klok van bovenaf: de <b>ingang op 6 uur</b>.
+      Op welk uur staat <b>T01</b>? (Daarna met de klok mee.) De gamemaster-apps tekenen hun plan zo.</p>
+      <label>T01 op <select id="t01-clock"></select> uur</label></div>
+  </div>
   <table id="tile-table"><thead><tr><th>Plaats</th><th>Fysieke tegel</th><th>Status</th><th>In gebruik</th></tr></thead><tbody></tbody></table>
   <h2>Niet toegewezen tegels</h2>
   <ul id="free-devices" class="events"></ul>
@@ -58,12 +71,22 @@
 <section id="tab-players" class="tab">
   <form id="add-player" class="row">
     <input name="name" placeholder="Naam" required>
-    <input name="color" type="color" value="#ff8800" title="Kleur">
     <input name="age" type="number" min="0" max="99" placeholder="Leeftijd" title="Leeftijd (0 = onbekend)">
     <button>+ Speler</button>
   </form>
   <input id="player-search" placeholder="Zoek speler…">
-  <table id="players"><thead><tr><th>#</th><th>Naam</th><th>Kleur</th><th>Leeftijd</th><th>Record (rondes)</th><th>Gespeeld</th><th>Toewijzen</th></tr></thead><tbody></tbody></table>
+  <table id="players"><thead><tr><th>#</th><th>Naam</th><th>Kaart</th><th>Leeftijd</th><th>Record (rondes)</th><th>Gespeeld</th><th>Toewijzen (kleur, tegel)</th></tr></thead><tbody></tbody></table>
+</section>
+
+<section id="tab-gamemasters" class="tab">
+  <p class="hint">De helpers met de gamemaster-app. Elk een eigen <b>kleur</b>: de tegel van wie zij toewijzen licht
+    op in die kleur (meerdere gamemasters werken tegelijk). In de app kiezen ze hun naam.</p>
+  <form id="add-gm" class="row">
+    <input name="name" placeholder="Naam" required>
+    <input name="color" type="color" value="#ff8800" title="Kleur">
+    <button>+ Gamemaster</button>
+  </form>
+  <table id="gamemasters"><thead><tr><th>Naam</th><th>Kleur</th><th>Nu ingelogd</th><th></th></tr></thead><tbody></tbody></table>
 </section>
 
 <section id="tab-questions" class="tab">

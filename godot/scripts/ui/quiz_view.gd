@@ -5,8 +5,9 @@ extends Control
 ##   question  the answers fade in, the countdown runs; small indicators of
 ##             who answered (not what)
 ##   timeup    "TIJD OM!"
-##   answers   every player's chosen icon (big player cards)
-##   reveal    who was right (green / red; shield = protected) - the right
+##   answers   every player's chosen icon (big player cards) ...
+##   reveal    ... then on the same slide, card by card: right (green ✔) or
+##             wrong (red ✘, the card shakes; shield = protected) - the right
 ##             answer itself is never shown (visitors could memorise it)
 ## The answers are laid out like the icons on the glass plate, as seen by a
 ## player standing on the tile and facing the robot:
@@ -41,7 +42,9 @@ var _slide: VBoxContainer        # players slide: timeup / answers / reveal
 var _slide_title: Label
 var _slide_status: Label
 var _player_grid: GridContainer
+var _grid_room: Control          # the cards scale down to fit it (any number of players)
 var _player_cards := {}          # tile_id -> {panel, name, icon, mark, shield}
+var _shown_ok := {}              # tile_id -> true: the card shows right / wrong (reveal animation)
 var _answered: HFlowContainer    # question step: who answered already (not what)
 var _answered_chips := {}        # tile_id -> Label
 var _last_phase := ""
@@ -64,7 +67,7 @@ func _init() -> void:
 	add_child(box)
 	_content = box
 
-	# header: QUIZ plate + question number, countdown on the right
+	# header: QUIZ plate + VRAAG, countdown on the right
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", 24)
 	box.add_child(top)
@@ -96,8 +99,13 @@ func _init() -> void:
 	_player_grid = GridContainer.new()
 	_player_grid.add_theme_constant_override("h_separation", 24)
 	_player_grid.add_theme_constant_override("v_separation", 24)
-	_player_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	_slide.add_child(_player_grid)
+	_grid_room = Control.new()
+	_grid_room.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_grid_room.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_grid_room.add_child(_player_grid)
+	_grid_room.resized.connect(_fit_grid)
+	_player_grid.minimum_size_changed.connect(_fit_grid)
+	_slide.add_child(_grid_room)
 	_slide_status = Retro.label(52, Retro.GOOD)
 	_slide.add_child(_slide_status)
 
@@ -196,14 +204,16 @@ func _init() -> void:
 	_slide.add_child(_legend)
 
 
-## state keys: number, total, phase (video / read / question / timeup /
+## state keys: phase (video / read / question / timeup /
 ## answers / reveal), question, answers (4 strings, in ANSWER_BUTTONS order),
 ## time_left, time_total, players: [{id, name, answer (-1 = none), dead,
 ## protected, streak, ok (reveal: right or not)}]. No right answer: never shown.
 func show_question(state: Dictionary) -> void:
 	var phase: String = state.phase
 	if phase != _last_phase:                       # a new step: fade it in
-		if phase == "question" and _last_phase == "read":
+		if phase == "reveal" and _last_phase == "answers":
+			_reveal_cards(state.players)            # same slide: card by card right / wrong
+		elif phase == "question" and _last_phase == "read":
 			for l in _answer_labels:                # same slide: only the answers fade in
 				l.modulate.a = 0.0
 				l.create_tween().tween_property(l, "modulate:a", 1.0, 0.5)
@@ -214,7 +224,7 @@ func show_question(state: Dictionary) -> void:
 	var watching := phase == "video"
 	var slide := phase in ["timeup", "answers", "reveal"]
 	var players: Array = state.players
-	_header.text = "VRAAG %d/%d" % [state.number, state.total]
+	_header.text = "VRAAG"
 	var meta: Array = [state.category.to_upper(), state.ages].filter(func(t): return t != "")
 	_meta.text = "  ▸  ".join(meta)
 	_meta.visible = not meta.is_empty()
@@ -290,7 +300,7 @@ func _update_answered(players: Array) -> void:
 			_answered_chips.erase(id)
 	for p in shown:
 		if not _answered_chips.has(p.id):
-			var chip := Retro.label(28, Retro.CREAM)
+			var chip := Retro.label(28 if shown.size() <= 13 else 22, Retro.CREAM)
 			_answered.add_child(chip)
 			_answered_chips[p.id] = chip
 		var chip: Label = _answered_chips[p.id]
@@ -306,11 +316,15 @@ func _show_players_slide(phase: String, players: Array) -> void:
 	_slide_title.text = {"timeup": "TIJD OM!", "answers": "DE ANTWOORDEN",
 		"reveal": "WIE HAD HET GOED?"}[phase]
 	_slide_title.add_theme_font_size_override("font_size", 150 if phase == "timeup" else 96)
-	_player_grid.visible = phase != "timeup"
+	_grid_room.visible = phase != "timeup"
 	_slide_status.visible = phase == "reveal"
 	_legend.visible = phase == "reveal" and players.any(func(p): return p.protected and not p.dead and p.ok == false)
 	var shown := players.filter(func(p): return not p.dead)
-	_player_grid.columns = clampi(shown.size(), 1, 5 if shown.size() > 8 else 4)
+	_player_grid.columns = _columns(shown.size())
+	var many := shown.size() > 10                  # (3 rows of cards: tighter, the legend stays on screen)
+	_slide.add_theme_constant_override("separation", 20 if many else 36)
+	if phase != "timeup":
+		_slide_title.add_theme_font_size_override("font_size", 80 if many else 96)
 	for id in _player_cards.keys():
 		if not shown.any(func(p): return p.id == id):
 			_player_cards[id].panel.queue_free()
@@ -319,7 +333,7 @@ func _show_players_slide(phase: String, players: Array) -> void:
 		if not _player_cards.has(p.id):
 			_player_cards[p.id] = _new_player_card()
 		var c: Dictionary = _player_cards[p.id]
-		c.name.text = "%02d %s" % [p.id, p.name.to_upper().left(10)]
+		c.name.text = "%02d %s" % [p.id, p.name.to_upper()]
 		var answered: bool = p.answer >= 0
 		var col: Color = CyberTile.BUTTON_COLORS[QuizRound.ANSWER_BUTTONS[p.answer]] if answered else Retro.DIM
 		c.icon.visible = answered
@@ -331,7 +345,7 @@ func _show_players_slide(phase: String, players: Array) -> void:
 		var border := col
 		var mark := "" if answered else "GEEN"
 		c.shield.visible = false
-		if phase == "reveal":
+		if phase == "reveal" and _shown_ok.has(p.id):
 			if p.ok == true:
 				fill = Retro.GOOD.darkened(0.6)
 				border = Retro.GOOD
@@ -347,20 +361,76 @@ func _show_players_slide(phase: String, players: Array) -> void:
 				mark = "✘"
 		c.panel.add_theme_stylebox_override("panel", Retro.panel(fill, border, 5, 20, 22))
 		c.mark.text = mark
-		c.mark.add_theme_color_override("font_color", border if phase == "reveal" else Retro.DIM)
+		c.mark.add_theme_color_override("font_color", border if _shown_ok.has(p.id) else Retro.DIM)
+	_slide_status.visible = phase == "reveal" and _shown_ok.size() >= shown.size()
 	if phase == "reveal":
 		var right := shown.filter(func(p): return p.ok == true).size()
 		_slide_status.text = "%d VAN %d SPELERS HADDEN HET GOED" % [right, shown.size()]
 
 
+## The reveal, one card after the other: the card pops, the mark (✔ / ✘ /
+## shield) stamps in big; wrong: the card shakes.
+func _reveal_cards(players: Array) -> void:
+	_shown_ok.clear()
+	var shown := players.filter(func(p): return not p.dead)
+	var step := minf(0.3, 2.4 / maxf(shown.size(), 1.0))  # (13 players: all within 2.4 s)
+	var k := 0
+	for p in shown:
+		var c: Dictionary = _player_cards.get(p.id, {})
+		if c.is_empty():
+			continue
+		var panel: PanelContainer = c.panel
+		var mark: Label = c.mark
+		var id: int = p.id
+		var right: bool = p.ok == true
+		var tw := panel.create_tween()
+		tw.tween_interval(0.35 + step * k)
+		tw.tween_callback(func():
+			_shown_ok[id] = true
+			panel.pivot_offset = panel.size / 2.0
+			mark.pivot_offset = mark.size / 2.0
+			mark.scale = Vector2(3, 3)
+			mark.create_tween().tween_property(mark, "scale", Vector2.ONE, 0.3) \
+				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT))
+		tw.tween_property(panel, "scale", Vector2(1.12, 1.12), 0.12)
+		tw.tween_property(panel, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK)
+		if not right:
+			for dx in [-14.0, 14.0, -9.0, 9.0, 0.0]:   # (the shake: rotation, containers own the position)
+				tw.tween_property(panel, "rotation", deg_to_rad(dx * 0.25), 0.05)
+		k += 1
+
+
+## Columns for n cards: up to 4 in one row, then about twice as wide as tall
+## (13: 5 x 3, 20: 5 x 4, 24: 6 x 4, 30: 8 x 4).
+static func _columns(n: int) -> int:
+	if n <= 8:
+		return clampi(n, 1, 4)
+	var rows := ceili(sqrt(n / 2.0))
+	return ceili(float(n) / rows)
+
+
+## The cards in their room: as big as they are, scaled down (as a whole) when
+## there are too many, centred.
+func _fit_grid() -> void:
+	var need := _player_grid.get_combined_minimum_size()
+	if need.x <= 0.0 or need.y <= 0.0:
+		return
+	var k := minf(1.0, minf(_grid_room.size.x / need.x, _grid_room.size.y / need.y))
+	_player_grid.scale = Vector2(k, k)
+	_player_grid.size = need
+	_player_grid.position = ((_grid_room.size - need * k) / 2.0).floor()
+
+
 func _new_player_card() -> Dictionary:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(330, 0)
+	panel.custom_minimum_size = Vector2(360, 0)
 	var box := VBoxContainer.new()
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_theme_constant_override("separation", 8)
 	panel.add_child(box)
-	var name_label := Retro.label(40, Retro.CREAM)
+	var name_label := Retro.label(36, Retro.CREAM)
+	name_label.clip_text = true                    # (the card keeps its width: long names end in …)
+	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	box.add_child(name_label)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER

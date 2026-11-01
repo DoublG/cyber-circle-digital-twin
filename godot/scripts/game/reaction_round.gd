@@ -35,6 +35,7 @@ var stats := {}                  # tile_id -> {hits, best_ms, streak, best_strea
 
 func _init() -> void:
 	title = "Reactie"
+	progress_label = "OP RIJ"
 	mode = "personal"
 	on_tile = true
 	duration = 30.0
@@ -151,9 +152,9 @@ func _animate(id: int, outcome: String, color: Color) -> void:
 		"hit", "nogo_ok":
 			var c := color if outcome == "hit" else Retro.SHIELD
 			arena.send_packet(id, c, func():
-				arena.robot.set_side_glow(id - 1, c, 2.0)
+				arena.robot.set_side_glow(arena.robot_side(id), c, 2.0)
 				await arena.get_tree().create_timer(0.2).timeout
-				arena.robot.set_side_glow(id - 1, Color.BLACK))
+				arena.robot.set_side_glow(arena.robot_side(id), Color.BLACK))
 		"wrong", "nogo_fail":
 			arena.send_packet(id, Color.RED, Callable(), false)
 

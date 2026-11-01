@@ -13,6 +13,9 @@ SCHEMA = os.path.join(HERE, "..", "godot", "data", "schema.sql")
 QUESTION_FIELDS = ("slug", "category", "min_age", "max_age", "question", "text", "answer1", "answer2",
                    "answer3", "answer4", "correct", "explanation", "video", "video_when", "image", "time", "active")
 
+FLOOR_TILES = 13                          # places around the robot
+PLACES = 18                               # + 5 mobile players (M1-M5 = 14-18)
+
 
 class Database:
     def __init__(self, path):
@@ -28,6 +31,13 @@ class Database:
         if "image" not in cols:                  # databases from before the picture column
             self.con.execute("ALTER TABLE questions ADD COLUMN image TEXT NOT NULL DEFAULT ''")
             self.con.commit()
+        pcols = {r["name"] for r in self.con.execute("PRAGMA table_info(players)")}
+        if "card" not in pcols:
+            self.con.execute("ALTER TABLE players ADD COLUMN card TEXT")   # (before the QR cards)
+        if "email" not in pcols:
+            self.con.execute("ALTER TABLE players ADD COLUMN email TEXT")
+        self.con.execute("CREATE UNIQUE INDEX IF NOT EXISTS players_card ON players (card)")
+        self.con.commit()
 
     def _all(self, sql, args=()):
         with self.lock:
@@ -56,9 +66,11 @@ class Database:
     # ------------------------------------------------------------ tiles (places around the robot)
 
     def tiles(self):
-        """The 13 places: which physical tile (device id) stands there, in service or not."""
+        """The 18 places: 1-13 the floor tiles around the robot, 14-18 the mobile
+        players' handheld tiles (M1-M5, their drones in the game): which physical
+        tile (device id) is there, in service or not."""
         with self.lock:
-            self.con.executemany("INSERT OR IGNORE INTO tiles (number) VALUES (?)", [(n,) for n in range(1, 14)])
+            self.con.executemany("INSERT OR IGNORE INTO tiles (number) VALUES (?)", [(n,) for n in range(1, PLACES + 1)])
             self.con.commit()
         return self._all("SELECT number, device, enabled FROM tiles ORDER BY number")
 
@@ -74,17 +86,54 @@ class Database:
                 self.con.execute("UPDATE tiles SET enabled = ? WHERE number = ?", (int(bool(enabled)), number))
             self.con.commit()
 
+    # ------------------------------------------------------------ gamemasters
+
+    def gamemasters(self):
+        return self._all("SELECT id, name, color FROM gamemasters WHERE active = 1 ORDER BY name")
+
+    def gamemaster(self, gid):
+        return self._one("SELECT id, name, color FROM gamemasters WHERE id = ? AND active = 1", (gid,))
+
+    def save_gamemaster(self, name, color, gid=None):
+        if gid is None:
+            return self._write("INSERT INTO gamemasters (name, color) VALUES (?, ?)", (name, color))
+        self._write("UPDATE gamemasters SET name = ?, color = ? WHERE id = ?", (name, color, gid))
+        return gid
+
+    def remove_gamemaster(self, gid):
+        self._write("UPDATE gamemasters SET active = 0 WHERE id = ?", (gid,))
+
     # ------------------------------------------------------------ players
 
-    def add_player(self, name, color="#ffcc00", age=0):
-        return self._write("INSERT INTO players (name, color, age) VALUES (?,?,?)", (name, color, int(age)))
+    def add_player(self, name, color="#ffcc00", age=0, card=None):
+        """card: the QR card's code (unique; a card used again is moved to this player)."""
+        with self.lock:
+            if card:
+                self.con.execute("UPDATE players SET card = NULL WHERE card = ?", (card,))
+            cur = self.con.execute("INSERT INTO players (name, color, age, card) VALUES (?,?,?,?)",
+                                   (name, color, int(age), card or None))
+            self.con.commit()
+            return cur.lastrowid
 
     def player(self, pid):
-        return self._one("SELECT id, name, color, age FROM players WHERE id = ?", (pid,))
+        return self._one("SELECT id, name, color, age, card FROM players WHERE id = ?", (pid,))
+
+    def upsert_card(self, card, name, age=0, email=None):
+        """The registration website's sync (or a gamemaster for a visitor without
+        a phone): the player behind a card, created or updated (a card
+        registered again: the same player, new name / age / email)."""
+        p = self.player_by_card(card)
+        pid = p["id"] if p else self.add_player(name, age=age, card=card)
+        self._write("UPDATE players SET name = ?, age = ?, email = ? WHERE id = ?", (name, int(age), email or None, pid))
+        return pid
+
+    def player_by_card(self, card):
+        """The player registered with this QR card, or None."""
+        return self._one("SELECT id, name, color, age, card FROM players WHERE card = ?", (card,))
 
     def players(self, search="", limit=50):
         return self._all(
-            "SELECT p.id, p.name, p.color, p.age, MAX(r.score) AS best, COUNT(r.id) AS plays"
+            "SELECT p.id, p.name, p.color, p.age, p.card, MAX(r.score) AS best, COUNT(r.id) AS plays"
             " FROM players p LEFT JOIN results r ON r.player_id = p.id"
             " WHERE p.name LIKE ? GROUP BY p.id ORDER BY p.id DESC LIMIT ?", (f"%{search}%", limit))
 

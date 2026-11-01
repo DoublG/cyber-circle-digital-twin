@@ -12,6 +12,7 @@ const SKILL := 0.7                 # chance a bot answers / reacts right
 
 var players := 6                   # 0: nobody plays, the game idles
 var join_interval := 4.0
+var answer_quiz := true            # false: the quiz answers are given by someone else (a movie script)
 var arena: Node3D
 var _t := 0.0
 var _next_join := 0.0
@@ -37,7 +38,7 @@ func _process(delta: float) -> void:
 		if not arena.is_playing(id) or arena.tiles[id - 1].is_dead:
 			continue
 		if round is QuizRound:
-			if round._phase == "question" and not round._answers.has(id) and randf() < delta * 0.5:
+			if answer_quiz and round._phase == "question" and not round._answers.has(id) and randf() < delta * 0.5:
 				var right := int(round._questions[round._index].correct)
 				var answer := right if randf() < SKILL else randi() % 4
 				arena.tiles[id - 1].press_button(QuizRound.ANSWER_BUTTONS[answer])
@@ -71,7 +72,7 @@ func _rhythm(round: RhythmRound, id: int) -> void:
 
 
 func _join() -> void:
-	var free: Array = arena.tiles.filter(func(t): return t.idle and not arena.is_pending(t.tile_id) and arena.is_enabled(t.tile_id))
+	var free: Array = arena.tiles.filter(func(t): return t.idle and not arena.is_pending(t.tile_id) and arena.is_enabled(t.tile_id) and not t is DroneTile)
 	if free.is_empty():
 		return
 	var used: Array = arena.player_ids().map(func(id): return arena.player_name(id))

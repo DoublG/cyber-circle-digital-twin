@@ -29,6 +29,7 @@ var _last_n := {}                # tile_id -> last result counter seen
 
 func _init() -> void:
 	title = "Simon zegt"
+	progress_label = "REEKS"
 	mode = "personal"
 	on_tile = true
 	duration = 90.0
@@ -127,9 +128,9 @@ func result(id: int, r: Dictionary) -> void:
 			game.screen_wall.popup(id, "+%d" % (level * points_per_level), Retro.GOOD)
 			var arena := game.arena
 			arena.send_packet(id, Retro.GOOD, func():
-				arena.robot.set_side_glow(id - 1, Retro.GOOD, 2.0)
+				arena.robot.set_side_glow(arena.robot_side(id), Retro.GOOD, 2.0)
 				await arena.get_tree().create_timer(0.3).timeout
-				arena.robot.set_side_glow(id - 1, Color.BLACK))
+				arena.robot.set_side_glow(arena.robot_side(id), Color.BLACK))
 		"fail":                            # back to the shortest sequence
 			st.phase = "pause"
 			st.fails += 1

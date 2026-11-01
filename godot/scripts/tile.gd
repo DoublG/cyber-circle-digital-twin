@@ -11,6 +11,9 @@ extends Node3D
 ##            activate; pressed icons stay lit, the ring fills a quarter each
 ##   playing  idle = false and pending = false: the game drives the LEDs and
 ##            the hearts show lives
+##   setup    (the game in SETUP) the hearts show the place number in binary -
+##            Heart_0 (nearest the logo) = 1, Heart_1 = 2, ... Heart_4 = 16 - so
+##            the crew sees that every tile stands on the right place
 
 signal button_pressed(tile_id: int, button: StringName)
 signal button_released(tile_id: int, button: StringName)
@@ -60,6 +63,7 @@ var _idle_time := 0.0
 var pending := false
 var _activation_pressed: Array[StringName] = []
 var _activation_color := Color.WHITE
+var show_number := false: set = set_show_number   # setup: the hearts show tile_id in binary
 ## Protected (e.g. the question is too hard for the player's age): attacks are
 ## blocked. Twin: energy dome over the tile. Real tile: the LED ring glows blue.
 var shielded := false: set = set_shielded
@@ -172,6 +176,8 @@ func set_idle(on: bool) -> void:
 	if on:
 		for h in _hearts:
 			_paint(h, Color.BLACK)
+		if show_number:                # (setup: the number stays on the hearts)
+			set_show_number(true)
 	else:
 		clear_ring()
 		for b in BUTTONS:
@@ -253,6 +259,20 @@ func _build_ring() -> void:
 
 func clear_ring() -> void:
 	fill_ring(Color.BLACK)
+
+
+func set_show_number(on: bool) -> void:
+	show_number = on
+	if _hearts.is_empty():
+		return
+	if on:
+		for i in HEART_COUNT:
+			_paint(_hearts[i], HEART_COLOR if tile_id >> i & 1 else HEART_LOST_COLOR)
+	elif idle:
+		for h in _hearts:
+			_paint(h, Color.BLACK)
+	else:
+		set_health(health)
 
 
 func set_health(value: int) -> void:

@@ -405,10 +405,10 @@ func _flash_dome(color: Color) -> void:
 ## When the queue is empty the robot goes back to normal.
 func queue_death(side: int, global_target = null, on_hit := Callable()) -> void:
 	side = posmod(side, SIDE_COUNT)
-	for v in _death_queue:
-		if v.side == side:
-			return  # already queued
 	var to: Vector3 = global_target if global_target != null else global_position + side_direction(side) * 2.2
+	for v in _death_queue:
+		if v.target.distance_to(to) < 0.05:
+			return  # already queued (a drone can share a side with a floor tile)
 	_death_queue.append({"side": side, "target": to, "on_hit": on_hit})
 	if not _death_running:
 		_run_deaths()

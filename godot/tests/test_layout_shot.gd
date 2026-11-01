@@ -25,8 +25,23 @@ func _ready() -> void:
 	game.auto_start_delay = 0.0
 	game.random_rounds = false
 	game.round_types = [QuizRound]
+	# the right column keeps its width: nobody, an invite (ACTIVEREN), long round counts
+	var page0: ObserverView = _find_page(arena.screen_wall)
+	await get_tree().create_timer(0.5).timeout
+	var col: Control = page0._list_panel.get_parent()
+	check(not page0._list_panel.is_visible_in_tree(), "overview: no player list while nobody plays")
+	check(is_equal_approx(col.size.x, ObserverView.RIGHT_WIDTH), "overview: right column %.0f wide with nobody" % col.size.x)
+	arena.apply_command({"tile": 13, "register": NAMES[12], "color": "#33ccff", "age": 12})
+	await get_tree().create_timer(0.5).timeout
+	check(page0._list_panel.is_visible_in_tree(), "overview: player list with an invite")
+	check(is_equal_approx(col.size.x, ObserverView.RIGHT_WIDTH), "overview: right column %.0f wide with an invite" % col.size.x)
+	arena.apply_command({"tile": 13, "leave": true})
 	for i in NAMES.size():
 		arena.apply_command({"tile": i + 1, "join": NAMES[i], "age": 12})
+	game.survived[1] = 12
+	await get_tree().create_timer(0.5).timeout
+	check(is_equal_approx(col.size.x, ObserverView.RIGHT_WIDTH), "overview: right column %.0f wide with 13 players, 12 RONDES" % col.size.x)
+	game.survived.erase(1)
 	for i in 14:                                         # a full event feed with long lines
 		game.log_event("EEN HEEL LANGE GEBEURTENIS OM HET AFKAPPEN TE TESTEN NUMMER %d" % i, Retro.CREAM)
 	await get_tree().create_timer(1.0).timeout

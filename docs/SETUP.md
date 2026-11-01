@@ -136,7 +136,8 @@ Godot 4.7.1; binaries for Linux, Windows and macOS – for a Pi add the
 ```bash
 cd /srv/cybercircle/digital_twin
 godot-4 --path godot -- --windows --node=overview-pc \
-    --screens=1,2,3/4,5,6/7,8,9/10,11/12,13 --monitors=0,1,2,3,4,5 \
+    --screens=1,2,3/4,5,6/7,8,9/10,11/12,13 --mobile-screens=14,15/16,17,18 \
+    --monitors=0,1,2,3,4,5,6,7 \
     --mqtt=ws://localhost:9001 --mqtt-user=cybercircle --mqtt-password=SECRET \
     --control=http://localhost:8080
 ```
@@ -152,16 +153,24 @@ at it, and which monitor output it is plugged into:
 1. Start once with `--windows` and note which monitor shows "scherm 1", "scherm 2", …
    (the window titles), or use `--monitors` to put them where you want.
 2. Set `--screens` so each screen lists the tiles whose players face it.
+   The **mobile players** (drones M1–M5 = 14–18) have screens of their own
+   after the floor screens (`--mobile-screens`, default M1–M2 on one screen
+   and M3–M5 on another). Those are not fixed: only the mobile players who
+   play (or are invited) get a view, side by side from left to right, full
+   height, sharing the width (one player: the whole screen). Their camera is the drone's own gimbal
+   camera – it flies with the drone, looking at the robot, and swings over
+   the drone to look down on its LEDs in the tile games.
 3. Put the final command in the autostart file below.
 
 Options (everything after `--`):
 
 | option | |
 |---|---|
-| `--windows` | screen 1 in the main window, screens 2–5 and the overview as full-screen windows on monitors 2–6 (in the order the OS numbers them) |
+| `--windows` | screen 1 in the main window, the other screens (floor, then mobile) and the overview as full-screen windows on the next monitors (in the order the OS numbers them) |
 | `--preview` | all 6 screens in one window (default – for testing) |
 | `--screens=1,2,3/4,5,6/7,8,9/10,11/12,13` | **which tiles each screen shows**, screens separated by `/` (this is the default). Put the tiles on the screen the players at those tiles can see. Every tile once; the game warns about missing or double tiles. The number of groups is the number of screens |
-| `--monitors=0,1,2,3,4,5` | with `--windows`: the monitor (OS numbering) for screen 1, 2, … and then the overview. Default: screen *k* on monitor *k*−1, the overview after the last screen |
+| `--mobile-screens=14,15/16,17,18` | the mobile players' screens (drones), the same way (this is the default) |
+| `--monitors=0,1,2,3,4,5,6,7` | with `--windows`: the monitor (OS numbering) for screen 1, 2, … (floor screens, then mobile screens) and then the overview. Default: screen *k* on monitor *k*−1, the overview after the last screen |
 | `--no-overview` | no overview screen for visitors |
 | `--mqtt=URL` | broker WebSocket URL. Not given: no MQTT, the tiles are simulated in the twin |
 | `--mqtt-user=…` `--mqtt-password=…` | broker login |
@@ -208,16 +217,32 @@ X-GNOME-Autostart-enabled=true
 2. A visitor gets a **QR card**, registers with their phone, and a **game
    master** lets them in: the app creates the player and assigns a tile.
    Their tile lights up in their colour; they press the 4 icons to activate it.
+   **Mobile players** (a wheelchair, blind players with a small 3D-printed
+   tile in their hands, a tablet; 5 places, M1–M5, so 18 players at most)
+   are set up at a station first and then assigned by the game master to a
+   specific **drone** (`"tile": 14`–`18` = M1–M5; the game never picks one
+   itself, and a registration without a tile always gets a floor tile). The
+   drone (`DroneTile`) flies from its park high near the wall into a
+   ring above the floor tiles, in their colour (light band and glow). The game
+   is exactly the same – the drone has the tile's LEDs, hearts, icons and
+   shield – only the animations differ: bolts through the air instead of the
+   cable, a hit makes it rock and drop, and when exterminated it spirals down
+   trailing smoke and explodes on the floor. The screens show it as M1–M5.
 3. 20 s after the first activation the rounds start by themselves
    (`auto_start_delay`). **Rounds keep coming** as long as there are players:
-   intro → round → (personal rounds: places in the players' own views) →
-   scoreboard → next round. Someone who joins during a round **waits** ("WACHT
+   intro → round → **UITSLAG** (personal rounds: the round's places 1, 2,
+   3 …, shared when equal, with what decided them – points, level, … – and
+   the life each player will gain (+♥) or lose (−♥, ☠ the last one); the rows
+   come in from the last place up) → **scoreboard** (the game's standing, the
+   lives change) → next round. **A quiz round is one question**: question →
+   who chose what (every player's icon), then on the same slide card by card
+   ✔ / ✘ (the right answer itself is never shown) → scoreboard; no points, no
+   places: right = you stay in, wrong or late = −1 life. Someone who joins during a round **waits** ("WACHT
    OP DE VOLGENDE RONDE", their view stays on the robot); the scoreboard is
    where new players come in (row **NIEUW!**) and they play from the next round.
 4. **Lives change only on the scoreboard after a round, by at most 1:**
    personal rounds – 1st place +1, last place −1; quiz – a wrong or missing
-   answer −1 (never more than one), and every 10 right answers in a row (over
-   rounds) +1. Max 5 lives. During a round the robot's shots are harmless.
+   answer −1, and every 10 right answers in a row (over rounds) +1. Max 5 lives. During a round the robot's shots are harmless.
    The scoreboard first shows the lives as they were; after `lives_delay`
    (2.5 s) the rows show the change (+♥ green, −♥ red) and the robot gives /
    takes the lives. At 0 a player is **exterminated** – very visible: a big
@@ -237,7 +262,7 @@ X-GNOME-Autostart-enabled=true
 
 | | |
 |---|---|
-| PUNTEN | points within a round – they decide the round's places |
+| PUNTEN | points within a personal round – they decide the round's places (not in the quiz) |
 | LEVENS | lives, max 5 |
 | OP RIJ | quiz answers right in a row (10 = +1 life) |
 | RONDES | rounds survived in this play – the ranking during the game |
@@ -252,8 +277,9 @@ game: the tile icons fall down 4 lanes on the player's own screen; press the
 icon when it reaches the bottom: in the yellow band +1, on the line +3, a
 press on nothing −1. Slow and one at a time first, then faster and two at
 once. The game judges the presses, not the tile: set *Vertraging tegel →
-spel* to the network delay of the installation). The randomizer fills the
-plan of the next 3 rounds (never the same twice in a row; with fewer than 4
+spel* to the network delay of the installation). The quiz is the backbone;
+the randomizer fills the plan of the next 3 rounds and puts the other games
+in between (those never twice in a row, quiz after quiz can; with fewer than 4
 players only the quiz – personal rounds always have a loser); the operator can
 choose any of them in the web interface.
 
@@ -294,6 +320,7 @@ Prefix `cybercircle` (setting `topic_prefix` on the *Mqtt* node). Payloads are J
 | `cybercircle/device/<dev>/hello` | tile → all | retained: a physical tile announces itself (its own id) |
 | `cybercircle/settings` | control → game | retained game settings `{"game": {...}, "quiz": {...}, …}` (only the changed values) |
 | `cybercircle/settings/schema` | master → all | retained: every setting with label, range, unit, default and current value |
+| `cybercircle/device/<dev>/identify` | control → tile | `{"seconds": 6}`: light up so the crew finds this tile (setup, swapping) |
 | `cybercircle/device/<dev>/config` | control → tile | retained `{"tile": n}`: the place it stands on; the tile then uses `tile/<n>/…` |
 
 The tile programs and results for Cyclone, Reaction and Simon are described
@@ -338,6 +365,9 @@ godot-4 --headless --path . --fixed-fps 60 res://tests/test_db.tscn     # databa
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_piet.tscn   # Zwarte Piet
 godot-4 --path . --disable-vsync res://tests/test_rhythm_shot.tscn      # Ritme (chart, judging, screenshot)
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_settings.tscn  # settings, tempo, sounds
+godot-4 --path . --disable-vsync --fixed-fps 30 res://tests/test_drones.tscn       # mobile players (video frames)
+godot-4 --path . --disable-vsync --fixed-fps 30 res://tests/test_13_players.tscn   # end-of-round screens, 13 players
+godot-4 --path . --disable-vsync --fixed-fps 30 res://tests/test_many_players.tscn # the same views with 24
 python3 tests/mqtt_test_broker.py 9011 &                                 # then:
 godot-4 --headless --path . res://tests/test_mqtt.tscn                   # MQTT end to end
 ```
@@ -345,6 +375,17 @@ godot-4 --headless --path . res://tests/test_mqtt.tscn                   # MQTT 
 Screenshot scenes (`tests/test_*_shot.tscn`) and the demo movies need a
 display. **Always add `--disable-vsync`**: a hidden or covered window otherwise
 gets ~1 frame per second from the desktop.
+
+**Gameplay clips** of the whole installation (`godot/movie/clips.gd`):
+`setup`, `joining`, `few` (3 players), `full` (13 tiles + 5 drones), `mobile`
+and `leaving`. Each clip is one movie with every screen at once – the
+overview page big, the floor screens and the mobile screens around it, with a
+caption – and every screen on its own in full HD (the same moments):
+
+```bash
+tools/make_clips.sh                  # all clips -> movies/gameplay/<clip>.mp4 and <clip>/<screen>.mp4
+tools/make_clips.sh full mobile      # only these
+```
 
 ```bash
 godot-4 --path . --resolution 1920x1080 --fixed-fps 30 --disable-vsync \
@@ -370,7 +411,7 @@ Compatibility renderer (`--rendering-method gl_compatibility`).
 
 ```bash
 cd blender
-blender -b -P build_models.py -- all                    # tile, robot, arena, room (.blend + .glb)
+blender -b -P build_models.py -- all                    # tile, robot, arena, room, drone (.blend + .glb)
 blender -b -P bake_models.py -- environment --samples 256 --size 4096
 ```
 
@@ -451,8 +492,8 @@ or a new master continues in the same mode.
 * **Instellingen** – times, speeds and points, per group: *Spel* (tempo,
   intro / result / scoreboard time, start delay, lives by age, the streak for
   +1 life, players needed for personal rounds, rounds planned ahead), one
-  group per round type (e.g. quiz: questions per round, reading / answer /
-  reveal times, points per right answer; Cyclone: light speed, points for
+  group per round type (e.g. quiz (one question per round): reading / answer /
+  reveal times; Cyclone: light speed, points for
   red / yellow / a miss; Reactie: reaction window, chance of red, all points;
   Simon: start length, show time, speed-up, points; Zwarte Piet: hidden time,
   light speed, penalty; Ritme: fall time and spacing at the start / end, when
@@ -471,8 +512,9 @@ two at once start, band and line size, points, tile delay), *Randomizer* and *Vr
 The randomizer fills the round queue the way games steer their dice
 (`GameManager.round_chances`); the plan in *Spel* shows each round's chance.
 
-1. **Weight** per round type (default quiz 2, the others 1; 0 = never).
-2. **No repeat** – never the same type twice in a row (when there is a choice).
+1. **Weight** per round type (default quiz 5, the others 1; 0 = never).
+2. **No repeat** – never the same game twice in a row (when there is a
+   choice); the quiz can follow itself.
 3. **Drought protection** (pity / bad-luck protection, as loot drops and the
    Tetris bag): every round a type was not played (or planned) adds
    *drought* × its weight, so nothing stays away for long.
@@ -497,7 +539,11 @@ when there are enough others.
 
 ### HTTP API (for the app and the game)
 
-`POST /api/players {name, color, age}` → `{id}` · `POST /api/players/<id>/assign {tile}` ·
+`PUT /api/cards/<code> {name, age, email?}` (the registration website's sync: who has this QR card) ·
+`GET /api/cards/<code>` · `GET /api/config` (for the gamemaster app: MQTT, places, layout) ·
+`PUT /api/layout {t01_clock}` · `GET|POST /api/gamemasters`, `PUT|DELETE /api/gamemasters/<id> {name, color}` ·
+`POST /api/session {device, gamemaster}` (the app's sign of life) · `POST /api/players {name, age}` → `{id}` ·
+`POST /api/players/<id>/assign {tile, gamemaster}` (tile 0 = a free floor tile, 14–18 = M1–M5) ·
 `GET /api/questions` · `GET /api/ranking` · `POST /api/games` · `POST /api/games/<id>/rounds|results|end` ·
 `GET /api/master` · `POST /api/mode {mode}` · `GET|PUT /api/settings` · · `POST /api/plan {slot, round, options}` ·
 `POST /api/tiles/<n>/points|lives|leave|revive|attack|attacked|fire` · `POST /api/cmd {...}` (any game
@@ -506,7 +552,64 @@ command). Interactive documentation: **http://\<overview pc\>:8080/docs**.
 Test: `control/.venv/bin/python control/test_e2e.py` (broker + control server
 + game, driven through the API).
 
-## 11. Troubleshooting
+## 11. Gamemaster app
+
+`gamemaster_app/` (Flutter): the gamemasters at the entrance scan the
+visitors' QR cards and send them to a tile – about 500 visitors a session, so
+it is built for scanning back to back. Visitors register themselves with their
+card on the website; that is synced to the control server
+(`PUT /api/cards/<code>`), so the card is all the gamemaster needs.
+
+- **Gamemasters** are managed in the web interface (**Gamemasters**: name and
+  colour each). Helpers take turns all day: the app opens on **Wie ben jij?** –
+  one tap on your name – also after **WISSEL** (top right) and after 10 minutes
+  in the background. **Spel** in the web interface shows who is logged in now,
+  in their colour (the app gives a sign of life every 5 s), and the event feed
+  says which gamemaster sent which visitor.
+- **Always ready**: the app reconnects by itself – when the phone wakes up,
+  as soon as it is on the installation's wifi, every 5 s while there is no
+  connection (a red banner says so).
+- **Scan**: the camera stays on. A card is looked up and – *fast assign*, the
+  default – sent straight to a free floor tile: the game picks it, filling the
+  emptiest part of the circle. One screen shows the name, **GA NAAR TEGEL T04**
+  big, and the floor plan with that tile lit; **VOLGENDE** = the next scan.
+  The tile lights up in the gamemaster's **own colour** (several gamemasters
+  work at the same time, each their colour). Codes are never typed.
+- **Bezoeker zonder gsm** (the gamemaster's call): name, age and email
+  (optional), then scan the card they got. An unknown card offers the same.
+- **Mobile players** (wheelchair, blind, tablet): tap them in the recent list
+  under the camera – *andere plaats* – and pick a drone M1–M5 (set up at their
+  station first). With fast assign off, every card opens that choice.
+- **Tegels** (setup, and swapping a broken tile): every place – T01–T13 and the
+  mobile players' handheld tiles M1–M5 – with the physical tile on it (its MAC
+  address: tiles announce themselves over MQTT, `device/<mac>/hello`), online
+  or not, and who plays there; below, the tiles that announced themselves but
+  have no place (new, or spares): **PLAATS** puts one on a place. A place's
+  detail page: what is on it, **speler uit het spel**, **buiten gebruik** /
+  **weer in gebruik**, **tegel wisselen** (during the game: out of service →
+  swap → back in, the app does the three steps after one confirmation),
+  **ontkoppelen** and **laat oplichten** (`device/<mac>/identify`).
+  In **SETUP** every tile's 5 hearts show its place number in binary (heart 1,
+  nearest the logo, = 1 … heart 5 = 16; T05 = ♥♡♥♡♡): the crew sees that each
+  tile stands on the right place; the detail page shows the pattern to expect.
+- **Floor plan**: the entrance at the bottom. How the circle stands in the venue
+  is set once in the web interface: **Tegels › Opstelling** – on which hour of a
+  clock T01 is (the entrance at 6); every app follows it.
+
+**Android** (`flutter build apk --release`): Instellingen → the control
+server's IP address on the installation's wifi (and the MQTT login); live
+updates come straight from the MQTT broker. **iPhone / any browser**: the
+control server serves the web version at `http://<server ip>:8080/gm/`
+(`flutter build web --release --base-href /gm/ --no-web-resources-cdn` – no
+internet needed); live updates through the server. A browser only allows the
+camera on **https**: `tools/make_cert.sh <server ip>` and start the control
+server with `--ssl-cert control/cert.pem --ssl-key control/key.pem`; open
+`https://<server ip>:8080/gm/` once on every iPhone and accept the warning.
+
+Tests: `cd gamemaster_app && flutter test`; the whole flow in a browser with a
+fake camera showing QR cards: `python gamemaster_app/test_browser/scan_flow.py`.
+
+## 12. Troubleshooting
 
 | problem | fix |
 |---|---|

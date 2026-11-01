@@ -4,6 +4,7 @@ extends RefCounted
 ## (orange stripes, teal pillars, green CRT consoles). Chamfered panels, a
 ## bold mono font, scanlines and a vignette on top of every screen.
 
+const FLOOR_TILES := 13             # tiles on the floor; mobile players (drones) come after
 const BG := Color(0.035, 0.03, 0.028)
 const PANEL := Color(0.09, 0.075, 0.06)
 const ORANGE := Color(1.0, 0.45, 0.08)
@@ -32,6 +33,12 @@ const CALLS_TO_ACTION := [
 const BUTTON_NAMES := {&"Square": "VIERKANT", &"Triangle": "DRIEHOEK", &"Cross": "KRUIS", &"Circle": "CIRKEL"}
 
 static var _theme: Theme
+
+
+## A player's place on the screens: floor tile "T03", mobile player (drone,
+## ids after the 13 floor tiles) "M1".
+static func tile_label(tile_id: int) -> String:
+	return "T%02d" % tile_id if tile_id <= FLOOR_TILES else "M%d" % (tile_id - FLOOR_TILES)
 
 
 ## "1 RONDE" / "3 RONDES": rounds survived.

@@ -105,6 +105,49 @@ try:
     check(until(lambda: player(4)), "Tess plays on T04")
     check(player(4)["player_id"] == pid, "linked to her player id")
 
+    print("--- a mobile player: set up at the station, assigned to drone M2 (tile 15)")
+    check(len(call("GET", "/api/tiles")["tiles"]) == 18, "18 places: T01-T13 and M1-M5")
+    check(status("PUT", "/api/tiles/15", {"device": "hand-1"}) == 409, "locked: no handheld swap on M2 in service")
+    check(status("POST", f"/api/players/{pid}/assign", {"tile": 19}) == 404, "no place 19")
+    st = state()
+    check(st.get("floor_tiles") == 13 and st.get("tile_count") == 18, "the game reports 13 floor tiles of 18 places")
+    pid3 = call("POST", "/api/players", {"name": "Mila", "color": "#ff44cc", "age": 12})["id"]
+    call("POST", f"/api/players/{pid3}/assign", {"tile": 15})
+    check(until(lambda: any(p["tile"] == 15 and p["name"] == "Mila" for p in state()["pending"])), "M2 waits for Mila")
+    for b in ("Square", "Triangle", "Cross", "Circle"):
+        call("POST", "/api/cmd", {"tile": 15, "press": b})
+        time.sleep(0.3)
+    check(until(lambda: player(15)), "Mila plays on M2 (her drone)")
+    call("POST", "/api/tiles/15/leave")
+    check(until(lambda: not player(15)), "operator: Mila removed from M2")
+
+    print("--- the gamemaster app: config, a QR card registered on the spot, looked up again")
+    cfg = call("GET", "/api/config")
+    check(cfg["mqtt"] == f"ws://127.0.0.1:{MQTT_PORT}" and cfg["prefix"] == "cybercircle" and cfg["places"] == 18,
+          f"config: where MQTT is ({cfg})")
+    check(cfg["t01_clock"] == 12, "default: T01 at 12 o'clock (across from the entrance)")
+    call("PUT", "/api/layout", {"t01_clock": 3})
+    check(call("GET", "/api/config")["t01_clock"] == 3 and live()["t01_clock"] == 3, "setup: T01 at 3 o'clock, for the apps")
+    check(status("GET", "/api/cards/CC-0042") == 404, "an unknown card: 404 (the app shows the form)")
+    gm = call("POST", "/api/gamemasters", {"name": "Erik", "color": "#00ffcc"})["id"]
+    check(any(g["name"] == "Erik" for g in call("GET", "/api/gamemasters")), "gamemaster Erik added")
+    online = call("POST", "/api/session", {"device": "phone-1", "gamemaster": gm})["online"]
+    check([g["name"] for g in online] == ["Erik"] and live()["gamemasters_online"][0]["color"] == "#00ffcc",
+          "Erik logged in on phone-1: on the dashboard with his colour")
+    pid4 = call("POST", "/api/players", {"name": "Noor", "color": "#33ccff", "age": 9, "card": "CC-0042"})["id"]
+    check(call("GET", "/api/cards/CC-0042")["id"] == pid4, "the card finds Noor")
+    up = call("PUT", "/api/cards/CC-0042", {"name": "Noor V.", "age": 10, "email": "noor@example.org"})["id"]
+    check(up == pid4 and call("GET", "/api/cards/CC-0042")["name"] == "Noor V.", "the website sync updates the card's player")
+    pid5 = call("POST", "/api/players", {"name": "Sem", "card": "CC-0042"})["id"]
+    check(call("GET", "/api/cards/CC-0042")["id"] == pid5, "a card handed out again: the new player")
+    call("POST", f"/api/players/{pid5}/assign", {"tile": 16, "gamemaster": gm})
+    check(until(lambda: any(p["tile"] == 16 and p["color"] == "#00ffcc" for p in state()["pending"])),
+          "assigned to M3 by Erik: in Erik's colour")
+    check(any("GAMEMASTER ERIK" in e["text"] for e in live()["events"]), "the event feed says who assigned")
+    call("POST", "/api/session", {"device": "phone-1", "gamemaster": 0})
+    check(live()["gamemasters_online"] == [], "Erik logged out")
+    call("POST", "/api/tiles/16/leave")
+
     print("--- operator: lives, round plan")
     call("POST", "/api/tiles/4/lives", {"lives": 2})
     check(until(lambda: player(4)["lives"] == 2), "lives set to 2")

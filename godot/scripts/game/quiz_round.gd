@@ -1,13 +1,16 @@
 class_name QuizRound
 extends GameRound
-## Shared round: a question with 4 answers on all screens. Each answer has the
+## Shared round: ONE question with 4 answers on all screens, then the
+## scoreboard (every quiz round is one question; the randomizer puts the other
+## games in between). Each answer has the
 ## colour and icon of a button.
 ## After every question the attacks are combined:
-## Correct: 5 points + up to 5 speed bonus. All correct players attack the robot
+## No points and no places: the quiz is about staying in the game.
+## Correct: you stay in the game; all correct players attack the robot
 ##          together (green, tile -> robot); if everyone was right the robot
 ##          overloads (special animation).
 ## Wrong or no answer: the robot hits back at all of them at once (red,
-##          robot -> tile): -1 life each.
+##          robot -> tile): -1 life (at the end of the round, at most 1).
 ## Protected: a player younger than the question's min_age gets a shield
 ##          (dome over the tile, blue LED ring, shield on the screen). A wrong
 ##          answer then costs nothing: the robot's shot bounces off.
@@ -37,7 +40,6 @@ const IMAGE_DIR := "res://data/images/"
 ## the glass seen from the player's spot: top-left, top-right, bottom-left, bottom-right
 const ANSWER_BUTTONS: Array[StringName] = [&"Square", &"Triangle", &"Cross", &"Circle"]
 
-var question_count := 3
 var categories: Array = []         # only questions from these categories (empty = all)
 var question_time := 15.0
 var reveal_time := 5.0
@@ -56,7 +58,6 @@ var _question_time := 15.0         # time for the current question
 var _video: VideoStreamPlayer      # one decoder; every screen shows its texture
 var _image: Texture2D              # the question's picture (or null)
 var _answers := {}                 # tile_id -> answer index
-var points_per_answer := 10
 var _wrong := {}                   # tile_id -> wrong / no answers (not counting shielded ones)
 var _streak_bonus := {}            # tile_id -> true: reached a streak milestone this round
 var _done := false
@@ -66,23 +67,23 @@ func _init() -> void:
 	title = "Quiz"
 	mode = "shared"
 	gives_lives = false            # (only through the streak)
+	can_repeat = true              # the backbone of the game: quiz after quiz
+	ranked = false                 # right: you stay, wrong: -1 life
 	duration = 999.0               # ends after the last question
 	rules = _rules(10)
 
 
 func _rules(streak: int) -> String:
-	return ("Druk op je tegel op het icoon van je antwoord (zelfde vorm, kleur en plek).\nJe mag je antwoord veranderen tot de tijd om is: je laatste keuze telt.\nJuist = %d punten. %d juiste antwoorden op rij = +1 leven!\nNa de ronde: een fout of geen antwoord kost een leven." % [points_per_answer, streak])
+	return ("Druk op je tegel op het icoon van je antwoord (zelfde vorm, kleur en plek).\nJe mag je antwoord veranderen tot de tijd om is: je laatste keuze telt.\nJuist: je blijft in het spel. Fout of te laat: je verliest een leven.\n%d juiste antwoorden op rij = +1 leven!" % streak)
 
 
 func tunables() -> Array:            # (no duration: the round ends after the last question)
 	return [
-		setting("question_count", "Vragen per ronde", 1, 10, 1),
 		setting("read_time", "Leestijd vraag (zonder antwoorden)", 0, 15, 0.5, "s"),
 		setting("question_time", "Antwoordtijd", 5, 60, 1, "s"),
 		setting("timeup_time", "Tijd om", 0, 5, 0.1, "s"),
 		setting("answers_time", "Iedereens antwoord", 1, 10, 0.5, "s"),
 		setting("reveal_time", "Wie had het goed", 1, 15, 0.5, "s"),
-		setting("points_per_answer", "Punten juist antwoord", 0, 100, 1),
 	]
 
 
@@ -96,7 +97,8 @@ func _start() -> void:
 	_next_question()
 
 
-## The questions for this round from the chosen categories. Questions that are
+## The question for this round from the chosen categories (a list: the tests
+## and screenshots can put several in it, played one after the other). Questions that are
 ## too hard for every player (all younger than min_age) are skipped when there
 ## are enough others. Per question a category is drawn (game style, as the
 ## round types - GameManager.category_chances): its weight, plus drought
@@ -108,11 +110,11 @@ func _pick_questions(all: Array) -> Array:
 	if ages.size() == players.size() and not ages.is_empty():
 		var oldest: int = ages.max()
 		var fitting := pool.filter(func(q): return int(q.get("min_age", 0)) <= oldest)
-		if fitting.size() >= question_count:
+		if not fitting.is_empty():
 			pool = fitting
 	var memory: Dictionary = game.question_memory
 	var picked := []
-	for n in question_count:
+	for n in 1:
 		var chances := game.category_chances(pool)
 		if chances.is_empty():
 			break
@@ -251,7 +253,7 @@ func _update(delta: float) -> void:
 		_phase = "answers"               # everyone's answer icon
 		_phase_left = answers_time
 	elif _phase == "answers" and _phase_left <= 0.0:
-		_reveal()                        # step 2: who was right (the right answer is never shown)
+		_reveal()                        # step 2 (same slide): who was right (the right answer is never shown)
 	elif _phase == "reveal" and _phase_left <= 0.0:
 		_next_question()
 		if _done:
@@ -271,7 +273,7 @@ func _update(delta: float) -> void:
 	if _video and _video.get_stream_length() > 0.0:
 		video_frac = _video.stream_position / _video.get_stream_length()
 	var state := {
-		"number": _index + 1, "total": _questions.size(), "phase": _phase,
+		"phase": _phase,
 		"category": str(q.get("category", "")), "ages": ages,
 		"question": q.question, "answers": q.answers,
 		"text": q.get("text", ""),
@@ -309,7 +311,6 @@ func _reveal() -> void:
 		if tile(id).is_dead:
 			continue
 		if _answers.has(id) and _answers[id].answer == correct:
-			add_points(id, points_per_answer)
 			right.append(id)
 			_count_streak(id, true)
 		elif is_protected(id):

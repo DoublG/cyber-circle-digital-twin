@@ -3,6 +3,7 @@
 Run headless:
     blender -b -P build_models.py -- tile
     blender -b -P build_models.py -- robot
+    blender -b -P build_models.py -- drone
     blender -b -P build_models.py -- all
 
 Outputs (relative to this file):
@@ -301,6 +302,49 @@ def heart_outline(size, n=40):
     return list(reversed(pts))  # curve runs clockwise -> make CCW
 
 
+def etched_buttons(glass_plate, glass_top, button_r, k, sym):
+    """The 4 icons etched in a glass plate (tile, drone), k = size factor:
+      Button_<name>          empty marking the button centre on the glass
+      Button_<name>_Symbol   the etched icon"""
+    for name, deg in BUTTONS.items():
+        a = math.radians(deg)
+        cx, cy = button_r * math.cos(a), button_r * math.sin(a)
+        anchor = bpy.data.objects.new(f"Button_{name}", None)
+        anchor.location = (cx, cy, glass_top)
+        anchor.empty_display_size = 0.03
+        bpy.context.collection.objects.link(anchor)
+        top = glass_top + 0.0003  # etching: very thin frosted layer on the glass
+        t = 0.009 * k
+        parts = []
+        if name == "Square":
+            sq = 0.062 * k
+            parts += [box("s", (sq, t, 0.0004), (cx, cy + sq / 2, top)),
+                      box("s", (sq, t, 0.0004), (cx, cy - sq / 2, top)),
+                      box("s", (t, sq, 0.0004), (cx + sq / 2, cy, top)),
+                      box("s", (t, sq, 0.0004), (cx - sq / 2, cy, top))]
+        elif name == "Triangle":
+            r = 0.042 * k
+            p = [(cx + r * math.cos(math.radians(90 + 120 * j)),
+                  cy + r * math.sin(math.radians(90 + 120 * j))) for j in range(3)]
+            for j in range(3):
+                (x0, y0), (x1, y1) = p[j], p[(j + 1) % 3]
+                length = math.hypot(x1 - x0, y1 - y0) + t
+                parts.append(box("s", (length, t, 0.0004), ((x0 + x1) / 2, (y0 + y1) / 2, top),
+                                 rot=(0, 0, math.atan2(y1 - y0, x1 - x0))))
+        elif name == "Cross":
+            for rz in (math.pi / 4, -math.pi / 4):
+                parts.append(box("s", (0.082 * k, t, 0.0004), (cx, cy, top), rot=(0, 0, rz)))
+        else:
+            parts.append(torus("s", 0.033 * k, 0.0048 * k, (cx, cy, top)))
+        for o in parts:
+            o.scale.z = 0.15  # flatten tori into an etched line
+        bpy.context.view_layer.update()
+        symbol = join(parts, f"Button_{name}_Symbol")
+        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+        link(symbol, sym, parent=glass_plate)
+        set_parent(anchor, glass_plate)
+
+
 def build_tile():
     reset_scene()
     white = material("Tile_White", (0.86, 0.86, 0.84), roughness=0.7)
@@ -363,46 +407,8 @@ def build_tile():
     glass_plate = cylinder("Glass_Plate", GLASS_R, 0.006, (0, 0, GLASS_TOP - 0.003),
                            verts=96, mat=glass)
 
-    # Buttons = icons etched in the glass, lit by an RGB LED (no physical parts):
-    #   Button_<name>          empty marking the button centre on the glass
-    #   Button_<name>_Symbol   the etched icon
-    for name, deg in BUTTONS.items():
-        a = math.radians(deg)
-        cx, cy = BUTTON_R * math.cos(a), BUTTON_R * math.sin(a)
-        anchor = bpy.data.objects.new(f"Button_{name}", None)
-        anchor.location = (cx, cy, GLASS_TOP)
-        anchor.empty_display_size = 0.03
-        bpy.context.collection.objects.link(anchor)
-        top = GLASS_TOP + 0.0003  # etching: very thin frosted layer on the glass
-        t = 0.009
-        parts = []
-        if name == "Square":
-            sq = 0.062
-            parts += [box("s", (sq, t, 0.0004), (cx, cy + sq / 2, top)),
-                      box("s", (sq, t, 0.0004), (cx, cy - sq / 2, top)),
-                      box("s", (t, sq, 0.0004), (cx + sq / 2, cy, top)),
-                      box("s", (t, sq, 0.0004), (cx - sq / 2, cy, top))]
-        elif name == "Triangle":
-            r = 0.042
-            p = [(cx + r * math.cos(math.radians(90 + 120 * k)),
-                  cy + r * math.sin(math.radians(90 + 120 * k))) for k in range(3)]
-            for k in range(3):
-                (x0, y0), (x1, y1) = p[k], p[(k + 1) % 3]
-                length = math.hypot(x1 - x0, y1 - y0) + t
-                parts.append(box("s", (length, t, 0.0004), ((x0 + x1) / 2, (y0 + y1) / 2, top),
-                                 rot=(0, 0, math.atan2(y1 - y0, x1 - x0))))
-        elif name == "Cross":
-            for rz in (math.pi / 4, -math.pi / 4):
-                parts.append(box("s", (0.082, t, 0.0004), (cx, cy, top), rot=(0, 0, rz)))
-        else:
-            parts.append(torus("s", 0.033, 0.0048, (cx, cy, top)))
-        for o in parts:
-            o.scale.z = 0.15  # flatten tori into an etched line
-        bpy.context.view_layer.update()
-        symbol = join(parts, f"Button_{name}_Symbol")
-        bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-        link(symbol, sym, parent=glass_plate)
-        set_parent(anchor, glass_plate)
+    # Buttons = icons etched in the glass, lit by an RGB LED (no physical parts)
+    etched_buttons(glass_plate, GLASS_TOP, BUTTON_R, 1.0, sym)
 
     # Status LED on the cable side and a collision shape for Godot
     cylinder("Status_LED", 0.004, 0.004, (0.05, TILE_R - 0.012, GLASS_TOP + 0.002),
@@ -986,6 +992,84 @@ def screen_window(name, centre, facing, r, mat=None, square=False):
     return link(new_object(name, bm), mat)
 
 
+# ---------------------------------------------------------------- drone
+
+DRONE_R = 0.20         # body radius: a flying mini tile for a mobile player
+DRONE_TOP = 0.030      # top plate (LEDs, hearts)
+DRONE_GLASS_TOP = 0.044
+DRONE_LED_R = 0.172
+DRONE_BUTTON_R = 0.098
+DRONE_ARM_R = 0.31     # body centre -> rotor centre
+DRONE_ROTOR_R = 0.10
+
+
+def build_drone():
+    """Mobile player's drone: the tile's API (LED_00..47, Heart_0..4,
+    Button_<name>[_Symbol], Status_LED) on a small round body with 4 ducted
+    rotors (Rotor_0..3 spin in Godot), a glow underneath (Thruster) and a light
+    band around the rim (Drone_Band), both in the player's colour. +Y = forward (to the robot), like the tile."""
+    reset_scene()
+    white = material("Tile_White", (0.86, 0.86, 0.84), roughness=0.7)
+    alu = material("Tile_Aluminium", (0.75, 0.76, 0.78), metallic=0.8, roughness=0.35)
+    black = material("Tile_Black", (0.02, 0.02, 0.02), roughness=0.8)
+    led = material("LED", (0.15, 0.15, 0.15), roughness=0.3, emission=(0, 0, 0))
+    sym = material("Button_Symbol", (0.95, 0.95, 0.95), roughness=0.9, emission=(0, 0, 0),
+                   alpha=0.8)
+    glass = material("Glass", (0.9, 0.97, 0.97), roughness=0.0, alpha=0.06)
+    blade = material("Rotor_Blade", (0.08, 0.08, 0.09), metallic=0.3, roughness=0.4)
+    glow = material("Thruster", (0.1, 0.1, 0.1), roughness=0.3, emission=(0, 0, 0))
+
+    # body: a flat disc, rounded underside, aluminium rim
+    cylinder("Drone_Body", DRONE_R, 0.026, (0, 0, 0.013), verts=64, mat=black)
+    hull = sphere("Drone_Hull", DRONE_R * 0.92, (0, 0, 0.0), segs=48, rings=16, mat=black)
+    hull.scale.z = 0.28
+    tube("Drone_Rim", DRONE_R - 0.008, DRONE_R + 0.006, 0.0, DRONE_GLASS_TOP + 0.002, segs=64, mat=alu)
+    band = material("Drone_Band", (0.1, 0.1, 0.1), roughness=0.3, emission=(0, 0, 0))
+    tube("Drone_Band", DRONE_R + 0.006, DRONE_R + 0.011, 0.008, 0.026, segs=64, mat=band)   # player's colour
+    cylinder("Drone_Top", DRONE_R - 0.01, 0.004, (0, 0, DRONE_TOP - 0.002), verts=64, mat=white)
+    annulus("Drone_LED_Channel", DRONE_LED_R - 0.007, DRONE_LED_R + 0.007, DRONE_TOP + 0.0008,
+            segs=64, mat=black)
+    for i in range(LED_COUNT):     # LED_00 at the front (+Y), clockwise from above
+        a = math.pi / 2 - 2 * math.pi * i / LED_COUNT
+        box(f"LED_{i:02d}", (0.009, 0.006, 0.003),
+            (DRONE_LED_R * math.cos(a), DRONE_LED_R * math.sin(a), DRONE_TOP + 0.002),
+            rot=(0, 0, a + math.pi / 2), mat=led)
+    for i in range(HEART_COUNT):   # Heart_0 nearest the centre, towards the front
+        y = 0.022 + i * 0.019
+        prism(f"Heart_{i}_Frame", heart_outline(0.019), DRONE_TOP, DRONE_TOP + 0.0025,
+              loc=(0, y, 0), mat=black)
+        prism(f"Heart_{i}", heart_outline(0.014), DRONE_TOP, DRONE_TOP + 0.0035,
+              loc=(0, y, 0), mat=led)
+    glass_plate = cylinder("Glass_Plate", DRONE_R - 0.012, 0.004,
+                           (0, 0, DRONE_GLASS_TOP - 0.002), verts=64, mat=glass)
+    etched_buttons(glass_plate, DRONE_GLASS_TOP, DRONE_BUTTON_R, 0.55, sym)
+
+    # 4 arms with ducted rotors (diagonals, clear of the front)
+    for k in range(4):
+        a = math.radians(45 + 90 * k)
+        cx, cy = DRONE_ARM_R * math.cos(a), DRONE_ARM_R * math.sin(a)
+        mid = (DRONE_R + DRONE_ARM_R - DRONE_ROTOR_R) / 2
+        box(f"Arm_{k}", (DRONE_ARM_R - DRONE_ROTOR_R - DRONE_R + 0.03, 0.03, 0.016),
+            (mid * math.cos(a), mid * math.sin(a), 0.012), rot=(0, 0, a), mat=alu)
+        tube(f"Duct_{k}", DRONE_ROTOR_R, DRONE_ROTOR_R + 0.012, -0.012, 0.03, segs=48, mat=black)
+        duct = bpy.data.objects[f"Duct_{k}"]
+        duct.location = (cx, cy, 0)
+        torus(f"Duct_Lip_{k}", DRONE_ROTOR_R + 0.006, 0.006, (cx, cy, 0.03), mat=alu)
+        hub = cylinder(f"Rotor_{k}", 0.014, 0.012, (cx, cy, 0.016), verts=16, mat=alu)
+        for b in range(2):
+            blade_obj = box(f"Rotor_{k}_Blade_{b}", (DRONE_ROTOR_R * 1.8, 0.018, 0.003),
+                            (cx, cy, 0.016), rot=(0.25 if b == 0 else -0.25, 0, math.pi / 2 * b), mat=blade)
+            set_parent(blade_obj, hub)
+
+    # glow underneath (the player's colour) and the antenna with the status LED
+    disc("Thruster", DRONE_R * 0.55, 0.058, segs=48, mat=glow)
+    bpy.data.objects["Thruster"].rotation_euler = (math.pi, 0, 0)  # flipped: 5.8 cm below, facing down
+    cylinder("Antenna", 0.003, 0.09, (0, -DRONE_R + 0.03, DRONE_GLASS_TOP + 0.045), verts=8, mat=alu)
+    sphere("Status_LED", 0.009, (0, -DRONE_R + 0.03, DRONE_GLASS_TOP + 0.092), segs=12, rings=6, mat=led)
+
+    save_and_export("drone")
+
+
 if __name__ == "__main__":
     argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else ["all"]
     what = argv[0] if argv else "all"
@@ -997,3 +1081,5 @@ if __name__ == "__main__":
         build_arena()
     if what in ("room", "all"):
         build_room()
+    if what in ("drone", "all"):
+        build_drone()

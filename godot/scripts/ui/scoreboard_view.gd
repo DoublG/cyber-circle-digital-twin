@@ -1,17 +1,18 @@
 class_name ScoreboardView
 extends Control
-## Ranking shown on all screens after every round: the players in the game by
-## rounds survived, with this round's points, lives, their record (most rounds
-## survived ever) and overall place.
-## rows: [{name, tile, survived, lives, delta, out, record, rank}] sorted best first;
+## The game's standing on all screens after every round (after this round's
+## places: RankingView): the players in the game by rounds survived, with
+## lives, their record (most rounds survived ever) and overall place.
+## rows: [{name, tile, survived, lives, out, record, rank}] sorted best first;
 ## with this round's lives change also {lives_before, change, was_out}: the
 ## rows first show the lives as they were, reveal_lives() shows the change
 ## (+1 green, -1 red, 0 lives: GEËXTERMINEERD).
 
-const MAX_ROWS := 13
 const HEADER_HEIGHT := 168       # title + subtitle; the GEËXTERMINEERD banner replaces them
+const TWO_COLUMNS := 17          # from this many rows (mobile tiles): two columns side by side
 
 var _rows := []                  # [{data, panel, name, lives}]
+var _gap := 30                   # between the cells of a row (tighter in two columns)
 var _header: Control
 
 
@@ -45,19 +46,12 @@ func show_scores(title: String, subtitle: String, rows: Array, revealed := true)
 	if subtitle != "":
 		titles.add_child(Retro.label(38, Retro.TEAL, subtitle.to_upper()))
 
-	var n := mini(rows.size(), MAX_ROWS)
+	var n := rows.size()                          # (any number: mobile tiles too)
 	var px := 44 if n <= 8 else 30
-	var room := Control.new()                     # the rows scale down when they don't fit
-	room.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	room.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	box.add_child(room)
-	var list := VBoxContainer.new()
-	list.alignment = BoxContainer.ALIGNMENT_CENTER
-	list.add_theme_constant_override("separation", 10 if n <= 8 else 5)
-	room.add_child(list)
-	room.resized.connect(_fit_rows.bind(room, list))
-	list.minimum_size_changed.connect(_fit_rows.bind(room, list))
-	list.add_child(_row(px, Retro.DIM, ["#", "SPELER", "TEGEL", "PUNTEN", "LEVENS", "RONDES", "RECORD", "PLAATS"], null))
+	_gap = 30 if n < TWO_COLUMNS else 16
+	var cols := table(box, n)
+	for c in cols:
+		c.add_child(_row(px, Retro.DIM, ["#", "SPELER", "TEGEL", "LEVENS", "RONDES", "RECORD", "PLAATS"], null))
 	for i in n:
 		var r: Dictionary = rows[i]
 		var out: bool = r.out if revealed else r.get("was_out", r.out)
@@ -74,18 +68,17 @@ func show_scores(title: String, subtitle: String, rows: Array, revealed := true)
 			style = Retro.panel(Color(0.02, 0.16, 0.15), Retro.TEAL, 3, 14, 20)
 		var cells := ["%02d" % (i + 1) if not r.get("new", false) else "+",
 			r.name.to_upper() + ("  [UIT]" if out else ("  NIEUW!" if r.get("new", false) else "")),
-			"T%02d" % r.tile, "%+d" % r.delta if not r.get("new", false) else "", "♥".repeat(lives), str(r.get("survived", 0)),
+			Retro.tile_label(r.tile), "♥".repeat(lives), str(r.get("survived", 0)),
 			str(r.get("record", 0)), "#%d" % r.rank if r.get("rank", 0) > 0 else "-"]
 		var row := _row(px, col, cells, style)
-		if i != 0 and not r.out:  # colour the round points, lives, rounds and place
+		if i != 0 and not r.out:  # colour the lives, rounds and place
 			var h := row.get_child(0)
-			h.get_child(3).add_theme_color_override("font_color", Retro.GOOD if r.delta > 0 else (Retro.BAD if r.delta < 0 else Retro.DIM))
-			h.get_child(4).add_theme_color_override("font_color", Color(1.0, 0.2, 0.3))
-			h.get_child(5).add_theme_color_override("font_color", Retro.AMBER)
-			h.get_child(7).add_theme_color_override("font_color", Retro.TEAL)
-		list.add_child(row)
+			h.get_child(3).add_theme_color_override("font_color", Color(1.0, 0.2, 0.3))
+			h.get_child(4).add_theme_color_override("font_color", Retro.AMBER)
+			h.get_child(6).add_theme_color_override("font_color", Retro.TEAL)
+		cols[column(i, n, cols.size())].add_child(row)
 		_rows.append({"data": r, "panel": row, "name": row.get_child(0).get_child(1),
-			"lives": row.get_child(0).get_child(4)})
+			"lives": row.get_child(0).get_child(3)})
 		if revealed and r.get("out") and not r.get("was_out", true):
 			_mark_exterminated(_rows.back())
 		if r.get("new", false):                    # welcome: slides in, teal glow
@@ -99,13 +92,39 @@ func show_scores(title: String, subtitle: String, rows: Array, revealed := true)
 		_banner_if_exterminated()
 
 
-## The rows in their room: full width, scaled down (as a whole) if too tall.
-func _fit_rows(room: Control, list: Control) -> void:
-	var need := list.get_combined_minimum_size().y
-	var k := minf(1.0, room.size.y / need) if need > 0.0 else 1.0
-	list.scale = Vector2(k, k)
-	list.size = Vector2(room.size.x / k, maxf(need, room.size.y / k))
-	list.position = Vector2.ZERO
+## The table under the title: one column of rows, or two side by side from
+## TWO_COLUMNS rows on (the first half left); in a room that scales it down
+## (as a whole) when it is too tall, centred. Returns the columns (VBoxes).
+## (Also used by RankingView.)
+static func table(box: Container, n: int) -> Array[VBoxContainer]:
+	var room := Control.new()
+	room.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	room.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	box.add_child(room)
+	var t := HBoxContainer.new()
+	t.add_theme_constant_override("separation", 40)
+	room.add_child(t)
+	var cols: Array[VBoxContainer] = []
+	for k in (2 if n >= TWO_COLUMNS else 1):
+		var c := VBoxContainer.new()
+		c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		c.add_theme_constant_override("separation", 10 if n <= 8 else 5)
+		t.add_child(c)
+		cols.append(c)
+	var fit := func():
+		var need := t.get_combined_minimum_size().y
+		var k := minf(1.0, room.size.y / need) if need > 0.0 else 1.0
+		t.scale = Vector2(k, k)
+		t.size = Vector2(room.size.x / k, need)
+		t.position = Vector2(0, floorf(maxf(room.size.y - need * k, 0.0) / 2.0))
+	room.resized.connect(fit)
+	t.minimum_size_changed.connect(fit)
+	return cols
+
+
+## The column of row i (of n) in a table with `count` columns.
+static func column(i: int, n: int, count: int) -> int:
+	return i / ceili(float(n) / count)
 
 
 ## (rebuilt after the change, e.g. a player joined: the banner again)
@@ -195,15 +214,16 @@ func _row(px: int, col: Color, cells: Array, style: StyleBoxFlat) -> PanelContai
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", style if style else StyleBoxEmpty.new())
 	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 30)
+	h.add_theme_constant_override("separation", _gap)
 	panel.add_child(h)
-	var widths := [3, 0, 4, 6, 6, 6, 6, 6]   # in characters; 0 = take the rest
+	var widths := [3, 0, 4, 6, 6, 6, 6]   # in characters; 0 = take the rest
 	for k in cells.size():
 		var l := Retro.label(px, col, cells[k],
 			HORIZONTAL_ALIGNMENT_LEFT if k == 1 else HORIZONTAL_ALIGNMENT_RIGHT)
 		if widths[k] == 0:
 			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			l.clip_text = true
+			l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		else:
 			l.custom_minimum_size.x = widths[k] * px * 0.62
 		h.add_child(l)

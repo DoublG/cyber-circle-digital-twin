@@ -5,10 +5,19 @@ interface and the HTTP API, and follows / steers the game over MQTT.
         --mqtt ws://localhost:9001 --mqtt-user cybercircle --mqtt-password SECRET
 
 Web interface: http://<this pc>:8080/      API: http://<this pc>:8080/api/...
+Gamemaster app in a browser (iPhone): http://<this pc>:8080/gm/ (the Flutter web build;
+  the camera needs https: --ssl-cert / --ssl-key, see tools/make_cert.sh)
   game master  GET /api/questions, GET /api/players/{id}, GET /api/ranking,
                POST /api/games, POST /api/games/{id}/rounds|results|end
   displays     GET /api/master        (where the master is: the Pis connect to it)
-  app          POST /api/players {name, color, age} -> {id};  POST /api/players/{id}/assign {tile?}
+  app          POST /api/players {name, color, age, card?} -> {id};  POST /api/players/{id}/assign {tile?}
+  website sync PUT /api/cards/{code} {name, age, email?} (visitors register on the website with their card;
+               the gamemaster app the same for a visitor without a phone)
+  setup        PUT /api/layout {t01_clock} (where T01 is, as on a clock; the entrance at 6)
+               GET|POST /api/gamemasters, PUT|DELETE /api/gamemasters/{id} {name, color}
+  gamemaster   POST /api/session {device, gamemaster} (sign of life: who is logged in, on the dashboard)
+  gamemaster   GET /api/config (where MQTT, the layout), GET /api/cards/{code} (who has this QR card),
+               POST /api/players {..., card}, POST /api/players/{id}/assign, POST /api/tiles/{n}/leave
   interface    everything else, live updates from GET /api/live (server-sent events)
 """
 
@@ -20,12 +29,14 @@ import time
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from urllib.parse import urlparse, urlunparse
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from db import Database
+from db import FLOOR_TILES, PLACES, Database
 from mqtt_link import MqttLink
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -36,10 +47,33 @@ class PlayerIn(BaseModel):
     name: str
     color: str = "#ffcc00"
     age: int = 0
+    card: str | None = None                  # the QR card's code
+
+
+class LayoutIn(BaseModel):
+    t01_clock: float                         # where T01 is, as on a clock seen from above (the entrance at 6)
+
+
+class CardIn(BaseModel):
+    name: str
+    age: int = 0
+    email: str | None = None
+
+
+class GamemasterIn(BaseModel):
+    name: str
+    color: str
+
+
+class SessionIn(BaseModel):
+    device: str                              # the phone / browser (a random id the app keeps)
+    gamemaster: int = 0                      # 0 = logged out
 
 
 class AssignIn(BaseModel):
-    tile: int = 0                            # 0 = any free tile
+    tile: int = 0                            # 0 = any free floor tile; 14-18 = a mobile player's drone (M1-M5)
+    color: str | None = None                 # the tile lights up in this colour so the visitor finds it
+    gamemaster: int = 0                      # who assigns (their colour wins; shown in the event feed)
 
 
 class QuestionIn(BaseModel):
@@ -108,7 +142,10 @@ class TileIn(BaseModel):
     enabled: bool | None = None
 
 
-def create_app(db: Database, link: MqttLink) -> FastAPI:
+GM_WEB = os.path.join(HERE, "..", "gamemaster_app", "build", "web")
+
+
+def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB) -> FastAPI:
     listeners: set[asyncio.Queue] = set()
     loop: dict = {}
 
@@ -132,10 +169,13 @@ def create_app(db: Database, link: MqttLink) -> FastAPI:
         link.stop()
 
     app = FastAPI(title="Cyber Circle control", lifespan=lifespan)
+    online_ref = []                          # (the gamemasters online: defined with their routes below)
 
     def live_snapshot():
         return {"mqtt": link.online, "state": link.state, "nodes": link.node_list(), "master": link.master,
-                "events": list(link.events), "devices": link.device_list(), "mode": db.setting("mode", "setup")}
+                "events": list(link.events), "devices": link.device_list(), "mode": db.setting("mode", "setup"),
+                "t01_clock": float(db.setting("t01_clock", "12") or 12),
+                "gamemasters_online": online_ref[0]() if online_ref else []}
 
     # ------------------------------------------------------------ live (web interface)
 
@@ -217,12 +257,18 @@ def create_app(db: Database, link: MqttLink) -> FastAPI:
                 "attacked": {"attacked": [tile]},          # the robot hits the player: -1 life
                 "attack": {"attack": [tile]},              # the player attacks the robot
                 "fire": {"robot": "fire", "tile": tile}}   # the robot turns and fires (show)
-        if action not in cmds or not 1 <= tile <= 13:
+        if action not in cmds or not 1 <= tile <= PLACES:   # 13 floor tiles + 5 mobile players (drones)
             raise HTTPException(404, "unknown action or tile")
         link.command(cmds[action])
         return {"ok": True}
 
     # ------------------------------------------------------------ tiles: places and physical tiles
+
+    @app.post("/api/devices/{device}/identify")
+    def identify(device: str):
+        """Light up a physical tile so the crew finds it (setup, swapping a broken one)."""
+        link.identify(device)
+        return {"ok": True}
 
     @app.get("/api/tiles")
     def tiles():
@@ -233,7 +279,7 @@ def create_app(db: Database, link: MqttLink) -> FastAPI:
 
     @app.put("/api/tiles/{number}")
     def set_tile(number: int, t: TileIn):
-        if not 1 <= number <= 13:
+        if not 1 <= number <= PLACES:
             raise HTTPException(404, "unknown tile")
         current = next(r for r in db.tiles() if r["number"] == number)
         if t.device != "-" and db.setting("mode", "setup") != "setup" and current["enabled"]:
@@ -283,7 +329,102 @@ def create_app(db: Database, link: MqttLink) -> FastAPI:
 
     @app.post("/api/players")
     def add_player(p: PlayerIn):
-        return {"id": db.add_player(p.name, p.color, p.age)}
+        return {"id": db.add_player(p.name, p.color, p.age, (p.card or "").strip() or None)}
+
+    @app.get("/api/cards/{code}")
+    def card(code: str):
+        """The player registered with this QR card (the gamemaster app scans it)."""
+        p = db.player_by_card(code.strip())
+        if p is None:
+            raise HTTPException(404, "card not registered")
+        return p
+
+    @app.put("/api/cards/{code}")
+    def put_card(code: str, c: CardIn):
+        """Who registered with this card: the registration website's sync, or a
+        gamemaster for a visitor without a phone."""
+        if not code.strip() or not c.name.strip():
+            raise HTTPException(422, "card code and name needed")
+        return {"id": db.upsert_card(code.strip(), c.name.strip(), c.age, (c.email or "").strip() or None)}
+
+    # ------------------------------------------------------------ gamemasters (the helpers with the app)
+
+    sessions: dict = {}                      # device -> {gamemaster, seen, since}
+    SESSION_TIMEOUT = 45                     # s without a sign of life: logged out (phone closed, away)
+
+    def online():
+        now = time.time()
+        for d in [d for d, s in sessions.items() if now - s["seen"] > SESSION_TIMEOUT]:
+            del sessions[d]
+        out = []
+        for d, s in sessions.items():
+            gm = db.gamemaster(s["gamemaster"])
+            if gm:
+                out.append({**gm, "device": d, "since": s["since"]})
+        return sorted(out, key=lambda g: g["name"])
+
+    online_ref.append(online)
+
+    @app.get("/api/gamemasters")
+    def gamemasters():
+        return db.gamemasters()
+
+    @app.post("/api/gamemasters")
+    def add_gamemaster(g: GamemasterIn):
+        gid = db.save_gamemaster(g.name.strip(), g.color)
+        changed("gamemasters")
+        return {"id": gid}
+
+    @app.put("/api/gamemasters/{gid}")
+    def put_gamemaster(gid: int, g: GamemasterIn):
+        db.save_gamemaster(g.name.strip(), g.color, gid)
+        changed("gamemasters")
+        return {"ok": True}
+
+    @app.delete("/api/gamemasters/{gid}")
+    def delete_gamemaster(gid: int):
+        db.remove_gamemaster(gid)
+        changed("gamemasters")
+        return {"ok": True}
+
+    @app.post("/api/session")
+    def session(s: SessionIn):
+        """The app's sign of life (every few seconds) with who uses it now;
+        gamemaster 0: logged out. The dashboard shows who is logged in."""
+        old = sessions.get(s.device)
+        if s.gamemaster and db.gamemaster(s.gamemaster):
+            fresh = old is None or old["gamemaster"] != s.gamemaster
+            sessions[s.device] = {"gamemaster": s.gamemaster, "seen": time.time(),
+                                  "since": time.strftime("%H:%M") if fresh else old["since"]}
+            if fresh:
+                changed("gamemasters")
+        elif sessions.pop(s.device, None):
+            changed("gamemasters")
+        return {"online": online()}
+
+    @app.get("/api/config")
+    def config(request: Request):
+        """For the gamemaster app: where the MQTT broker is (localhost as the
+        address the app used for this server), the topic prefix and the places."""
+        u = urlparse(link.url)
+        host = request.url.hostname if u.hostname in ("localhost", "127.0.0.1", "0.0.0.0") else u.hostname
+        return {"mqtt": urlunparse(u._replace(netloc=f"{host}:{u.port}" if u.port else host)),
+                "prefix": link.prefix, "floor_tiles": FLOOR_TILES, "places": PLACES, "t01_clock": t01_clock()}
+
+    def t01_clock():
+        try:
+            return float(db.setting("t01_clock", "12"))
+        except ValueError:
+            return 12.0
+
+    @app.put("/api/layout")
+    def put_layout(l: LayoutIn):
+        """Setup: how the circle stands in this venue - T01 at this hour, the
+        entrance at 6 (then clockwise); the gamemaster apps draw their plan so."""
+        h = l.t01_clock % 12 or 12.0
+        db.set_setting("t01_clock", h)
+        changed("layout")
+        return {"t01_clock": h}
 
     @app.get("/api/players")
     def players(search: str = "", limit: int = 50):
@@ -300,7 +441,20 @@ def create_app(db: Database, link: MqttLink) -> FastAPI:
     def assign(pid: int, a: AssignIn):
         if db.player(pid) is None:
             raise HTTPException(404, "unknown player")
-        link.command({"assign": pid, "tile": a.tile} if a.tile else {"assign": pid})
+        if not 0 <= a.tile <= PLACES:
+            raise HTTPException(404, "unknown tile")
+        cmd = {"assign": pid}
+        if a.tile:
+            cmd["tile"] = a.tile
+        gm = db.gamemaster(a.gamemaster) if a.gamemaster else None
+        color = gm["color"] if gm else a.color
+        if color:
+            cmd["color"] = color
+        link.command(cmd)
+        if gm:
+            link.events.appendleft({"text": f"GAMEMASTER {gm['name'].upper()}: {db.player(pid)['name'].upper()}",
+                                    "color": gm["color"], "time": time.strftime("%H:%M:%S")})
+            changed("event")
         return {"ok": True}
 
     # ------------------------------------------------------------ questions
@@ -360,6 +514,8 @@ def create_app(db: Database, link: MqttLink) -> FastAPI:
     # ------------------------------------------------------------ web interface
 
     app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")
+    if os.path.isdir(gm_web):                # the gamemaster app for browsers (flutter build web --base-href /gm/)
+        app.mount("/gm", StaticFiles(directory=gm_web, html=True), name="gm")
 
     @app.get("/")
     def index():
@@ -377,13 +533,18 @@ def main():
     ap.add_argument("--prefix", default="cybercircle")
     ap.add_argument("--host", default="0.0.0.0", help="0.0.0.0 = reachable on the LAN")
     ap.add_argument("--port", type=int, default=8080)
+    ap.add_argument("--ssl-cert", default="", help="https (the gamemaster web app's camera on iPhones): certificate ...")
+    ap.add_argument("--ssl-key", default="", help="... and its key (tools/make_cert.sh makes a self-signed pair)")
+    ap.add_argument("--gm-web", default=GM_WEB, help="the gamemaster app's web build, served at /gm/")
     a = ap.parse_args()
     db = Database(a.db)
     if not db.question_rows():               # a fresh database: start with the example questions
         print("control: imported %d questions" % db.import_questions(QUESTIONS_JSON))
     link = MqttLink(a.mqtt, a.prefix, a.mqtt_user, a.mqtt_password)
-    print(f"control: database {os.path.normpath(a.db)}, MQTT {a.mqtt}, web http://{a.host}:{a.port}/")
-    uvicorn.run(create_app(db, link), host=a.host, port=a.port, log_level="warning")
+    scheme = "https" if a.ssl_cert else "http"
+    print(f"control: database {os.path.normpath(a.db)}, MQTT {a.mqtt}, web {scheme}://{a.host}:{a.port}/")
+    uvicorn.run(create_app(db, link, a.gm_web), host=a.host, port=a.port, log_level="warning",
+                ssl_certfile=a.ssl_cert or None, ssl_keyfile=a.ssl_key or None)
 
 
 if __name__ == "__main__":

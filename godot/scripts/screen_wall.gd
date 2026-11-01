@@ -8,10 +8,18 @@ extends CanvasLayer
 ##   the name of the player who registered in the app). Nothing resizes when
 ##   players come and go.
 ## Every player camera is fixed on its tile, at eye height, looking at the robot.
+## Mobile players (drones, M1-M5) have screens of their own (mobile_groups,
+## after the floor screens): their camera follows the drone in third person -
+## behind and well above it, so their own drone is low in the view and the
+## robot fully visible above it; it flies, swoops and falls with the drone. Those screens are not fixed:
+## only the mobile players who play (or are invited) get a view, side by side
+## from left to right, growing to fill the screen (1 player: the whole
+## screen); nobody: the free slots.
 ## A player's HUD (plate, popups, round info) is laid out for a full 1920x1080
 ## screen and scaled with its cell, so it looks the same in every split.
 ## In rounds played on the tile itself (GameRound.on_tile) the camera tilts down
-## to the player's own tile once the round starts, with an arrow hint.
+## to the player's own tile once the round starts, with an arrow hint (a drone
+## camera swings up over the drone and looks down on its LEDs and icons).
 ## That is the "players" mode (lobby and personal rounds). In "shared" mode
 ## (shared rounds, intros, scoreboards) every screen shows the same view.
 ##
@@ -29,8 +37,10 @@ const GUTTER := 10                          # px of screen background between sp
 @export var observer_page := true
 ## Tile ids shown on each screen (screen 1 first). 13 tiles over 5 screens.
 @export var screen_groups: Array = [[1, 2, 3], [4, 5, 6], [7, 8, 9], [10, 11], [12, 13]]
-## multi_window: the monitor (OS numbering) of screen 1, 2, ... and then the
-## overview page. Empty / too short: screen k on monitor k-1, the overview next.
+## The mobile players' screens (drones M1-M5 = ids 14-18), after the floor screens.
+@export var mobile_groups: Array = [[14, 15], [16, 17, 18]]
+## multi_window: the monitor (OS numbering) of screen 1, 2, ... (the floor
+## screens, then the mobile screens) and then the overview page. Empty / too short: screen k on monitor k-1, the overview next.
 @export var monitors: Array = []
 @export var eye_height := 1.45          # camera height above the tile (m)
 @export var player_fov := 70.0
@@ -40,6 +50,9 @@ const GUTTER := 10                          # px of screen background between sp
 @export var tile_look_ahead := 0.3      # m in front of the player's feet (towards the robot)
 @export var tile_fov := 48.0            # zoom in on the tile while tilting down
 @export var hud_min_scale := 0.8        # narrow (3 side by side) views: keep the HUD readable
+@export var drone_cam_back := 0.9       # drone camera (third person): m behind the drone ...
+@export var drone_cam_up := 1.6         # ... and above it: looking down steeply, the drone under the robot
+@export var drone_cam_aim := 0.45       # aim between the robot (0) and the drone (1)
 
 var arena: Node3D                       # set by arena.gd
 var _screens: Array[Control] = []       # one root Control per physical screen
@@ -191,11 +204,16 @@ func refresh() -> void:
 			shared_views.append(view)
 			_add_timer_label(screen)
 			continue
-		var row := HBoxContainer.new()
+		var mobile := k >= screen_groups.size()
+		var row := HBoxContainer.new()             # left to right
 		row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT, Control.PRESET_MODE_MINSIZE, GUTTER)
 		row.add_theme_constant_override("separation", GUTTER)
 		screen.add_child(row)
-		for id in screen_groups[k]:               # fixed layout: one equal slot per tile
+		var ids: Array = groups()[k]
+		if mobile:                                # mobile screen: only who plays / is invited, scaled up
+			var shown := ids.filter(func(id): return arena.is_playing(id) or arena.is_pending(id))
+			ids = shown if not shown.is_empty() else ids
+		for id in ids:                            # floor screens: fixed, one equal slot per tile
 			row.add_child(_player_view(id) if arena.is_playing(id) else _tile_slot(id))
 		_add_timer_label(screen)
 	_test_patterns(arena.game.mode == GameManager.Mode.SETUP)
@@ -248,7 +266,7 @@ func update_player(tile_id: int) -> void:
 		return
 	var hud: Dictionary = _huds[tile_id]
 	var tile: CyberTile = arena.tiles[tile_id - 1]
-	hud.tile.text = "T%02d" % tile_id
+	hud.tile.text = Retro.tile_label(tile_id)
 	hud.name.text = arena.player_name(tile_id).to_upper().left(10)
 	hud.lives.text = "♥".repeat(tile.health) + "♡".repeat(tile.max_health - tile.health)
 	var game: GameManager = arena.game
@@ -276,7 +294,24 @@ func _player_view(tile_id: int) -> Control:
 	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cell.add_child(hud)
 	cell.resized.connect(func(): _fit_hud(cell, hud))
-	if _look_down and not tile.is_dead and not arena.dying.has(tile_id) and arena.game.in_round(tile_id):
+	if tile is DroneTile:             # the camera flies with the drone
+		var rig := DroneCam.new()
+		rig.wall = self
+		rig.drone = tile
+		rig.cam = cell.get_meta(&"camera")
+		cell.add_child(rig)
+		rig.follow()
+		if _look_down and not tile.is_dead and not arena.dying.has(tile_id) and arena.game.in_round(tile_id):
+			if _tilt_done:
+				rig.down = 1.0
+			else:
+				var tw := rig.create_tween()
+				tw.tween_interval(tilt_delay)
+				tw.tween_property(rig, "down", 1.0, tilt_time).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+				var hint := LookDownHint.new()
+				hint.lifetime = tilt_delay + tilt_time + 2.0
+				hud.add_child(hint)
+	elif _look_down and not tile.is_dead and not arena.dying.has(tile_id) and arena.game.in_round(tile_id):
 		# (dying, or waiting for the next round: the view stays on the robot)
 		var tile_view := Transform3D(Basis(), eye).looking_at(
 			tile.global_position + to_robot * tile_look_ahead, robot_view.basis.y)
@@ -382,6 +417,42 @@ func _tilt(cam: Camera3D, from: Transform3D, to: Transform3D) -> void:
 		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 
 
+## The floor screens and then the mobile screens: the tile ids of each screen.
+func groups() -> Array:
+	return screen_groups + mobile_groups
+
+
+## A drone player's camera, third person: behind and well above the drone,
+## looking down past it at the robot - the drone low in the view, the robot
+## above it (the drone flies higher than the robot: from just behind it would
+## cover the robot). down = 1: over the drone, looking down at its top (LEDs,
+## icons; the robot side up), for the rounds on the tile.
+class DroneCam:
+	extends Node
+	var wall: ScreenWall
+	var drone: DroneTile
+	var cam: Camera3D
+	var down := 0.0
+
+	func _process(_delta: float) -> void:
+		follow()
+
+	func follow() -> void:
+		if not is_instance_valid(drone) or not cam.is_inside_tree():
+			return
+		var p := drone.global_position
+		var out := Vector3(p.x, 0, p.z).normalized()
+		if out.is_zero_approx():
+			return
+		var r := minf(Vector2(p.x, p.z).length() + wall.drone_cam_back, 6.0)   # (inside the room)
+		var eye := Vector3(out.x * r, p.y + wall.drone_cam_up, out.z * r)
+		var chase := Transform3D(Basis(), eye).looking_at(wall.look_at.lerp(p, wall.drone_cam_aim), Vector3.UP)
+		var over := Transform3D(Basis(), p + Vector3(0, 0.95, 0) + out * 0.3).looking_at(
+			p + Vector3(0, 0.05, 0) - out * 0.05, -out)
+		cam.global_transform = chase.interpolate_with(over, down)
+		cam.fov = lerpf(wall.player_fov, wall.tile_fov, down)
+
+
 func _label(font_size: int, color: Color) -> Label:
 	var l := Label.new()
 	l.add_theme_font_size_override("font_size", font_size)
@@ -462,14 +533,15 @@ func _test_patterns(on: bool) -> void:
 		tp.name = "TestPattern"
 		tp.screen_number = k + 1
 		tp.screen_count = _screens.size()
-		tp.tiles = screen_groups[k] if k < screen_groups.size() else []
+		tp.tiles = groups()[k] if k < groups().size() else []
 		var m: int = int(monitors[k]) if k < monitors.size() else k
 		tp.output = "MONITOR %d" % m if multi_window else "PREVIEW"
 		tp.node_name = node
 		screen.add_child(tp)
 
 
-## Preview: screens 1-3 on the top row, 4-5 below, each kept at 16:9.
+## Preview: 3 per row (floor screens, mobile screens, then the overview), each
+## kept at 16:9 - 8 panes fill a 16:9 window.
 func _build_preview() -> void:
 	var back := ColorRect.new()
 	back.color = Color(0.08, 0.08, 0.1)
@@ -479,8 +551,8 @@ func _build_preview() -> void:
 	rows.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(rows)
 	var row: HBoxContainer
-	for k in screen_groups.size():
-		if k == 0 or k == 3:
+	for k in groups().size():
+		if k % 3 == 0:
 			row = HBoxContainer.new()
 			row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 			row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -491,6 +563,11 @@ func _build_preview() -> void:
 		row.add_child(aspect)
 		_new_screen(aspect)
 	if observer_page:
+		if groups().size() % 3 == 0:
+			row = HBoxContainer.new()
+			row.size_flags_vertical = Control.SIZE_EXPAND_FILL
+			row.alignment = BoxContainer.ALIGNMENT_CENTER
+			rows.add_child(row)
 		var aspect := AspectRatioContainer.new()
 		aspect.ratio = 16.0 / 9.0
 		aspect.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -500,7 +577,7 @@ func _build_preview() -> void:
 
 ## One screen per monitor: screen 1 in the main window, the others in windows.
 func _build_windows() -> void:
-	for k in screen_groups.size():
+	for k in groups().size():
 		if k == 0:
 			_place(get_window(), 0)
 			_new_screen(self)
@@ -516,7 +593,7 @@ func _build_windows() -> void:
 		win.title = "Cyber Circle - overzicht"
 		win.size = Vector2i(1280, 720)
 		add_child(win)
-		_place(win, screen_groups.size())
+		_place(win, groups().size())
 		_add_observer_page(win)
 
 
@@ -526,13 +603,13 @@ func _build_windows() -> void:
 func _place(win: Window, k: int) -> void:
 	var count := DisplayServer.get_screen_count()
 	var m: int = int(monitors[k]) if k < monitors.size() else k
-	var windows := screen_groups.size() + (1 if observer_page else 0)
+	var windows := groups().size() + (1 if observer_page else 0)
 	if count >= windows and m < count:
 		win.position = DisplayServer.screen_get_position(m)
 		win.mode = Window.MODE_FULLSCREEN
 		return
 	var area := DisplayServer.screen_get_usable_rect(0)
-	var cols := 3
+	var cols := 4
 	var rows := ceili(windows / float(cols))
 	var cell := Vector2i(area.size.x / cols, area.size.y / rows)
 	var size := Vector2i(cell.x, cell.x * 9 / 16)

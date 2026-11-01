@@ -42,8 +42,16 @@ func _ready() -> void:
 		arena.screen_wall.update_player(id)
 	await get_tree().create_timer(3.0).timeout
 	await _shot("28_plates_with_rank")
-	game.skip()                                # end the round: scoreboard
-	while arena.screen_wall.shared_views.is_empty():
+	var cyc: CycloneRound = game.current       # places: Anna 1, Bram and Gijs 2, Daan last (on his last life)
+	for p in [[1, 5], [2, 3], [3, 3], [4, 1]]:
+		cyc.state[p[0]].best = p[1]
+	arena.tiles[3].health = 1
+	game.skip()                                # end the round: UITSLAG, then the scoreboard
+	while not (not arena.screen_wall.shared_views.is_empty() and arena.screen_wall.shared_views[0] is RankingView):
+		await get_tree().process_frame
+	await get_tree().create_timer(4.0).timeout # (rows and lives badges in)
+	await _shot("28b_uitslag")
+	while not arena.screen_wall.shared_views[0] is ScoreboardView:
 		await get_tree().process_frame
 	await get_tree().create_timer(0.5).timeout
 	await _shot("29_scoreboard_record_rank")

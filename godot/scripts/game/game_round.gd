@@ -10,6 +10,9 @@ var rules := ""
 var mode := "personal"
 var on_tile := false              # played on the tile itself: player cameras tilt down to it
 var gives_lives := true           # the round can win a life (the randomizer's director uses it)
+var ranked := true                # the round has places (1, 2, 3 ...); the quiz has none
+var progress_label := "PUNTEN"     # what decides the places (progress), on the UITSLAG board
+var can_repeat := false           # the randomizer may pick it twice in a row (the quiz)
 var duration := 45.0              # seconds; shared rounds may end earlier via is_finished()
 var game: GameManager
 var players: Array[int] = []      # tile ids taking part in this round
@@ -123,6 +126,28 @@ func life_changes() -> Dictionary:
 ## several 1st and several 2nd places. Shows them (popups, event feed).
 ## Returns {tile_id: place}.
 func rank_result() -> Dictionary:
+	var result := places()
+	var alive := result.keys()
+	var levels: int = result.values().max() if not result.is_empty() else 0
+	if levels < 2:
+		return result                      # everyone equally far
+	for place in range(1, levels + 1):
+		var names := alive.filter(func(id): return result[id] == place).map(
+			func(id): return game.arena.player_name(id).to_upper())
+		game.log_event("%dE PLAATS: %s" % [place, ", ".join(names)], Retro.AMBER if place == 1 else Retro.CREAM)
+	for id in alive:
+		var last: bool = result[id] == levels
+		game.screen_wall.popup(id, "LAATSTE" if last else "%dE PLAATS" % result[id],
+			Retro.BAD if last else (Retro.GOOD if result[id] == 1 else Retro.CREAM), false)
+	return result
+
+
+## The places only (no popups): {tile_id: place}, 1 = best, shared when equal
+## (1, 1, 2, ...): the UITSLAG board after the round.
+## Rounds without places (ranked = false): {}.
+func places() -> Dictionary:
+	if not ranked:
+		return {}
 	var alive := players.filter(func(id): return not tile(id).is_dead and game.arena.is_playing(id))
 	var levels := []
 	for id in alive:
@@ -130,20 +155,10 @@ func rank_result() -> Dictionary:
 			levels.append(progress(id))
 	levels.sort()
 	levels.reverse()                       # best first
-	var places := {}
+	var out := {}
 	for id in alive:
-		places[id] = levels.find(progress(id)) + 1
-	if levels.size() < 2:
-		return places                      # everyone equally far
-	for place in range(1, levels.size() + 1):
-		var names := alive.filter(func(id): return places[id] == place).map(
-			func(id): return game.arena.player_name(id).to_upper())
-		game.log_event("%dE PLAATS: %s" % [place, ", ".join(names)], Retro.AMBER if place == 1 else Retro.CREAM)
-	for id in alive:
-		var last: bool = places[id] == levels.size()
-		game.screen_wall.popup(id, "LAATSTE" if last else "%dE PLAATS" % places[id],
-			Retro.BAD if last else (Retro.GOOD if places[id] == 1 else Retro.CREAM), false)
-	return places
+		out[id] = levels.find(progress(id)) + 1
+	return out
 
 
 func tile(tile_id: int) -> CyberTile:

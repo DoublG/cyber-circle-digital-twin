@@ -17,6 +17,8 @@ func _ready() -> void:
 	game.use_database("")                 # screenshots: no database writes
 	game.intro_time = 2.0
 	game.auto_start_delay = 0.0
+	game.random_rounds = false
+	game.round_types = [CycloneRound, QuizRound]
 	_run()
 
 
@@ -45,6 +47,9 @@ func _run() -> void:
 
 	game.skip()
 	await _wait(1.0)
+	await _shot("5a_uitslag")
+	game.skip()                           # UITSLAG -> scoreboard
+	await _wait(1.0)
 	await _shot("5_scoreboard")
 	game.skip()
 	await _until(func(): return game.state == GameManager.State.PLAYING)
@@ -59,10 +64,10 @@ func _run() -> void:
 	await _wait(1.0)
 	await _shot("6_quiz_shared")
 	await _until(func(): return quiz._phase == "answers")
-	await _wait(0.3)
+	await _wait(1.2)                   # (after the names dropped in)
 	await _shot("6b_quiz_answers")
 	await _until(func(): return quiz._phase == "reveal")
-	await _wait(0.3)
+	await _wait(1.5)                   # (after the reveal animation)
 	await _shot("7_quiz_reveal")
 
 	# a question with a video, then one with a long text

@@ -26,7 +26,7 @@ func _ready() -> void:
 	check(qt.default == 15.0 and qt.value == 15.0 and qt.unit == "s", "quiz answer time: default 15 s")
 
 	game.apply_settings({"game": {"tempo": 2.0, "scoreboard_time": 99999, "queue_length": 2, "streak_bonus": 4},
-		"quiz": {"question_time": 20, "points_per_answer": 25, "bogus": 3},
+		"quiz": {"question_time": 20, "reveal_time": 8, "bogus": 3},
 		"cyclone": {"points_miss": -4, "light_speed": 1.5}, "nonsense": {"x": 1}})
 	check(game.tempo == 2.0 and game.streak_bonus == 4, "game settings at once")
 	check(game.scoreboard_time == 30.0, "clamped to the range (scoreboard max 30 s)")
@@ -41,8 +41,8 @@ func _ready() -> void:
 	await _until(func(): return game.state == GameManager.State.INTRO)
 	var quiz: QuizRound = game.current
 	check(is_equal_approx(quiz.question_time, 10.0), "quiz: 20 s answer time at tempo 2 = 10 s (%s)" % quiz.question_time)
-	check(quiz.points_per_answer == 25, "quiz: 25 points per answer")
-	check("25 punten" in quiz.rules and "4 juiste antwoorden" in quiz.rules, "rules text follows the settings")
+	check(is_equal_approx(quiz.reveal_time, 4.0), "quiz: 8 s reveal at tempo 2 = 4 s")
+	check("4 juiste antwoorden" in quiz.rules, "rules text follows the settings")
 	check(is_equal_approx(game._timer, 3.5), "intro 7 s at tempo 2 = 3.5 s")
 	game.skip()
 	await _until(func(): return game.state == GameManager.State.PLAYING)
@@ -114,11 +114,11 @@ func _ready() -> void:
 	qr.game = game
 	var seen := {}
 	var cats := {}
-	for r in 4:
+	for r in 12:                                                  # (one question per round)
 		for q in qr._pick_questions(game.all_questions()):
 			seen[qr._qid(q)] = true
 			cats[q.category] = cats.get(q.category, 0) + 1
-	print("    12 questions over 4 rounds: ", cats)
+	print("    12 questions over 12 rounds: ", cats)
 	check(seen.size() == 12, "no question twice while there are unasked ones (14 questions)")
 	check(cats.size() == 3 and cats.values().min() >= 2, "every category comes up (drought protection)")
 	game.question_memory = {"count": 6, "since": {"Computers": 0, "Programmeren": 1, "Online veiligheid": 6}, "asked": {}}

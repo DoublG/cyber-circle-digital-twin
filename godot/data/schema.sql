@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS players (
     name       TEXT    NOT NULL,
     color      TEXT    NOT NULL DEFAULT '#ffcc00',   -- the colour picked in the app
     age        INTEGER NOT NULL DEFAULT 0,           -- 0 = unknown
+    card       TEXT,                                 -- the QR card's code (the gamemaster app scans it)
+    email      TEXT,                                 -- optional (registered at the gamemaster, without a phone)
     created_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS questions (
@@ -61,6 +63,12 @@ CREATE TABLE IF NOT EXISTS tiles (
     number  INTEGER PRIMARY KEY,                  -- 1..13: the place around the robot
     device  TEXT UNIQUE,                          -- the physical tile on that place (its own id)
     enabled INTEGER NOT NULL DEFAULT 1            -- 0 = out of service: not used in the game
+);
+CREATE TABLE IF NOT EXISTS gamemasters (          -- the helpers at the entrance (control server)
+    id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    name   TEXT    NOT NULL,
+    color  TEXT    NOT NULL,                          -- the tiles of the visitors they assign light up in it
+    active INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,                       -- e.g. "mode": setup / closed / open / paused

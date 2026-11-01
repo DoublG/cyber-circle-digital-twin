@@ -2,6 +2,9 @@
 // through the control server's JSON API.
 const $ = (s, el = document) => el.querySelector(s);
 const STATE_NAMES = { LOBBY: "WACHT OP SPELERS", INTRO: "INTRO", PLAYING: "BEZIG", SCOREBOARD: "SCOREBORD" };
+const FLOOR_TILES = 13, PLACES = 18;       // T01-T13 around the robot, M1-M5 the mobile players (drones)
+// a place as the screens show it: "T03" / "M2"
+const label = t => t <= FLOOR_TILES ? `T${String(t).padStart(2, "0")}` : `M${t - FLOOR_TILES}`;
 let live = { state: {}, nodes: [], events: [], master: {}, mode: "setup" };
 const MODE_NAMES = { setup: "SETUP", closed: "GESLOTEN", open: "OPEN", paused: "PAUZE" };
 const MODE_ACTIONS = {          // [target mode, label, confirm?]
@@ -25,7 +28,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button, .tab").forEach(e => e.classList.remove("active"));
   b.classList.add("active");
   $(`#tab-${b.dataset.tab}`).classList.add("active");
-  ({ players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: loadTiles, settings: loadSettings })[b.dataset.tab]?.();
+  ({ gamemasters: loadGamemasters, players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: loadTiles, settings: loadSettings })[b.dataset.tab]?.();
 });
 
 // ---------------------------------------------------------------- live
@@ -37,7 +40,7 @@ function connectLive() {
 
 function renderLive() {
   const s = live.state || {};
-  const st = STATE_NAMES[s.state] || (s.state ? s.state : "GEEN MASTER");
+  const st = s.state === "SCOREBOARD" && s.uitslag ? "UITSLAG" : STATE_NAMES[s.state] || (s.state ? s.state : "GEEN MASTER");
   $("#status").textContent = s.round && s.state !== "LOBBY" ? `${st}: ${String(s.round).toUpperCase()}` : st;
   $("#timer").textContent = s.timer || "";
   const master = live.master?.node ? `master: ${live.master.node}` : "geen master gekozen";
@@ -48,24 +51,37 @@ function renderLive() {
     `<button data-mode="${m}" ${ask ? `data-ask="${esc(ask)}"` : ""} class="${m === "closed" && live.mode !== "setup" ? "danger" : ""}">${label}</button>`).join("");
   renderPlan(s);
   renderTiles(s);
+  renderOnline();
   $("#events").innerHTML = (live.events || []).map(e =>
     `<li><span class="t">${esc(e.time)}</span><span style="color:${esc(e.color || "")}">${esc(e.text)}</span></li>`).join("");
   renderNodes();
-  if ($("#tab-tiles").classList.contains("active")) renderTileTable();
+  if ($("#tab-tiles").classList.contains("active")) { renderTileTable(); renderLayout(); }
 }
 
+// the live places: the floor tiles, then the mobile players (drones)
 function renderTiles(s) {
+  const floor = s.floor_tiles || FLOOR_TILES, count = s.tile_count || PLACES;
+  const players = Object.fromEntries((s.players || []).map(p => [p.tile, p]));
+  $("#tiles").innerHTML = tileCards(s, 1, floor);
+  $("#mobile-tiles").innerHTML = tileCards(s, floor + 1, count);
+  const n = (a, b) => Object.keys(players).filter(t => t >= a && t <= b).length;
+  $("#tiles-count").textContent = `${n(1, floor)} / ${floor} spelers`;
+  $("#mobile-count").textContent = `${n(floor + 1, count)} / ${count - floor} spelers · toewijzen bij Spelers`;
+}
+
+function tileCards(s, from, to) {
   const players = Object.fromEntries((s.players || []).map(p => [p.tile, p]));
   const pending = Object.fromEntries((s.pending || []).map(p => [p.tile, p]));
   let html = "";
-  for (let t = 1; t <= 13; t++) {
+  for (let t = from; t <= to; t++) {
     const p = players[t], inv = pending[t];
+    const mobile = t > FLOOR_TILES ? " mobile" : "";
     if (p) {
-      html += `<div class="tile playing ${p.out ? "out" : ""}"><span class="no">T${String(t).padStart(2, "0")}</span>
+      html += `<div class="tile playing${mobile} ${p.out ? "out" : ""}"><span class="no">${label(t)}</span>
         ${p.rank ? `<span class="rank">#${p.rank}</span>` : ""}
         <div class="name">${esc(p.name)}</div>
         <div class="hearts">${"♥".repeat(p.lives)}${"♡".repeat(Math.max(0, (p.max_lives || 0) - p.lives))}</div>
-        <div class="score">${p.survived ?? 0} rondes overleefd · ${p.points ?? 0} punten deze ronde${p.streak >= 2 ? ` · ${p.streak} op rij` : ""}</div>
+        <div class="score">${p.survived ?? 0} rondes overleefd${s.ranked && s.state === "PLAYING" ? ` · ${p.points ?? 0} punten deze ronde` : ""}${p.streak >= 2 ? ` · ${p.streak} op rij` : ""}</div>
         <div class="actions">
           <button class="small" data-tile="${t}" data-points="1">+1</button>
           <button class="small" data-tile="${t}" data-points="5">+5</button>
@@ -78,25 +94,26 @@ function renderTiles(s) {
           <button class="small" data-tile="${t}" data-act="fire" title="robot draait en vuurt (show)">Robot vuurt</button>
           <button class="small danger" data-tile="${t}" data-act="leave">Verwijder</button></div></div>`;
     } else if (inv) {
-      html += `<div class="tile" style="border-color:${esc(inv.color)}"><span class="no">T${String(t).padStart(2, "0")}</span>
+      html += `<div class="tile${mobile}" style="border-color:${esc(inv.color)}"><span class="no">${label(t)}</span>
         <div class="name" style="color:${esc(inv.color)}">${esc(inv.name)}</div><div class="hint">wacht op activatie (4 iconen)</div>
         <div class="actions"><button class="small danger" data-tile="${t}" data-act="leave">Annuleer</button></div></div>`;
     } else if ((s.disabled || []).includes(t)) {
-      html += `<div class="tile out"><span class="no">T${String(t).padStart(2, "0")}</span><div class="name">BUITEN GEBRUIK</div></div>`;
+      html += `<div class="tile out${mobile}"><span class="no">${label(t)}</span><div class="name">BUITEN GEBRUIK</div></div>`;
     } else {
-      html += `<div class="tile free"><span class="no">T${String(t).padStart(2, "0")}</span><div class="name">VRIJ</div></div>`;
+      html += `<div class="tile free${mobile}"><span class="no">${label(t)}</span><div class="name">VRIJ</div>
+        ${mobile ? `<div class="hint">drone in de parking</div>` : ""}</div>`;
     }
   }
-  $("#tiles").innerHTML = html;
+  return html;
 }
 
-$("#tiles").onclick = e => {
+$("#tiles").onclick = $("#mobile-tiles").onclick = e => {
   const b = e.target.closest("button[data-tile]");
   if (!b) return;
   const t = b.dataset.tile;
   if (b.dataset.points) return api("POST", `/api/tiles/${t}/points`, { points: Number(b.dataset.points) });
   if (b.dataset.lives) return api("POST", `/api/tiles/${t}/lives`, { lives: Number(b.dataset.lives) });
-  if (b.dataset.act !== "leave" || confirm(`Speler van tegel ${t} verwijderen?`))
+  if (b.dataset.act !== "leave" || confirm(`Speler van ${label(Number(t))} verwijderen?`))
     api("POST", `/api/tiles/${t}/${b.dataset.act}`);
 };
 document.querySelectorAll("[data-game]").forEach(b => b.onclick = () => api("POST", `/api/game/${b.dataset.game}`));
@@ -153,14 +170,39 @@ let tileRows = [];
 async function loadTiles() {
   tileRows = (await api("GET", "/api/tiles")).tiles;
   renderTileTable();
+  renderLayout();
 }
+
+// the circle in the venue, like a clock seen from above: the entrance at 6, T01 at t01_clock
+function renderLayout() {
+  const h = live.t01_clock || 12;
+  const sel = $("#t01-clock");
+  if (!sel.options.length)
+    sel.innerHTML = Array.from({ length: 24 }, (_, i) => (i + 1) / 2)
+      .map(v => `<option value="${v}">${Number.isInteger(v) ? v : Math.floor(v) + "½"}</option>`).join("");
+  if (document.activeElement !== sel) sel.value = String(h);
+  const pt = (a, r) => [Math.cos(a) * r, Math.sin(a) * r];
+  let svg = `<circle r="110" fill="none" stroke="var(--dim)"/><line x1="-22" y1="110" x2="22" y2="110" stroke="var(--orange)" stroke-width="6"/>
+    <text y="104" text-anchor="middle" fill="var(--orange)" font-size="11">INGANG</text>
+    <circle r="16" fill="var(--panel)" stroke="var(--teal)"/><text y="4" text-anchor="middle" fill="var(--teal)" font-size="8">ROBOT</text>`;
+  for (let t = 1; t <= FLOOR_TILES; t++) {
+    const [x, y] = pt(-Math.PI / 2 + h * Math.PI / 6 + 2 * Math.PI * (t - 1) / FLOOR_TILES, 78);
+    svg += `<line x2="${x}" y2="${y}" stroke="var(--line)"/><circle cx="${x}" cy="${y}" r="13" fill="${t === 1 ? "var(--amber)" : "var(--panel)"}" stroke="var(--orange)"/>
+      <text x="${x}" y="${y + 3.5}" text-anchor="middle" font-size="9" fill="${t === 1 ? "var(--bg)" : "var(--cream)"}">${label(t)}</text>`;
+  }
+  $("#layout-plan").innerHTML = svg;
+}
+$("#t01-clock").onchange = async e => {
+  await api("PUT", "/api/layout", { t01_clock: Number(e.target.value) });
+};
 function renderTileTable() {
   const devices = live.devices || [];
   const online = Object.fromEntries(devices.map(d => [d.device, d.online]));
   const placed = new Set(tileRows.map(t => t.device).filter(Boolean));
   $("#tile-table tbody").innerHTML = tileRows.map(t => {
     const opts = new Set([...devices.map(d => d.device), ...(t.device ? [t.device] : [])]);
-    return `<tr><td><span class="no" style="background:var(--teal);color:var(--bg);padding:0 6px">T${String(t.number).padStart(2, "0")}</span></td>
+    const head = t.number === FLOOR_TILES + 1 ? `<tr><td colspan="4" class="section">Handtegels van mobiele spelers (M1–M5: drones in het spel)</td></tr>` : "";
+    return `${head}<tr><td><span class="no" style="background:var(--teal);color:var(--bg);padding:0 6px">${label(t.number)}</span></td>
       <td><select data-number="${t.number}" data-field="device" ${live.mode !== "setup" && t.enabled ? "disabled title='setup vergrendeld: eerst buiten gebruik zetten'" : ""}><option value="">— geen —</option>
         ${[...opts].sort().map(d => `<option ${d === t.device ? "selected" : ""}>${esc(d)}</option>`).join("")}</select></td>
       <td>${t.device ? `<span class="dot ${online[t.device] ? "on" : ""}"></span> ${online[t.device] ? "online" : "offline"}` : "-"}</td>
@@ -181,32 +223,85 @@ $("#tile-table").onclick = async e => {
   const b = e.target.closest("button[data-field=enabled]");
   if (!b) return;
   const t = tileRows.find(r => r.number == b.dataset.number);
-  if (t.enabled && !confirm(`Tegel ${t.number} buiten gebruik zetten? Een speler die erop staat gaat eruit.`)) return;
+  if (t.enabled && !confirm(`${label(t.number)} buiten gebruik zetten? Een speler die erop staat gaat eruit.`)) return;
   await api("PUT", `/api/tiles/${t.number}`, { enabled: !t.enabled });
   loadTiles();
 };
 
+// ---------------------------------------------------------------- gamemasters
+function renderOnline() {
+  const on = live.gamemasters_online || [];
+  $("#gm-online").innerHTML = on.map(g => `<span class="gm" style="border-color:${esc(g.color)}">
+      <span class="swatch" style="background:${esc(g.color)}"></span> ${esc(g.name)} <span class="hint">sinds ${esc(g.since)}</span></span>`).join("")
+    || `<span class="hint">Niemand.</span>`;
+  if ($("#tab-gamemasters").classList.contains("active")) renderGamemasters();
+}
+let gmRows = [];
+async function loadGamemasters() {
+  gmRows = await api("GET", "/api/gamemasters");
+  renderGamemasters();
+}
+function renderGamemasters() {
+  const on = new Set((live.gamemasters_online || []).map(g => g.id));
+  const body = $("#gamemasters tbody");
+  if (body.contains(document.activeElement)) return;      // (editing)
+  body.innerHTML = gmRows.map(g => `<tr><td><input data-gm="${g.id}" data-field="name" value="${esc(g.name)}"></td>
+    <td><input type="color" data-gm="${g.id}" data-field="color" value="${esc(g.color)}"></td>
+    <td>${on.has(g.id) ? `<span class="dot on"></span> ingelogd` : `<span class="hint">-</span>`}</td>
+    <td><button class="small danger" data-gm-del="${g.id}">Verwijder</button></td></tr>`).join("")
+    || `<tr><td colspan="4" class="hint">Nog geen gamemasters.</td></tr>`;
+}
+$("#add-gm").onsubmit = async e => {
+  e.preventDefault();
+  const f = e.target;
+  await api("POST", "/api/gamemasters", { name: f.name.value, color: f.color.value });
+  f.name.value = "";
+  loadGamemasters();
+};
+$("#gamemasters").onchange = async e => {
+  const i = e.target.closest("input[data-gm]");
+  if (!i) return;
+  const row = gmRows.find(g => g.id == i.dataset.gm);
+  row[i.dataset.field] = i.value;
+  await api("PUT", `/api/gamemasters/${row.id}`, { name: row.name, color: row.color });
+};
+$("#gamemasters").onclick = async e => {
+  const b = e.target.closest("button[data-gm-del]");
+  if (b && confirm("Deze gamemaster verwijderen?")) { await api("DELETE", `/api/gamemasters/${b.dataset.gmDel}`); loadGamemasters(); }
+};
+
 // ---------------------------------------------------------------- players
+// assignment colours: the tile lights up in it so the visitor finds it; a
+// colour no invited player has right now
+const ASSIGN_COLORS = ["#ff8800", "#33ccff", "#ff44cc", "#88ff00", "#ffee00", "#aa55ff", "#ff3344", "#00ffcc", "#ffffff"];
+function nextColor() {
+  const used = new Set((live.state?.pending || []).map(p => p.color.toLowerCase()));
+  return ASSIGN_COLORS.find(c => !used.has(c)) || ASSIGN_COLORS[0];
+}
 async function loadPlayers() {
   const rows = await api("GET", `/api/players?search=${encodeURIComponent($("#player-search").value)}`);
   $("#players tbody").innerHTML = rows.map(p => `<tr><td>${p.id}</td><td>${esc(p.name)}</td>
-    <td><span class="swatch" style="background:${esc(p.color)}"></span></td><td>${p.age || "-"}</td>
+    <td>${esc(p.card || "-")}</td><td>${p.age || "-"}</td>
     <td>${p.best ?? "-"}</td><td>${p.plays}</td>
-    <td><select data-pid="${p.id}"><option value="">tegel…</option><option value="0">vrije tegel</option>
-      ${Array.from({ length: 13 }, (_, i) => `<option value="${i + 1}">T${String(i + 1).padStart(2, "0")}</option>`).join("")}
+    <td><input type="color" data-color="${p.id}" value="${nextColor()}" title="de tegel licht op in deze kleur">
+      <select data-pid="${p.id}"><option value="">tegel…</option><option value="0">vrije vloertegel</option>
+      <optgroup label="Vloertegels">${Array.from({ length: FLOOR_TILES }, (_, i) => `<option value="${i + 1}">${label(i + 1)}</option>`).join("")}</optgroup>
+      <optgroup label="Mobiel (drone)">${Array.from({ length: PLACES - FLOOR_TILES }, (_, i) =>
+        `<option value="${FLOOR_TILES + i + 1}">${label(FLOOR_TILES + i + 1)}</option>`).join("")}</optgroup>
     </select></td></tr>`).join("");
 }
 $("#player-search").oninput = loadPlayers;
 $("#players").onchange = async e => {
   const sel = e.target.closest("select[data-pid]");
   if (!sel || sel.value === "") return;
-  await api("POST", `/api/players/${sel.dataset.pid}/assign`, { tile: Number(sel.value) });
+  const color = $(`input[data-color="${sel.dataset.pid}"]`).value;
+  await api("POST", `/api/players/${sel.dataset.pid}/assign`, { tile: Number(sel.value), color });
   sel.value = "";
 };
 $("#add-player").onsubmit = async e => {
   e.preventDefault();
   const f = e.target;
-  await api("POST", "/api/players", { name: f.name.value, color: f.color.value, age: Number(f.age.value || 0) });
+  await api("POST", "/api/players", { name: f.name.value, age: Number(f.age.value || 0) });
   f.name.value = ""; f.age.value = "";
   loadPlayers();
 };

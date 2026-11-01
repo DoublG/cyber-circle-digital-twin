@@ -58,7 +58,7 @@ func _draw() -> void:
 	draw_rect(head, Retro.TEAL, false, 3.0)
 	var title := "SCHERM %d / %d" % [screen_number, screen_count] if not tiles.is_empty() else "OVERZICHT"
 	_text(title, Vector2(w / 2, 172), 72, Retro.TEAL)
-	var info := ("TEGELS " + "  ".join(tiles.map(func(id): return "T%02d" % id))) if not tiles.is_empty() else "BEZOEKERSSCHERM"
+	var info := ("TEGELS " + "  ".join(tiles.map(func(id): return Retro.tile_label(id)))) if not tiles.is_empty() else "BEZOEKERSSCHERM"
 	_text(info, Vector2(w / 2, 228), 30, Retro.CREAM)
 	# output / node / resolution
 	var win := get_window().size if get_window() else Vector2i.ZERO

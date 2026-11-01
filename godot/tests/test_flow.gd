@@ -96,6 +96,14 @@ func _run() -> void:
 	print("    round points: ", game.current.points)
 	await _until(func(): return game.state == GameManager.State.SCOREBOARD)
 	print("    scores: ", game.scores)
+	await _wait(0.2)
+	var uitslag = game.screen_wall.shared_views[0]
+	check(uitslag is RankingView, "after Cyclone first the UITSLAG (places, lives to gain / lose)")
+	if uitslag is RankingView:
+		var badges: Array = uitslag._badges.map(func(b): return b.text)
+		check(badges.front() == "+♥" and badges.back() == "-♥", "UITSLAG: 1st +♥, last -♥: %s" % [badges])
+	await _until(func(): return game.screen_wall.shared_views[0] is ScoreboardView)
+	check(game.screen_wall.shared_views[0] is ScoreboardView, "then the scoreboard")
 
 	await _until(func(): return game.state == GameManager.State.PLAYING)
 	check(game.current is QuizRound, "round 2 is Quiz")
@@ -106,14 +114,13 @@ func _run() -> void:
 	check(cleo_tile in game.current.players, "Cleo plays in round 2")
 
 	var quiz: QuizRound = game.current
-	# fixed questions: one with a video first, then two plain ones
+	# a fixed question with a video (a quiz round is one question)
 	var all: Array = JSON.parse_string(FileAccess.get_file_as_string(QuizRound.QUESTIONS_FILE))
-	var plain := all.filter(func(q): return not q.has("video"))
-	quiz._questions = [all.filter(func(q): return q.has("video"))[0], plain[0], plain[1]]
+	quiz._questions = [all.filter(func(q): return q.has("video"))[0]]
 	quiz._stop_video()
 	quiz._index = -1
 	quiz._next_question()
-	print("--- question 1 has a video: answering starts when it ends")
+	print("--- the question has a video: answering starts when it ends")
 	check(quiz.is_protected(cleo_tile) and arena.tiles[cleo_tile - 1].shielded,
 		"Cleo (7) is shielded on a 10+ question")
 	check(not quiz.is_protected(1) and not quiz.is_protected(5), "Anna (12) and Bram (no age) are not")
@@ -127,39 +134,23 @@ func _run() -> void:
 	check(quiz._phase == "question" and quiz._video == null, "answering starts after the video")
 	check(is_equal_approx(quiz._phase_left, 20.0) or quiz._phase_left > 19.0, "question uses its own time (20 s)")
 
-	print("--- question 1: Anna right, Bram wrong, Cleo no answer")
+	print("--- Anna right, Bram wrong, Cleo no answer (shielded)")
+	arena.tiles[4].health = 2
 	var correct := int(quiz._questions[quiz._index].correct)
 	arena.tiles[0].press_button(QuizRound.ANSWER_BUTTONS[correct])
 	arena.tiles[4].press_button(QuizRound.ANSWER_BUTTONS[(correct + 1) % 4])
 	await _until(func(): return quiz._phase == "reveal")
 	await _wait(4.0)
-	print("    health: Anna=", arena.tiles[0].health, " Bram=", arena.tiles[4].health,
-		" Cleo=", arena.tiles[cleo_tile - 1].health)
-	check(arena.tiles[4].health == 4, "Bram wrong: no life lost yet (lives change at the end of the round)")
-	check(arena.tiles[0].health == 4, "Anna right: no life won (the quiz never gives lives)")
+	check(arena.tiles[4].health == 2, "Bram wrong: no life lost yet (lives change on the scoreboard)")
 	check(arena.tiles[cleo_tile - 1].health == 5, "Cleo's shield blocked the hit")
-
-	print("--- question 2: everyone right -> overload")
-	await _until(func(): return quiz._phase == "question")
-	correct = int(quiz._questions[quiz._index].correct)
-	for id in [1, 5, cleo_tile]:
-		arena.tiles[id - 1].press_button(QuizRound.ANSWER_BUTTONS[correct])
-		await _wait(0.2)
-	await _until(func(): return quiz._phase == "reveal")
-	await _wait(5.0)
-
-	print("--- question 3: Bram wrong again, Anna and Cleo right")
-	arena.tiles[4].health = 2
-	await _until(func(): return quiz._phase == "question")
-	correct = int(quiz._questions[quiz._index].correct)
-	arena.tiles[4].press_button(QuizRound.ANSWER_BUTTONS[(correct + 1) % 4])
-	for id in [1, cleo_tile]:
-		arena.tiles[id - 1].press_button(QuizRound.ANSWER_BUTTONS[correct])
+	check(quiz.points.values().all(func(p): return p == 0), "the quiz gives no points: %s" % quiz.points)
 	game.scoreboard_time = 20.0          # keep the scores up while checking
 	await _until(func(): return game.state == GameManager.State.SCOREBOARD, 60.0)
 	await _wait(6.0)                     # the robot's attack at the end of the round
-	check(arena.tiles[4].health == 1 and not arena.tiles[4].is_dead, "end of the quiz: Bram (2 wrong) loses only 1 life")
-	check(arena.tiles[0].health == 4 and arena.tiles[cleo_tile - 1].health == 5, "Anna and Cleo all right: lives unchanged")
+	check(game.state == GameManager.State.SCOREBOARD, "one question, then the scoreboard")
+	check(arena.tiles[4].health == 1 and not arena.tiles[4].is_dead, "end of the quiz: Bram (wrong) -1 life")
+	check(game.screen_wall.shared_views[0] is ScoreboardView, "after the quiz straight to the scoreboard (no UITSLAG)")
+	check(arena.tiles[0].health == 4 and arena.tiles[cleo_tile - 1].health == 5, "Anna right, Cleo shielded: lives unchanged")
 	check(game.survived[1] == 2 and game.survived[5] == 2 and game.survived[cleo_tile] == 1,
 		"rounds survived: Anna 2, Bram 2, Cleo 1 (joined in round 2)")
 	game.scoreboard_time = 2.0

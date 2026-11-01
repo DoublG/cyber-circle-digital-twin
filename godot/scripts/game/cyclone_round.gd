@@ -32,6 +32,7 @@ var _last_n := {}
 
 func _init() -> void:
 	title = "Cyclone"
+	progress_label = "LEVEL"
 	mode = "personal"
 	on_tile = true
 	duration = 40.0
@@ -116,9 +117,9 @@ func result(id: int, r: Dictionary) -> void:
 		arena.send_packet(id, Color.RED, Callable(), false)
 	else:
 		arena.send_packet(id, col, func():
-			arena.robot.set_side_glow(id - 1, col, 2.0)
+			arena.robot.set_side_glow(arena.robot_side(id), col, 2.0)
 			await arena.get_tree().create_timer(0.25).timeout
-			arena.robot.set_side_glow(id - 1, Color.BLACK))
+			arena.robot.set_side_glow(arena.robot_side(id), Color.BLACK))
 
 
 func finish() -> void:

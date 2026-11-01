@@ -26,11 +26,13 @@ var wall: ScreenWall
 var _status: Label
 var _timer: Label
 var _list: VBoxContainer
+var _list_panel: Control
+var _list_scale := 1.0           # font scale of the player rows (smaller with more than 13)
 var _rules_title: Label
 var _rules: Label
 var _events: VBoxContainer
 var _under: Array[Control] = []   # panels hidden while the scoreboard shows
-var _board: ScoreboardView
+var _board: Control              # the UITSLAG (RankingView) or the ScoreboardView
 var _refresh := 0.0
 var _page_t := 0.0
 
@@ -98,7 +100,7 @@ func _ready() -> void:
 	_under.append(rules)
 	# right: players, and the event feed under it (takes the rest, clipped)
 	var col := VBoxContainer.new()
-	col.custom_minimum_size.x = RIGHT_WIDTH
+	col.custom_minimum_size.x = RIGHT_WIDTH         # every row clips: the column never gets wider
 	col.add_theme_constant_override("separation", 16)
 	body.add_child(col)
 	_under.append(col)
@@ -107,6 +109,7 @@ func _ready() -> void:
 	_list.add_theme_constant_override("separation", 2)
 	panel.add_child(_list)
 	col.add_child(panel)
+	_list_panel = panel
 	var feed := Retro.panel_container(Color(Retro.PANEL, 0.82), Retro.ORANGE, 3, 16, 20)
 	feed.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var feed_box := _holder(0)                     # the rest of the column; older events cut off
@@ -121,6 +124,7 @@ func _ready() -> void:
 	col.add_child(feed)
 	wall.arena.game.game_event.connect(_on_event)
 	wall.arena.game.scores_shown.connect(_show_board)
+	wall.arena.game.ranking_shown.connect(_show_ranking)
 	wall.arena.exterminated.connect(_exterminated_popup)
 	_update()
 
@@ -157,15 +161,27 @@ func _exterminated_popup(_tile_id: int, player: String) -> void:
 
 ## The round's scoreboard, over the rules, players and events.
 func _show_board(title: String, subtitle: String, rows: Array) -> void:
+	var board := ScoreboardView.new()
+	_place_board(board)
+	board.show_scores(title, subtitle, rows, false)
+	wall.arena.game.lives_revealed.connect(board.reveal_lives)
+
+
+## The round's places (UITSLAG) before it, in the same place.
+func _show_ranking(title: String, label: String, rows: Array) -> void:
+	var board := RankingView.new()
+	_place_board(board)
+	board.show_ranking(title, label, rows)
+
+
+func _place_board(board: Control) -> void:
 	_hide_board()
-	_board = ScoreboardView.new()
+	_board = board
 	_board.offset_left = MARGIN
 	_board.offset_right = -MARGIN
 	_board.offset_top = BODY_TOP
 	_board.offset_bottom = -MARGIN
 	add_child(_board)
-	_board.show_scores(title, subtitle, rows, false)
-	wall.arena.game.lives_revealed.connect(_board.reveal_lives)
 	for c in _under:
 		c.visible = false
 
@@ -198,7 +214,7 @@ func _update() -> void:
 		GameManager.State.INTRO, GameManager.State.PLAYING:
 			_status.text = game.current.title.to_upper()
 		GameManager.State.SCOREBOARD:
-			_status.text = "SCOREBORD"
+			_status.text = "UITSLAG" if _board is RankingView else "SCOREBORD"
 	if _board and (game.state != GameManager.State.SCOREBOARD or game.mode != GameManager.Mode.OPEN):
 		_hide_board()
 	if _board:                     # an extermination: the board steps aside for the robot
@@ -222,6 +238,8 @@ func _update() -> void:
 	for c in _list.get_children():
 		c.queue_free()
 	var ids: Array = arena.player_ids()
+	var count := ids.size() + range(1, arena.tiles.size() + 1).filter(func(id): return not arena.pending_info(id).is_empty()).size()
+	_list_scale = clampf(13.0 / maxf(count, 13.0), 0.55, 1.0)   # more than 13 (mobile tiles): smaller rows
 	ids.sort_custom(func(a, b): return game.survived.get(a, 0) > game.survived.get(b, 0))
 	for i in ids.size():
 		var id: int = ids[i]
@@ -230,24 +248,30 @@ func _update() -> void:
 		if tile.is_dead:
 			col = Retro.DIM
 		var place := game.overall_rank(id)
-		_row("T%02d" % id, arena.player_name(id).to_upper().left(10),
+		_row(Retro.tile_label(id), arena.player_name(id).to_upper().left(10),
 			"♥".repeat(maxi(tile.health, 0)), Retro.rounds(game.survived.get(id, 0)), col, "#%d" % place if place > 0 else "")
+	var rows := ids.size()
 	for id in range(1, arena.tiles.size() + 1):
 		var invite: Dictionary = arena.pending_info(id)
 		if not invite.is_empty():
-			_row("T%02d" % id, str(invite.name).to_upper().left(10), "", "ACTIVEREN", invite.color)
-	if _list.get_child_count() == 0:
-		_row("", "NOG GEEN SPELERS", "", "", Retro.DIM)
+			rows += 1
+			_row(Retro.tile_label(id), str(invite.name).to_upper().left(10), "", "ACTIVEREN", invite.color)
+	_list_panel.visible = rows > 0                 # nobody yet: no list (the old rows are still freeing)
 
 
 func _row(tile: String, name: String, hearts: String, score: String, col: Color, rank := "") -> void:
 	var r := HBoxContainer.new()
 	r.add_theme_constant_override("separation", 14)
-	var cells := [[tile, 34, Retro.TEAL, 80], [name, 34, col, 230], [hearts, 30, Color(1, 0.2, 0.3), 120],
-		[score, 34, col, 140], [rank, 30, Retro.TEAL, 70]]
+	# fixed widths (the name takes the rest), long text is cut off
+	var cells := [[tile, 34, Retro.TEAL, 80], [name, 34, col, 0], [hearts, 30, Color(1, 0.2, 0.3), 110],
+		[score, 34, col, 190], [rank, 30, Retro.TEAL, 70]]
 	for c in cells:
-		var l := Retro.label(c[1], c[2], c[0], HORIZONTAL_ALIGNMENT_LEFT)
+		var l := Retro.label(int(c[1] * _list_scale), c[2], c[0], HORIZONTAL_ALIGNMENT_LEFT)
 		l.custom_minimum_size.x = c[3]
+		l.clip_text = true
+		l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		if c[3] == 0:
+			l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		r.add_child(l)
 	_list.add_child(r)
 

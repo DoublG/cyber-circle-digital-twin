@@ -15,3 +15,10 @@ godot/movie/*.avi
 movies/*.avi
 # blender backups
 *.blend1
+godot/movie/clips_tmp/
+control/*.pem
+# videos kept locally (tools/make_clips.sh, the test scenes make them again) and old gallery runs
+movies/gameplay/
+movies/drones.mp4
+movies/13_players_end_of_round.mp4
+movies/gallery_old/
