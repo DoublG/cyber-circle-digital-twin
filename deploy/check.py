@@ -79,11 +79,18 @@ try:
     check(False, "without our CA the connection should be refused")
 except ssl.SSLCertVerificationError:
     check(True, "without our CA: refused (the system does not trust it - as it should)")
+except OSError as e:
+    check(False, "without our CA: %s" % e)
 try:
     tls("127.0.0.1", PORTS["control (https)"], CTX, name="wrong-name.example")
     check(False, "a name not in the certificate should be refused")
 except ssl.SSLCertVerificationError:
     check(True, "a name not in the certificate: refused (hostname check)")
+except OSError as e:
+    check(False, "hostname check: %s" % e)
+if fails:
+    print("DONE: %d failure(s) - is the compose up? (cd deploy && docker compose up -d)" % fails)
+    sys.exit(1)
 
 print("lookup by name inside the compose network (from the control container):")
 probe = ("import socket,ssl;c=ssl.create_default_context(cafile='/certs/ca.pem')\n"
@@ -128,6 +135,10 @@ for i in range(4):                           # the 4 icons, as on the tile's top
         time.sleep(0.25)
 check(bool(until(lambda: any(p["tile"] == 1 and p["name"] == name for p in live()["state"]["players"]))),
       "'%s' plays on T01: activated with the emulated tile's icons" % name)
+r = subprocess.run(["docker", "exec", "cybercircle-mysql-1", "sh", "-c",
+                    'mysql -N -ucybercircle -p"$MYSQL_PASSWORD" cybercircle -e "SELECT COUNT(*) FROM players WHERE name = \'%s\'"' % name],
+                   capture_output=True, text=True)
+check(r.stdout.strip() == "1", "'%s' is stored in MySQL (players: %s)" % (name, r.stdout.strip() or r.stderr.strip()[-80:]))
 call("POST", "/api/tiles/1/leave")
 print("DONE: %d failure(s)" % fails)
 sys.exit(1 if fails else 0)

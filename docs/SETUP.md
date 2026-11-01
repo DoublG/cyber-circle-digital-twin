@@ -21,7 +21,7 @@ digital_twin/
 ## 1. How it fits together
 
 ```
- operator (browser) ─▶ CONTROL SERVER (overview PC, Python) ── owns ──▶ SQLite database
+ operator (browser) ─▶ CONTROL SERVER (overview PC, Python) ── owns ──▶ MySQL database
  Android app ──HTTP─▶   web interface + HTTP API                          (players, questions,
                           │ MQTT                ▲ HTTP                      scores, tiles, mode)
                           ▼                     │
@@ -31,7 +31,7 @@ digital_twin/
 ```
 
 * **The control server** (Python, on the overview PC) is the only owner of the
-  SQLite database. It serves the **web interface** for the operator and an
+  MySQL database (SQLAlchemy). It serves the **web interface** for the operator and an
   **HTTP API** for the game and the app, and follows / steers the game over
   MQTT. See §10.
 * **The game master** (Godot) runs the rounds, the robot, the screens and the
@@ -123,8 +123,9 @@ sudo snap install godot-4                     # or unpack the official build
 cd /srv/cybercircle/digital_twin
 godot-4 --headless --path godot --import
 
-# 4. the database (questions from questions.json + 4 demo players)
-python3 tools/cybercircle_db.py init --db /srv/cybercircle/cybercircle.db --demo-players
+# 4. the database: MySQL / MariaDB for the control server, see §10
+#    (standalone without a control server: a SQLite file,
+#     python3 tools/cybercircle_db.py init --db /srv/cybercircle/cybercircle.db --demo-players)
 ```
 
 The SQLite add-on is already in `godot/addons/godot-sqlite` (v4.9, built for
@@ -205,7 +206,7 @@ comes from the computer running the master.
 [Desktop Entry]
 Type=Application
 Name=Cyber Circle
-Exec=sh -c 'cd /srv/cybercircle/digital_twin && godot-4 --path godot -- --windows --mqtt=ws://localhost:9001 --mqtt-user=cybercircle --mqtt-password=SECRET --db=/srv/cybercircle/cybercircle.db'
+Exec=sh -c 'cd /srv/cybercircle/digital_twin && godot-4 --path godot -- --windows --mqtt=ws://localhost:9001 --mqtt-user=cybercircle --mqtt-password=SECRET --control=http://localhost:8080'
 X-GNOME-Autostart-enabled=true
 ```
 
@@ -389,8 +390,12 @@ under *Tegels zonder plaats* with its MAC address.
 
 ## 6. Database
 
-SQLite file, schema in `godot/data/schema.sql` (the game and the tool create
-missing tables themselves; WAL mode, so the app can write while the game runs).
+**MySQL** (or MariaDB) on the installation, owned by the control server
+through SQLAlchemy (`control/db.py` defines the tables and creates the missing
+ones itself; §10). The control server takes `--db` as a SQLAlchemy URL; a plain
+file path is a SQLite file – for tests and trying things out, as is the game's
+standalone `--db=FILE` and `tools/cybercircle_db.py` (schema
+`godot/data/schema.sql`, the same tables).
 
 | table | written by | |
 |---|---|---|
@@ -400,8 +405,8 @@ missing tables themselves; WAL mode, so the app can write while the game runs).
 | `round_scores` | game | points per player per round |
 | `results` | game | every play's end result: score, lives, exterminated, rank |
 
-* **Questions**: edit them in any SQLite tool (e.g. DB Browser for SQLite);
-  set `active = 0` to hide one. Answer 1–4 = Square, Triangle, Cross, Circle.
+* **Questions**: edit them in the web interface (*Vragen*, also CSV), or in any
+  MySQL client; set `active = 0` to hide one. Answer 1–4 = Square, Triangle, Cross, Circle.
   `min_age`: younger players get a shield (no life lost). Changes are used
   from the next quiz round. `python3 tools/cybercircle_db.py init` re-imports
   `questions.json` (updates rows with the same `slug`).
@@ -414,7 +419,7 @@ missing tables themselves; WAL mode, so the app can write while the game runs).
   are cut off. Any length; its last frame stays until `clip_time` is over.
 * **Players** (what the app does): `python3 tools/cybercircle_db.py add-player Erik "#ff8800" 10`
   prints the id and the MQTT message to send.
-* **Overall ranking**: `SELECT name, MAX(score) FROM results JOIN players ON players.id = player_id GROUP BY player_id ORDER BY 2 DESC`.
+* **Overall ranking**: `SELECT name, MAX(score) FROM results JOIN players ON players.id = player_id GROUP BY player_id, name ORDER BY 2 DESC`.
 
 ## 7. Tests and demo movies
 
@@ -486,15 +491,22 @@ the tiles follow.
 The control server runs on the overview PC and owns the database.
 
 ```bash
+# the database: MySQL, or MariaDB (Raspberry Pi OS / Debian: sudo apt install mariadb-server)
+sudo mysql -e "CREATE DATABASE cybercircle CHARACTER SET utf8mb4;
+  CREATE USER 'cybercircle'@'localhost' IDENTIFIED BY 'DBSECRET';
+  GRANT ALL ON cybercircle.* TO 'cybercircle'@'localhost';"
+
 cd /srv/cybercircle/digital_twin/control
 /usr/bin/python3 -m venv .venv                 # Python 3.11+
-.venv/bin/pip install -r requirements.txt     # fastapi, uvicorn, paho-mqtt
-.venv/bin/python server.py --db /srv/cybercircle/cybercircle.db \
+.venv/bin/pip install -r requirements.txt     # fastapi, uvicorn, paho-mqtt, SQLAlchemy, PyMySQL
+.venv/bin/python server.py \
+    --db "mysql+pymysql://cybercircle:DBSECRET@localhost/cybercircle?charset=utf8mb4" \
     --mqtt ws://localhost:9001 --mqtt-user cybercircle --mqtt-password SECRET
 ```
 
-Web interface: **http://\<overview pc\>:8080/** (reachable on the LAN). A fresh
-database gets the example questions.
+Web interface: **http://\<overview pc\>:8080/** (reachable on the LAN). An empty
+database gets the tables and the example questions. (`--db FILE`: a SQLite
+file instead – for trying things out.)
 
 ### Operating modes (top bar)
 
@@ -701,11 +713,12 @@ fake camera showing QR cards: `python gamemaster_app/test_browser/scan_flow.py`.
 Raspberry Pis (§3–4). `deploy/docker-compose.yml` starts every part in one go,
 split the way the installation is, to test the certificates and how the parts
 find each other: `certs` (makes the CA and the certificate once), `broker`
-(Mosquitto), `control` (the control server on https, the database in the
-volume `database`), `game` (Godot 4.7.2 headless, as a screen PC runs it) and
+(Mosquitto), `mysql` (MySQL 8.4, its data in the volume `database`),
+`control` (the control server on https), `game` (Godot 4.7.2 headless, as a screen PC runs it) and
 `tile-1..3` (emulated tiles). Ports on this PC (`deploy/.env`, see
 `.env.example`): 8443 https web interface + `/gm/`, 1883 MQTT (tiles), 8883
-mqtts, 9443 wss, 8191–8193 the tiles' tops.
+mqtts, 9443 wss, 3307 MySQL (user / password `cybercircle`), 8191–8193 the
+tiles' tops.
 
 ```bash
 cd deploy && docker compose up -d --build
@@ -721,9 +734,11 @@ python3 check.py              # certificates, lookup, every link, a visitor on a
   game and the control server trust it with `--ca=ca.pem`; browsers and phones
   once by importing `ca.pem` (then `https://localhost:8443` has no warning).
   The tiles use plain MQTT on 1883 (the firmware has no TLS).
-* **The database** is a real one in the volume `database` (the example
-  questions on the first start); it survives restarts and rebuilds
-  (`docker compose down -v` deletes it).
+* **The database**: MySQL in the volume `database` (the tables and the
+  example questions on the first start); it survives restarts and rebuilds
+  (`docker compose down -v` deletes it). The control server's tests run on
+  any MySQL too: `CC_TEST_DB=mysql+pymysql://user:pw@host:port/db python control/test_e2e.py`
+  (it empties that database first).
 * **The app**: `/api/config` tells it `wss://<the address it used>:9443/mqtt`
   (`--public-mqtt`); its web version is `https://localhost:8443/gm/` (build it
   first: §11).

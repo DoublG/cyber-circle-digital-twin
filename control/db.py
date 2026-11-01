@@ -1,67 +1,161 @@
 """The Cyber Circle database. The control server is its only owner: the game
 master, the app and the web interface all go through the control server's
-HTTP API. Schema: ../godot/data/schema.sql (shared with the game's standalone
-mode and tools/cybercircle_db.py)."""
+HTTP API. SQLAlchemy (Core): MySQL / MariaDB on the installation
+(mysql+pymysql://user:password@host/cybercircle), or a SQLite file (a plain
+path: tests, trying things out). The tables match ../godot/data/schema.sql
+(the game's standalone SQLite mode and tools/cybercircle_db.py)."""
 
+import datetime
 import json
 import os
-import sqlite3
-import threading
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-SCHEMA = os.path.join(HERE, "..", "godot", "data", "schema.sql")
+from sqlalchemy import (Column, DateTime, Float, ForeignKey, Index, Integer, MetaData, String, Table, Text,
+                        create_engine, func, inspect, select, text, update, insert, delete, event)
+
 QUESTION_FIELDS = ("slug", "category", "min_age", "max_age", "question", "text", "answer1", "answer2",
                    "answer3", "answer4", "correct", "explanation", "video", "video_when", "image", "time", "active")
 
 FLOOR_TILES = 13                          # places around the robot
 PLACES = 18                               # + 5 mobile players (M1-M5 = 14-18)
 
+meta = MetaData()
+# (MySQL: an indexed / unique column must be a VARCHAR, not TEXT)
+players = Table(
+    "players", meta,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", String(255), nullable=False),
+    Column("color", String(16), nullable=False, server_default="#ffcc00"),     # the colour picked in the app
+    Column("age", Integer, nullable=False, server_default="0"),                # 0 = unknown
+    Column("card", String(191)),                                               # the QR card's code
+    Column("email", String(255)),                                              # optional
+    Column("created_at", DateTime, nullable=False, server_default=func.now()),
+    Index("players_card", "card", unique=True))
+questions = Table(
+    "questions", meta,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("slug", String(191), unique=True),                  # optional readable id
+    Column("category", String(191), nullable=False, server_default=""),
+    Column("min_age", Integer, nullable=False, server_default="0"),
+    Column("max_age", Integer, nullable=False, server_default="99"),
+    Column("question", Text, nullable=False),
+    Column("text", Text, nullable=False),                      # longer text under the question
+    Column("answer1", Text, nullable=False),                   # answer 1..4 = Square, Triangle, Cross, Circle
+    Column("answer2", Text, nullable=False),
+    Column("answer3", Text, nullable=False),
+    Column("answer4", Text, nullable=False),
+    Column("correct", Integer, nullable=False),                # 0..3
+    Column("explanation", Text, nullable=False),
+    Column("video", String(255), nullable=False, server_default=""),
+    Column("video_when", String(16), nullable=False, server_default="before"),
+    Column("image", String(255), nullable=False, server_default=""),
+    Column("time", Float, nullable=False, server_default="0"),  # seconds to answer, 0 = game default
+    Column("active", Integer, nullable=False, server_default="1"))
+games = Table(
+    "games", meta,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("started_at", DateTime, nullable=False, server_default=func.now()),
+    Column("ended_at", DateTime))
+round_scores = Table(
+    "round_scores", meta,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("game_id", Integer, ForeignKey("games.id"), nullable=False),
+    Column("round", Integer, nullable=False),
+    Column("round_type", String(32), nullable=False),
+    Column("player_id", Integer, ForeignKey("players.id")),   # NULL: joined without the app
+    Column("tile", Integer, nullable=False),
+    Column("points", Integer, nullable=False),                 # points in this round (the round's places)
+    Column("score", Integer, nullable=False),                  # rounds survived so far in this play
+    Column("lives", Integer, nullable=False),
+    Column("created_at", DateTime, nullable=False, server_default=func.now()))
+results = Table(
+    "results", meta,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("game_id", Integer, ForeignKey("games.id"), nullable=False),
+    Column("player_id", Integer, ForeignKey("players.id")),
+    Column("tile", Integer, nullable=False),
+    Column("name", String(255), nullable=False),
+    Column("score", Integer, nullable=False),                  # rounds survived (the ranking: best per player)
+    Column("lives", Integer, nullable=False),
+    Column("exterminated", Integer, nullable=False, server_default="0"),
+    Column("rank", Integer),                                   # NULL for exterminated players
+    Column("created_at", DateTime, nullable=False, server_default=func.now()))
+tiles_t = Table(
+    "tiles", meta,
+    Column("number", Integer, primary_key=True, autoincrement=False),   # the place: 1-13 floor, 14-18 mobile
+    Column("device", String(64), unique=True),                 # the physical tile on it (its MAC address)
+    Column("enabled", Integer, nullable=False, server_default="1"))     # 0 = out of service
+gamemasters_t = Table(
+    "gamemasters", meta,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", String(255), nullable=False),
+    Column("color", String(16), nullable=False),               # the tiles they assign light up in it
+    Column("active", Integer, nullable=False, server_default="1"))
+settings_t = Table(
+    "settings", meta,
+    Column("key", String(191), primary_key=True),              # e.g. "mode": setup / closed / open / paused
+    Column("value", Text, nullable=False))
+
+# columns added after the first installations: (table, column, SQL type) - added when missing
+LATER_COLUMNS = (("questions", "image", "VARCHAR(255) NOT NULL DEFAULT ''"),
+                 ("players", "card", "VARCHAR(191)"), ("players", "email", "VARCHAR(255)"))
+
+
+def engine_url(db):
+    """--db: a SQLAlchemy URL, or a plain path = a SQLite file."""
+    return db if "://" in db else "sqlite:///" + os.path.abspath(db)
+
+
+def _plain(row):
+    """A row as JSON-friendly dict (times as 'YYYY-MM-DD HH:MM:SS', as SQLite stores them)."""
+    return {k: (v.strftime("%Y-%m-%d %H:%M:%S") if isinstance(v, datetime.datetime) else v)
+            for k, v in row._mapping.items()}
+
 
 class Database:
-    def __init__(self, path):
-        self.path = path
-        self.lock = threading.Lock()          # one connection, requests come from a thread pool
-        self.con = sqlite3.connect(path, check_same_thread=False)
-        self.con.row_factory = sqlite3.Row
-        self.con.execute("PRAGMA journal_mode = WAL")
-        self.con.execute("PRAGMA foreign_keys = ON")
-        with open(SCHEMA, encoding="utf-8") as f:
-            self.con.executescript(f.read())
-        cols = {r["name"] for r in self.con.execute("PRAGMA table_info(questions)")}
-        if "image" not in cols:                  # databases from before the picture column
-            self.con.execute("ALTER TABLE questions ADD COLUMN image TEXT NOT NULL DEFAULT ''")
-            self.con.commit()
-        pcols = {r["name"] for r in self.con.execute("PRAGMA table_info(players)")}
-        if "card" not in pcols:
-            self.con.execute("ALTER TABLE players ADD COLUMN card TEXT")   # (before the QR cards)
-        if "email" not in pcols:
-            self.con.execute("ALTER TABLE players ADD COLUMN email TEXT")
-        self.con.execute("CREATE UNIQUE INDEX IF NOT EXISTS players_card ON players (card)")
-        self.con.commit()
+    def __init__(self, db):
+        self.url = engine_url(db)
+        sqlite = self.url.startswith("sqlite")
+        # MySQL closes idle connections: check them before use, renew them hourly
+        self.engine = create_engine(self.url, pool_pre_ping=True, **({} if sqlite else {"pool_recycle": 3600}))
+        if sqlite:
+            @event.listens_for(self.engine, "connect")
+            def _pragmas(con, _):
+                con.execute("PRAGMA journal_mode = WAL")
+                con.execute("PRAGMA foreign_keys = ON")
+        meta.create_all(self.engine)
+        cols = {t: {c["name"] for c in inspect(self.engine).get_columns(t)} for t in ("questions", "players")}
+        with self.engine.begin() as con:
+            for table, column, sqltype in LATER_COLUMNS:       # databases from before these columns
+                if column not in cols[table]:
+                    con.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {sqltype}"))
+        if "card" not in cols["players"]:          # (and its index, before the QR cards)
+            with self.engine.begin() as con:
+                con.execute(text("CREATE UNIQUE INDEX players_card ON players (card)"))
 
-    def _all(self, sql, args=()):
-        with self.lock:
-            return [dict(r) for r in self.con.execute(sql, args)]
+    def _all(self, stmt):
+        with self.engine.connect() as con:
+            return [_plain(r) for r in con.execute(stmt)]
 
-    def _one(self, sql, args=()):
-        rows = self._all(sql, args)
+    def _one(self, stmt):
+        rows = self._all(stmt)
         return rows[0] if rows else None
 
-    def _write(self, sql, args=()):
-        with self.lock:
-            cur = self.con.execute(sql, args)
-            self.con.commit()
-            return cur.lastrowid
+    def _write(self, stmt):
+        with self.engine.begin() as con:
+            res = con.execute(stmt)
+            return res.inserted_primary_key[0] if res.is_insert and res.inserted_primary_key else None
 
     # ------------------------------------------------------------ settings
 
     def setting(self, key, default=None):
-        row = self._one("SELECT value FROM settings WHERE key = ?", (key,))
+        row = self._one(select(settings_t.c.value).where(settings_t.c.key == key))
         return row["value"] if row else default
 
     def set_setting(self, key, value):
-        self._write("INSERT INTO settings (key, value) VALUES (?, ?)"
-                    " ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, str(value)))
+        with self.engine.begin() as con:
+            if con.execute(update(settings_t).where(settings_t.c.key == key).values(value=str(value))).rowcount == 0:
+                if con.execute(select(settings_t.c.key).where(settings_t.c.key == key)).first() is None:
+                    con.execute(insert(settings_t).values(key=key, value=str(value)))
 
     # ------------------------------------------------------------ tiles (places around the robot)
 
@@ -69,54 +163,59 @@ class Database:
         """The 18 places: 1-13 the floor tiles around the robot, 14-18 the mobile
         players' handheld tiles (M1-M5, their drones in the game): which physical
         tile (device id) is there, in service or not."""
-        with self.lock:
-            self.con.executemany("INSERT OR IGNORE INTO tiles (number) VALUES (?)", [(n,) for n in range(1, PLACES + 1)])
-            self.con.commit()
-        return self._all("SELECT number, device, enabled FROM tiles ORDER BY number")
+        with self.engine.begin() as con:
+            have = {r[0] for r in con.execute(select(tiles_t.c.number))}
+            missing = [{"number": n} for n in range(1, PLACES + 1) if n not in have]
+            if missing:
+                con.execute(insert(tiles_t), missing)
+        return self._all(select(tiles_t.c.number, tiles_t.c.device, tiles_t.c.enabled).order_by(tiles_t.c.number))
 
     def set_tile(self, number, device=..., enabled=None):
         """device: a device id, None (no device) or ... (unchanged)."""
         self.tiles()
-        with self.lock:
+        with self.engine.begin() as con:
             if device is not ...:
                 if device:                       # a device stands on one place only
-                    self.con.execute("UPDATE tiles SET device = NULL WHERE device = ?", (device,))
-                self.con.execute("UPDATE tiles SET device = ? WHERE number = ?", (device or None, number))
+                    con.execute(update(tiles_t).where(tiles_t.c.device == device).values(device=None))
+                con.execute(update(tiles_t).where(tiles_t.c.number == number).values(device=device or None))
             if enabled is not None:
-                self.con.execute("UPDATE tiles SET enabled = ? WHERE number = ?", (int(bool(enabled)), number))
-            self.con.commit()
+                con.execute(update(tiles_t).where(tiles_t.c.number == number).values(enabled=int(bool(enabled))))
 
     # ------------------------------------------------------------ gamemasters
 
     def gamemasters(self):
-        return self._all("SELECT id, name, color FROM gamemasters WHERE active = 1 ORDER BY name")
+        g = gamemasters_t.c
+        return self._all(select(g.id, g.name, g.color).where(g.active == 1).order_by(g.name))
 
     def gamemaster(self, gid):
-        return self._one("SELECT id, name, color FROM gamemasters WHERE id = ? AND active = 1", (gid,))
+        g = gamemasters_t.c
+        return self._one(select(g.id, g.name, g.color).where(g.id == gid, g.active == 1))
 
     def save_gamemaster(self, name, color, gid=None):
         if gid is None:
-            return self._write("INSERT INTO gamemasters (name, color) VALUES (?, ?)", (name, color))
-        self._write("UPDATE gamemasters SET name = ?, color = ? WHERE id = ?", (name, color, gid))
+            return self._write(insert(gamemasters_t).values(name=name, color=color))
+        self._write(update(gamemasters_t).where(gamemasters_t.c.id == gid).values(name=name, color=color))
         return gid
 
     def remove_gamemaster(self, gid):
-        self._write("UPDATE gamemasters SET active = 0 WHERE id = ?", (gid,))
+        self._write(update(gamemasters_t).where(gamemasters_t.c.id == gid).values(active=0))
 
     # ------------------------------------------------------------ players
 
     def add_player(self, name, color="#ffcc00", age=0, card=None):
         """card: the QR card's code (unique; a card used again is moved to this player)."""
-        with self.lock:
+        with self.engine.begin() as con:
             if card:
-                self.con.execute("UPDATE players SET card = NULL WHERE card = ?", (card,))
-            cur = self.con.execute("INSERT INTO players (name, color, age, card) VALUES (?,?,?,?)",
-                                   (name, color, int(age), card or None))
-            self.con.commit()
-            return cur.lastrowid
+                con.execute(update(players).where(players.c.card == card).values(card=None))
+            res = con.execute(insert(players).values(name=name, color=color, age=int(age), card=card or None))
+            return res.inserted_primary_key[0]
+
+    def _player_cols(self):
+        p = players.c
+        return select(p.id, p.name, p.color, p.age, p.card)
 
     def player(self, pid):
-        return self._one("SELECT id, name, color, age, card FROM players WHERE id = ?", (pid,))
+        return self._one(self._player_cols().where(players.c.id == pid))
 
     def upsert_card(self, card, name, age=0, email=None):
         """The registration website's sync (or a gamemaster for a visitor without
@@ -124,18 +223,20 @@ class Database:
         registered again: the same player, new name / age / email)."""
         p = self.player_by_card(card)
         pid = p["id"] if p else self.add_player(name, age=age, card=card)
-        self._write("UPDATE players SET name = ?, age = ?, email = ? WHERE id = ?", (name, int(age), email or None, pid))
+        self._write(update(players).where(players.c.id == pid).values(name=name, age=int(age), email=email or None))
         return pid
 
     def player_by_card(self, card):
         """The player registered with this QR card, or None."""
-        return self._one("SELECT id, name, color, age, card FROM players WHERE card = ?", (card,))
+        return self._one(self._player_cols().where(players.c.card == card))
 
     def players(self, search="", limit=50):
+        p, r = players.c, results.c
         return self._all(
-            "SELECT p.id, p.name, p.color, p.age, p.card, MAX(r.score) AS best, COUNT(r.id) AS plays"
-            " FROM players p LEFT JOIN results r ON r.player_id = p.id"
-            " WHERE p.name LIKE ? GROUP BY p.id ORDER BY p.id DESC LIMIT ?", (f"%{search}%", limit))
+            select(p.id, p.name, p.color, p.age, p.card, func.max(r.score).label("best"), func.count(r.id).label("plays"))
+            .select_from(players.outerjoin(results, r.player_id == p.id))
+            .where(p.name.like(f"%{search}%"))
+            .group_by(p.id, p.name, p.color, p.age, p.card).order_by(p.id.desc()).limit(limit))
 
     # ------------------------------------------------------------ questions
 
@@ -155,52 +256,61 @@ class Database:
         return q
 
     def questions(self):
-        return [self.question_json(r) for r in self._all("SELECT * FROM questions WHERE active = 1 ORDER BY id")]
+        return [self.question_json(r) for r in
+                self._all(select(questions).where(questions.c.active == 1).order_by(questions.c.id))]
 
     def question_rows(self):
-        return self._all("SELECT * FROM questions ORDER BY id")
+        return self._all(select(questions).order_by(questions.c.id))
 
     def save_question(self, q, qid=None):
-        values = [q.get(f) for f in QUESTION_FIELDS]
+        values = {f: q.get(f) for f in QUESTION_FIELDS}
+        for f in ("text", "explanation", "video", "image", "category"):     # (NOT NULL text columns)
+            if values[f] is None:
+                values[f] = ""
+        for f, default in (("video_when", "before"), ("min_age", 0), ("max_age", 99), ("time", 0), ("active", 1)):
+            if values[f] is None:
+                values[f] = default
         if qid is None:
-            cols = ", ".join(QUESTION_FIELDS)
-            return self._write(f"INSERT INTO questions ({cols}) VALUES ({','.join('?' * len(values))})", values)
-        sets = ", ".join(f"{f} = ?" for f in QUESTION_FIELDS)
-        self._write(f"UPDATE questions SET {sets} WHERE id = ?", values + [qid])
+            return self._write(insert(questions).values(**values))
+        self._write(update(questions).where(questions.c.id == qid).values(**values))
         return qid
 
     def delete_question(self, qid):
-        self._write("DELETE FROM questions WHERE id = ?", (qid,))
+        self._write(delete(questions).where(questions.c.id == qid))
 
     # ------------------------------------------------------------ games and scores
 
     def start_game(self):
-        return self._write("INSERT INTO games DEFAULT VALUES")
+        return self._write(insert(games).values(started_at=func.now()))
 
     def end_game(self, game_id):
-        self._write("UPDATE games SET ended_at = datetime('now') WHERE id = ?", (game_id,))
+        self._write(update(games).where(games.c.id == game_id).values(ended_at=func.now()))
 
     def save_round(self, game_id, rnd, round_type, rows):
-        for r in rows:
-            self._write("INSERT INTO round_scores (game_id, round, round_type, player_id, tile, points, score, lives)"
-                        " VALUES (?,?,?,?,?,?,?,?)", (game_id, rnd, round_type, r.get("player_id") or None,
-                                                      r["tile"], r["points"], r["score"], r["lives"]))
+        if not rows:
+            return
+        with self.engine.begin() as con:
+            con.execute(insert(round_scores), [
+                {"game_id": game_id, "round": rnd, "round_type": round_type, "player_id": r.get("player_id") or None,
+                 "tile": r["tile"], "points": r["points"], "score": r["score"], "lives": r["lives"]} for r in rows])
 
     def save_result(self, game_id, r):
-        self._write("INSERT INTO results (game_id, player_id, tile, name, score, lives, exterminated, rank)"
-                    " VALUES (?,?,?,?,?,?,?,?)", (game_id, r.get("player_id") or None, r["tile"], r["name"],
-                                                  r["score"], r["lives"], int(bool(r.get("exterminated"))),
-                                                  r.get("rank")))
+        self._write(insert(results).values(
+            game_id=game_id, player_id=r.get("player_id") or None, tile=r["tile"], name=r["name"], score=r["score"],
+            lives=r["lives"], exterminated=int(bool(r.get("exterminated"))), rank=r.get("rank")))
 
     def leaderboard(self, limit=1000):
         """Every player's highest score over all plays, best first."""
-        return self._all("SELECT p.id AS player_id, p.name AS name, MAX(r.score) AS best, COUNT(r.id) AS plays"
-                         " FROM results r JOIN players p ON p.id = r.player_id"
-                         " GROUP BY p.id ORDER BY best DESC LIMIT ?", (limit,))
+        p, r = players.c, results.c
+        best = func.max(r.score).label("best")
+        return self._all(
+            select(p.id.label("player_id"), p.name.label("name"), best, func.count(r.id).label("plays"))
+            .select_from(results.join(players, p.id == r.player_id))
+            .group_by(p.id, p.name).order_by(best.desc()).limit(limit))
 
     def recent_results(self, limit=30):
-        return self._all("SELECT r.*, g.started_at FROM results r JOIN games g ON g.id = r.game_id"
-                         " ORDER BY r.id DESC LIMIT ?", (limit,))
+        return self._all(select(results, games.c.started_at).select_from(results.join(games, games.c.id == results.c.game_id))
+                         .order_by(results.c.id.desc()).limit(limit))
 
     def import_questions(self, path):
         with open(path, encoding="utf-8") as f:
@@ -213,6 +323,6 @@ class Database:
                    "correct": q["correct"], "explanation": q.get("explanation", ""), "video": q.get("video", ""),
                    "video_when": q.get("video_when", "before"), "image": q.get("image", ""),
                    "time": q.get("time", 0), "active": 1}
-            existing = self._one("SELECT id FROM questions WHERE slug = ?", (row["slug"],))
+            existing = self._one(select(questions.c.id).where(questions.c.slug == row["slug"]))
             self.save_question(row, existing["id"] if existing else None)
         return len(items)

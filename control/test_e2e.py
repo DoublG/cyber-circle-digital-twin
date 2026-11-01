@@ -59,6 +59,14 @@ def until(cond, timeout=30.0):
     return None
 
 
+if os.environ.get("CC_TEST_DB"):            # another database (a URL), emptied first:
+    DB = os.environ["CC_TEST_DB"]          #   CC_TEST_DB=mysql+pymysql://user:pw@127.0.0.1:3306/cc_test
+    sys.path.insert(0, HERE)
+    import db as _db
+    from sqlalchemy import create_engine
+    _e = create_engine(DB)
+    _db.meta.drop_all(_e)
+    _e.dispose()
 for f in (DB, DB + "-wal", DB + "-shm"):
     if os.path.exists(f):
         os.remove(f)

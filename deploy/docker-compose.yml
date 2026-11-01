@@ -1,6 +1,6 @@
 # Everything in one go, for testing (the real installation runs bare on Linux
 # and the Raspberry Pis - docs/SETUP.md §3-4): the CA and certificates, the
-# MQTT broker, the control server (https, a real database in a volume), three
+# MQTT broker, MySQL, the control server (https), three
 # emulated tiles and the game (as a screen PC runs it). The parts find each
 # other by name (broker, control); the ports are the mapping on this PC
 # (.env, see .env.example).
@@ -33,6 +33,24 @@ services:
       - "${WSS_PORT:-9443}:9443"           # WebSocket over TLS: game, control server, app
     restart: unless-stopped
 
+  mysql:                                   # the database (the control server is its only user)
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: cybercircle
+      MYSQL_USER: cybercircle
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-cybercircle}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-cybercircle-root}
+    volumes:
+      - database:/var/lib/mysql
+    ports:
+      - "${MYSQL_PORT:-3307}:3306"         # to look inside with any MySQL client (3307: next to a local MySQL)
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-ucybercircle", "-p${MYSQL_PASSWORD:-cybercircle}", "--silent"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+    restart: unless-stopped
+
   control:
     build:
       context: ..
@@ -42,8 +60,11 @@ services:
         condition: service_completed_successfully
       broker:
         condition: service_started
+      mysql:
+        condition: service_healthy
     command:
-      - --db=/data/cybercircle.db          # the real database (a fresh one gets the example questions)
+      # MySQL through SQLAlchemy (an empty database gets the tables and the example questions)
+      - --db=mysql+pymysql://cybercircle:${MYSQL_PASSWORD:-cybercircle}@mysql/cybercircle?charset=utf8mb4
       - --port=8443
       - --mqtt=wss://broker:9443/mqtt
       - --ca=/certs/ca.pem
@@ -53,7 +74,6 @@ services:
       - --gm-web=/gm
     volumes:
       - ./certs:/certs:ro
-      - database:/data
       - ../gamemaster_app/build/web:/gm:ro # the app's web build (flutter build web ..., see SETUP §11)
     ports:
       - "${CONTROL_PORT:-8443}:8443"       # https://localhost:8443  (web interface, /gm/ = the app)
@@ -100,4 +120,4 @@ services:
     ports: !override ["${TILE3_PORT:-8193}:8090"]
 
 volumes:
-  database:                                # the SQLite database: survives restarts / rebuilds (down -v deletes it)
+  database:                                # MySQL's data: survives restarts / rebuilds (down -v deletes it)
