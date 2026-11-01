@@ -1,16 +1,18 @@
 class_name ObserverView
 extends Control
 ## The overview page for visitors (its own full-screen display): the floating
-## observer camera with
-##   top:          what is happening (round / state) + timer, a rotating
-##                 call to action ("VERSLA DE DALEK!")
-##   bottom-left:  how the current game works (the round's rules), every
-##                 `page_time` seconds alternating with the overall ranking
-##                 (top 10 by most rounds survived in one play)
-##   right:        live player list (score, lives, overall rank, invites) and
-##                 an event feed
-## After every round the scoreboard (the same as on the player screens) takes
-## the page (under the status bar) until the next round starts.
+## observer camera, the status bar (what is happening + timer) always on top,
+## and under it a loop for the people watching, scene after scene:
+##   scores   a rotating call to action ("VERSLA DE DALEK!"), the overall
+##            ranking (top 10 by most rounds survived in one play) bottom-left,
+##            the live player list and the event feed right
+##   games    every game explained, one after the other (title and rules) -
+##            the one being played now first ("NU BEZIG")
+##   join     how to join, big
+##   robot    nothing over the camera: it circles close around the robot
+## An extermination interrupts: everything steps aside (the camera drifts over
+## to watch, a GEËXTERMINEERD popup). After every round the UITSLAG and the
+## scoreboard (the same as on the player screens) take the page.
 
 const LOBBY_RULES := "1. Haal een QR-codekaart.\n2. Registreer je met je gsm.\n3. Ga naar een gamemaster: die laat je toe tot het spel.\n4. Zoek de tegel in jouw kleur en druk op de 4 iconen.\n5. Blijf zo lang mogelijk in het spel!"
 const MAX_EVENTS := 9
@@ -20,7 +22,8 @@ const BODY_TOP := 164            # under the status bar and the timer
 const GAP := 24
 const RIGHT_WIDTH := 760         # players + events column
 
-var page_time := 10.0             # s per page in the bottom-left panel (rules / ranking)
+## The loop: [scene, seconds] ("games": seconds per game).
+var scenes := [["scores", 14.0], ["games", 8.0], ["join", 12.0], ["robot", 14.0]]
 
 var wall: ScreenWall
 var _status: Label
@@ -34,7 +37,14 @@ var _events: VBoxContainer
 var _under: Array[Control] = []   # panels hidden while the scoreboard shows
 var _board: Control              # the UITSLAG (RankingView) or the ScoreboardView
 var _refresh := 0.0
-var _page_t := 0.0
+var _scene := 0                  # index in `scenes`
+var _scene_left := 0.0           # s until the next scene (or the next game)
+var _game := 0                   # games scene: which game now
+var _games: Array = []           # [{title, rules}] of every round type
+var _center: PanelContainer      # games / join: the big panel in the middle
+var _center_title: Label
+var _center_sub: Label
+var _center_body: Label
 
 
 func _ready() -> void:
@@ -122,6 +132,30 @@ func _ready() -> void:
 	_events.add_theme_constant_override("separation", 2)
 	fb.add_child(_events)
 	col.add_child(feed)
+	# middle: the games explained / how to join (the loop's big panel)
+	_center = Retro.panel_container(Color(Retro.PANEL, 0.92), Retro.ORANGE, 5, 20, 40)
+	_center.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	_center.custom_minimum_size = Vector2(1300, 0)
+	_center.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_center.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_center.offset_top = 60                         # (under the status bar)
+	var cb := VBoxContainer.new()
+	cb.add_theme_constant_override("separation", 14)
+	_center.add_child(cb)
+	_center_sub = Retro.label(34, Retro.TEAL)
+	cb.add_child(_center_sub)
+	_center_title = Retro.label(80, Retro.AMBER)
+	cb.add_child(_center_title)
+	_center_body = Retro.label(38, Retro.CREAM, "", HORIZONTAL_ALIGNMENT_LEFT)
+	_center_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_center_body.custom_minimum_size.x = 1200
+	cb.add_child(_center_body)
+	_center.visible = false
+	add_child(_center)
+	for t in GameManager.ROUND_TYPES:
+		var r: GameRound = t.new()
+		_games.append({"title": r.title, "rules": r.rules})
+	_scene_left = scenes[0][1]
 	wall.arena.game.game_event.connect(_on_event)
 	wall.arena.game.scores_shown.connect(_show_board)
 	wall.arena.game.ranking_shown.connect(_show_ranking)
@@ -182,20 +216,79 @@ func _place_board(board: Control) -> void:
 	_board.offset_top = BODY_TOP
 	_board.offset_bottom = -MARGIN
 	add_child(_board)
-	for c in _under:
-		c.visible = false
+	_apply_scene()
 
 
 func _hide_board() -> void:
 	if _board:
 		_board.queue_free()
 		_board = null
+	_apply_scene()
+
+
+func scene_name() -> String:
+	return scenes[_scene][0]
+
+
+## Jump to a scene of the loop (tests, screenshots).
+func show_scene(name: String) -> void:
+	_scene = scenes.find_custom(func(s): return s[0] == name)
+	_start_scene()
+
+
+func _next_scene() -> void:
+	if scene_name() == "games" and _game + 1 < _games.size():
+		_game += 1                                  # the next game
+		_scene_left = scenes[_scene][1]
+		_apply_scene()
+		return
+	_scene = (_scene + 1) % scenes.size()
+	_start_scene()
+
+
+func _start_scene() -> void:
+	_scene_left = scenes[_scene][1]
+	_game = 0
+	if scene_name() == "games":                     # the game being played now first
+		var game: GameManager = wall.arena.game
+		if game.current and game.state in [GameManager.State.INTRO, GameManager.State.PLAYING]:
+			var now := _games.find_custom(func(g): return g.title == game.current.title)
+			if now > 0:
+				_games.push_front(_games.pop_at(now))
+	if scene_name() == "robot":
+		wall.arena.observer.close_up(_scene_left)
+	_apply_scene()
+
+
+## What shows over the camera: the board after a round, nothing during an
+## extermination, else the loop's scene.
+func _apply_scene() -> void:
+	var arena := wall.arena
+	var scene := scene_name()
+	var free: bool = _board == null and arena.dying.is_empty()
 	for c in _under:
-		c.visible = true
+		c.visible = free and scene == "scores"
+	_center.visible = free and scene in ["games", "join"]
+	if scene == "games":
+		var g: Dictionary = _games[_game]
+		var game: GameManager = arena.game
+		var now: bool = game.current != null and game.current.title == g.title \
+			and game.state in [GameManager.State.INTRO, GameManager.State.PLAYING]
+		_center_sub.text = "NU BEZIG" if now else "DE SPELLEN  %d/%d" % [_game + 1, _games.size()]
+		_center_sub.add_theme_color_override("font_color", Retro.GOOD if now else Retro.TEAL)
+		_center_title.text = str(g.title).to_upper()
+		_center_body.text = g.rules
+	elif scene == "join":
+		_center_sub.text = "DOE MEE!"
+		_center_sub.add_theme_color_override("font_color", Retro.TEAL)
+		_center_title.text = "HOE DOE JE MEE?"
+		_center_body.text = LOBBY_RULES
 
 
 func _process(delta: float) -> void:
-	_page_t += delta
+	_scene_left -= delta
+	if _scene_left <= 0.0:
+		_next_scene()
 	_refresh -= delta
 	if _refresh <= 0.0:
 		_refresh = 0.25
@@ -219,8 +312,9 @@ func _update() -> void:
 		_hide_board()
 	if _board:                     # an extermination: the board steps aside for the robot
 		_board.visible = arena.dying.is_empty()
+	_apply_scene()
 	var ranking := game.overall_ranking()
-	if int(_page_t / page_time) % 2 == 1 and not ranking.is_empty():
+	if not ranking.is_empty():
 		_rules_title.text = "RANGLIJST - MEESTE RONDES OVERLEEFD"
 		var lines := PackedStringArray()
 		for i in mini(ranking.size(), TOP):

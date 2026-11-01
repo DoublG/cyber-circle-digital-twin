@@ -52,7 +52,7 @@ func _ready() -> void:
 		await get_tree().process_frame
 	await get_tree().create_timer(0.6).timeout
 	await _no_overlap(page, "overview intro")
-	page._page_t = page.page_time                         # the ranking page in the rules panel
+	page.show_scene("scores")                            # the ranking in the bottom-left panel
 	await get_tree().create_timer(0.4).timeout
 	await _no_overlap(page, "overview ranking")
 	page.get_viewport().get_texture().get_image().save_png("res://tests/shots/40_overview_layout.png")

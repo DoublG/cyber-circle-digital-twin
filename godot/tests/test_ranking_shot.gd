@@ -56,7 +56,7 @@ func _ready() -> void:
 	await get_tree().create_timer(0.5).timeout
 	await _shot("29_scoreboard_record_rank")
 	var page: ObserverView = _find_page(arena.screen_wall)
-	page._page_t = page.page_time + 0.1        # the ranking page
+	page.show_scene("scores")                  # the ranking page
 	page._update()
 	await RenderingServer.frame_post_draw
 	page.get_viewport().get_texture().get_image().save_png("res://tests/shots/30_overview_ranking.png")

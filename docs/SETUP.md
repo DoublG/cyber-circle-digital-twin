@@ -213,7 +213,14 @@ X-GNOME-Autostart-enabled=true
 1. **Setup** – the operator assigns the physical tiles and screens, then locks
    the setup and presses **Start spel** in the web interface (§10). With
    nobody playing the game idles; the screens show every tile's slot ("VRIJ")
-   and how to join, the overview the floating camera and the ranking.
+   and how to join. The **overview page** (for the people watching: the
+   floating camera, the status bar and timer always on top) runs a loop:
+   **scores** (player list, events, the overall ranking) → **de spellen**
+   (every game explained, one after the other; the one being played first,
+   NU BEZIG) → **hoe doe je mee?** → **the robot** up close (nothing over the
+   camera) → scores … An extermination clears the page so everyone sees it;
+   after a round the UITSLAG and the scoreboard take the page. The scene
+   lengths: `ObserverView.scenes`.
 2. A visitor gets a **QR card**, registers with their phone, and a **game
    master** lets them in: the app creates the player and assigns a tile.
    Their tile lights up in their colour; they press the 4 icons to activate it.

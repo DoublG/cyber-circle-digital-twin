@@ -17,6 +17,7 @@ var _angle := 0.0
 var _look := Vector3.ZERO
 var _focus := Vector3.ZERO      # a tile to watch (an extermination) ...
 var _focus_left := 0.0          # ... for this many seconds more
+var _close_left := 0.0          # the overview's robot scene: close around the robot
 
 
 func setup(arena_node: Node3D) -> void:
@@ -34,8 +35,15 @@ func focus(tile_pos: Vector3, seconds: float) -> void:
 	_focus_left = seconds
 
 
+## The robot up close: a lower, nearer orbit (just outside the tiles) for
+## `seconds` - the overview page's robot scene. A focus (extermination) wins.
+func close_up(seconds: float) -> void:
+	_close_left = seconds
+
+
 func _process(delta: float) -> void:
 	_t += delta
+	_close_left = maxf(_close_left - delta, 0.0)
 	var look := center + Vector3(sin(_t * 0.07) * 0.5, 0.2 * sin(_t * 0.05), cos(_t * 0.06) * 0.5)
 	var target := _orbit_pos()
 	var g := glide
@@ -50,6 +58,10 @@ func _process(delta: float) -> void:
 			look = _focus.lerp(center, 0.35)
 		g = glide * 1.6
 		_angle = atan2(position.z, position.x)     # afterwards: float on from here
+	elif _close_left > 0.0:
+		_angle += orbit_speed * 2.5 * delta
+		target = Vector3(cos(_angle) * 3.4, 1.55 + 0.25 * sin(_t * 0.3), sin(_angle) * 3.4)
+		look = center + Vector3(0.0, 0.25, 0.0)
 	else:
 		_angle += orbit_speed * delta
 	var k := 1.0 - exp(-delta * g)
