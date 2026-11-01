@@ -348,6 +348,17 @@ binary and a pressed icon flashes (the sensor test); `identify` makes it light
 up. The status LED: blue = wifi, amber = MQTT but no place yet, green = ready,
 red = no wifi. Build and flash: `cd tile_firmware && pio run -t upload`
 (the sensors calibrate at power-up: nobody on the tile then).
+**Emulator** (no hardware): [Wokwi](https://wokwi.com) runs the real
+firmware on a simulated ESP32 with a 48-LED ring, a strip with the 5 hearts,
+the 4 icon LEDs and the status LED, and 4 buttons in the icon colours as the
+pressure sensors (`tile_firmware/diagram.json`). Build it with
+`pio run -e wokwi` (the emulator's wifi `Wokwi-GUEST`; the MQTT broker on this
+PC as `host.wokwi.internal`, port 1883 – Mosquitto's plain listener), then in
+VS Code with the Wokwi extension: *Wokwi: Start Simulator* (its private gateway
+reaches the broker on this PC; `wokwi.toml`). Headless:
+`WOKWI_CLI_TOKEN=… ~/.wokwi/bin/wokwi-cli tile_firmware` (a free token:
+wokwi.com/dashboard/ci). Place the simulated tile like a real one: it shows up
+under *Tegels zonder plaats* with its MAC address.
 **MQTT** in the web interface shows the raw traffic live (filter by topic).
 
 ## 6. Database

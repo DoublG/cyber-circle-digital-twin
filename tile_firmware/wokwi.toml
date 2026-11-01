@@ -1,0 +1,8 @@
+# Wokwi: the tile in the emulator (VS Code: "Wokwi: Start Simulator";
+# headless: wokwi-cli). First: pio run -e wokwi
+[wokwi]
+version = 1
+firmware = ".pio/build/wokwi/firmware.bin"
+elf = ".pio/build/wokwi/firmware.elf"
+# the simulated ESP32 reaches this PC as host.wokwi.internal (the MQTT broker)
+gateway = true
