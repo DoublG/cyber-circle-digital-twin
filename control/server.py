@@ -11,7 +11,7 @@ Gamemaster app in a browser (iPhone): http://<this pc>:8080/gm/ (the Flutter web
                POST /api/games, POST /api/games/{id}/rounds|results|end
   displays     GET /api/master        (where the master is: the Pis connect to it)
   performance  GET /api/metrics       (every component: fps, frame times, CPU, memory, links; Prestaties tab)
-  app          POST /api/players {name, color, age, card?} -> {id};  POST /api/players/{id}/assign {tile?}
+  app          POST /api/players {name, color, age, card?} -> {id};  POST /api/players/{id}/assign {tile?, mobile?}
   website      GET /api/website (is the registration website up? --website=URL of its health endpoint,
                none: a mock - POST /api/website/mock {"up": false} to test), the last registration in
   website sync PUT /api/cards/{code} {name, age, email?} (visitors register on the website with their card;
@@ -87,6 +87,7 @@ class AssignIn(BaseModel):
     tile: int = 0                            # 0 = any free floor tile; 14-18 = a mobile player's drone (M1-M5)
     color: str | None = None                 # the tile lights up in this colour so the visitor finds it
     gamemaster: int = 0                      # who assigns (their colour wins; shown in the event feed)
+    mobile: bool = False                     # tile 0: a free mobile place when no floor tile is free (the app's setting)
 
 
 class QuestionIn(BaseModel):
@@ -696,6 +697,8 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         cmd = {"assign": pid}
         if a.tile:
             cmd["tile"] = a.tile
+        elif a.mobile:
+            cmd["mobile"] = True
         gm = db.gamemaster(a.gamemaster) if a.gamemaster else None
         color = gm["color"] if gm else a.color
         if color:

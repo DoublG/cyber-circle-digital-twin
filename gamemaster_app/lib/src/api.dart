@@ -143,8 +143,10 @@ class Api {
     return (url: '${j['url']}', qr: '${j['qr']}', video: j['video'] == true);
   }
 
-  Future<void> assign(int playerId, int tile, Gamemaster gm) =>
-      _send('POST', '/api/players/$playerId/assign', {'tile': tile, 'gamemaster': gm.id, 'color': colorHex(gm.color)});
+  /// tile 0: the game picks a free floor tile - mobile: else a free mobile place.
+  Future<void> assign(int playerId, int tile, Gamemaster gm, {bool mobile = false}) =>
+      _send('POST', '/api/players/$playerId/assign',
+          {'tile': tile, 'gamemaster': gm.id, 'color': colorHex(gm.color), if (mobile) 'mobile': true});
 
   /// The places and the physical tiles: which tile (its MAC address, as it
   /// announces itself over MQTT) stands on which place, and the tiles seen.

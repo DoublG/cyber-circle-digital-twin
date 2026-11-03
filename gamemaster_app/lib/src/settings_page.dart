@@ -49,6 +49,14 @@ class _SettingsPageState extends State<SettingsPage> {
             subtitle: const Text('Een gescande kaart gaat meteen naar een vrije vloertegel (het spel vult de lege '
                 'plaatsen). Uit: voor elke bezoeker de plaats kiezen.', style: TextStyle(color: Retro.dim)),
           ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: app.quickMobile,
+            onChanged: app.quickAssign ? app.setQuickMobile : null,
+            title: const Text('Ook mobiele plaatsen'),
+            subtitle: const Text('Snel toewijzen vult ook de mobiele plaatsen (drones, M1 eerst) als er geen vloertegel '
+                'meer vrij is - voor een opstelling met weinig of geen fysieke tegels.', style: TextStyle(color: Retro.dim)),
+          ),
           const SizedBox(height: 16),
           const Text('OPSTELLING', style: TextStyle(color: Retro.teal, fontWeight: FontWeight.bold)),
           Text('De ingang onderaan (6 uur), T01 op ${app.t01Clock.toStringAsFixed(app.t01Clock % 1 == 0 ? 0 : 1)} uur - '

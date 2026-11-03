@@ -1,7 +1,9 @@
 // Scanning, back to back (500 visitors a session): the camera keeps running.
 // A card is looked up (visitors register with it on the website, synced to
 // the control server); fast assign: straight to a free floor tile in this
-// gamemaster's colour (the game fills the empty places). Then one indicator
+// gamemaster's colour (the game fills the empty places) - with "ook mobiele
+// plaatsen" on (Instellingen: the gamemaster's choice, never automatic): else
+// a free mobile place (a drone, M1 first). Then one indicator
 // screen - NAME, go to tile T04, in the colour - and VOLGENDE: the next scan.
 // (Also for an unknown card, a full game, ...: what's wrong, VOLGENDE.)
 // The recent visitors below the camera follow live (waiting / playing); tap
@@ -117,6 +119,9 @@ class _ScanPageState extends State<ScanPage> {
     }
   }
 
+  /// Fast assign also to the mobile places: only when the gamemaster turned it on.
+  bool get _mobileToo => app.quickMobile;
+
   /// Fast assign: a free floor tile, then the indicator (or: choose the place).
   Future<void> _place(Player player, String code) async {
     final where = app.live.state.whereIs(player.id);
@@ -157,7 +162,7 @@ class _ScanPageState extends State<ScanPage> {
         _show('Het spel is niet open.');
         return;
       }
-      await app.api!.assign(player.id, 0, app.gamemaster!);
+      await app.api!.assign(player.id, 0, app.gamemaster!, mobile: _mobileToo);
       setState(() {
         _showing = _Recent(player, code);
         _recent.insert(0, _showing!);
@@ -370,7 +375,8 @@ class _ScanPageState extends State<ScanPage> {
     if (_problem != null) {
       middle = Text(_problem!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 26, color: Retro.cream));
     } else if (where == null) {
-      middle = Text(late ? 'Niet geplaatst: geen vrije vloertegel.' : '…', textAlign: TextAlign.center,
+      middle = Text(late ? (_mobileToo ? 'Niet geplaatst: geen vrije plaats.' : 'Niet geplaatst: geen vrije vloertegel.') : '…',
+          textAlign: TextAlign.center,
           style: TextStyle(fontSize: late ? 26 : 60, color: Retro.cream));
     } else {
       final mobile = s.isMobile(where.$1);
@@ -485,7 +491,7 @@ class _ScanPageState extends State<ScanPage> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               color: Colors.black54,
-              child: Text(app.quickAssign ? 'SNEL: VRIJE VLOERTEGEL' : 'PLAATS KIEZEN',
+              child: Text(app.quickAssign ? (_mobileToo ? 'SNEL: VLOERTEGEL OF MOBIEL' : 'SNEL: VRIJE VLOERTEGEL') : 'PLAATS KIEZEN',
                   style: TextStyle(color: app.color, fontWeight: FontWeight.bold, fontSize: 12)),
             ),
           ),

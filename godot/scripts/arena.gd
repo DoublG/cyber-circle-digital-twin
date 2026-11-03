@@ -30,7 +30,7 @@ extends Node3D
 ##                       drone, 14-18 = M1-M5; set up at their station first)
 ##                       (QR scan; without "tile" a free tile is chosen; "age" is
 ##                        optional and protects young players from too hard questions)
-##   {"assign": 42, "tile": 3, "color": "#ff8800"}  (player 42 from the database, put
+##   {"assign": 42, "tile": 3, "color": "#ff8800", "mobile": true}  (player 42 from the database, put
 ##                        there by the gamemaster app; name and age are read from it;
 ##                        "color": the tile lights up in it so the player finds it;
 ##                        "tile" optional)
@@ -500,12 +500,13 @@ func player_db_id(tile_id: int) -> int:
 
 
 ## Register a player the app put in the database ({"assign": id}).
-func assign(player_id: int, tile_id := 0, color = null) -> int:
+## mobile: with no tile given, a free mobile place (drone) when no floor tile is free.
+func assign(player_id: int, tile_id := 0, color = null, mobile := false) -> int:
 	var p: Dictionary = await game.db.fetch_player(player_id) if game.db else {}
 	if p.is_empty():
 		push_warning("assign: player %d not in the database" % player_id)
 		return 0
-	return register(tile_id, p.name, color if color is Color else Color(p.color), int(p.age), player_id)
+	return register(tile_id, p.name, color if color is Color else Color(p.color), int(p.age), player_id, mobile)
 
 
 ## The tile a database player is on now (invited or playing), or 0. A player
@@ -540,10 +541,11 @@ func pending_info(tile_id: int) -> Dictionary:
 ## Step 1 (from the registration system after a QR scan): the tile lights up
 ## in the colour shown in the app (so the player can find it) and waits until
 ## all 4 icons are pressed.
-## tile_id <= 0: pick a free floor tile (a mobile player's drone is always
-## chosen by the operator: tile 14-18). Returns the tile id, or 0 if none is
+## tile_id <= 0: pick a free floor tile; mobile = true (the gamemaster's
+## choice in the app: "ook mobiele plaatsen"): when none is free, a free mobile
+## place (a drone, M1 first). Never on its own. Returns the tile id, or 0 if none is
 ## free. player_id: the player's id in the database (0 = not from the database).
-func register(tile_id: int, player: String, color := Color(1.0, 0.8, 0.1), age := 0, player_id := 0) -> int:
+func register(tile_id: int, player: String, color := Color(1.0, 0.8, 0.1), age := 0, player_id := 0, mobile := false) -> int:
 	if not game.accepting_players():
 		push_warning("register %s: the game is not open (%s)" % [player, game.mode_name()])
 		return 0
@@ -552,11 +554,17 @@ func register(tile_id: int, player: String, color := Color(1.0, 0.8, 0.1), age :
 		push_warning("register %s: already on tile %d" % [player, already])
 		return 0
 	if tile_id <= 0:
-		var free := tiles.filter(func(t): return t.idle and not is_pending(t.tile_id) and is_enabled(t.tile_id) and not t is DroneTile)
-		if free.is_empty():
+		var open := func(t): return t.idle and not is_pending(t.tile_id) and is_enabled(t.tile_id)
+		var free := tiles.filter(func(t): return open.call(t) and not t is DroneTile)
+		if free.is_empty() and mobile:                    # the gamemaster's choice: a free mobile place, M1 first
+			var drones := tiles.filter(func(t): return open.call(t) and t is DroneTile)
+			if not drones.is_empty():
+				tile_id = drones[0].tile_id
+		elif not free.is_empty():
+			tile_id = pick_free_tile(free.map(func(t): return t.tile_id))
+		if tile_id <= 0:
 			push_warning("register %s: no free tile" % player)
 			return 0
-		tile_id = pick_free_tile(free.map(func(t): return t.tile_id))
 	if is_playing(tile_id):
 		push_warning("register %s: tile %d is in use" % [player, tile_id])
 		return 0
@@ -1309,11 +1317,12 @@ func apply_command(cmd: Dictionary) -> void:
 		robot_attack(cmd.attacked.map(func(v): return int(v)))
 		return
 	if cmd.has("assign"):    # the app put the player in the database: {"assign": id, "tile"?: n}
-		assign(int(cmd.assign), int(cmd.get("tile", 0)), Color(cmd.color) if cmd.has("color") else null)
+		assign(int(cmd.assign), int(cmd.get("tile", 0)), Color(cmd.color) if cmd.has("color") else null,
+			bool(cmd.get("mobile", false)))
 		return
 	if cmd.has("register"):  # QR scan: {"register": name, "color": "#rrggbb", "tile"?: n}
 		register(int(cmd.get("tile", 0)), str(cmd.register), Color(cmd.get("color", "#ffcc1a")),
-			int(cmd.get("age", 0)))
+			int(cmd.get("age", 0)), 0, bool(cmd.get("mobile", false)))
 		return
 	if cmd.has("tile") and not cmd.has("robot"):
 		var tile := tiles[int(cmd.tile) - 1]

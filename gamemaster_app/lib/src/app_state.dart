@@ -25,6 +25,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   /// Fast: a scanned card goes straight to a free floor tile (500 visitors a
   /// session: scan, scan, scan); off: choose the place for every visitor.
   bool quickAssign = true;
+  bool quickMobile = false;                // fast assign: also a free mobile place (M1-M5)
   Gamemaster? gamemaster;          // who uses the app now (null: choose)
   /// The registration website (the control server checks it): 'down' = new
   /// registrations don't come in - the crew must know (a banner).
@@ -64,6 +65,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     mqttUser = p.getString('mqtt_user') ?? '';
     mqttPassword = p.getString('mqtt_password') ?? '';
     quickAssign = p.getBool('quick') ?? true;
+    quickMobile = p.getBool('quick_mobile') ?? false;
     lastGamemaster = p.getInt('gamemaster') ?? 0;
     device = p.getString('device') ?? '';
     if (device.isEmpty) {
@@ -80,6 +82,15 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
     final p = await SharedPreferences.getInstance();
     await p.setBool('quick', on);
+  }
+
+  /// Fast assign also to the mobile places (drones): when no floor tile is
+  /// free - an installation without (enough) physical tiles.
+  Future<void> setQuickMobile(bool on) async {
+    quickMobile = on;
+    notifyListeners();
+    final p = await SharedPreferences.getInstance();
+    await p.setBool('quick_mobile', on);
   }
 
   Future<void> login(Gamemaster gm) async {

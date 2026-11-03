@@ -47,3 +47,5 @@ tools/voice/reference*.wav
 godot/tests/_voice/
 godot/movie/game_tmp/
 movies/game/
+godot/movie/*_tmp/
+movies/game_*/

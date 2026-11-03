@@ -18,10 +18,18 @@ and press the 4 icons); Lies puts a mobile player
 on a drone, starts it from the web interface; a quiz, Cyclone (on the tile),
 Ritme and a quiz again, with the scoreboards in between; the operator stops it.
 
+Setups (--setup, each its own folder and file names, so the others stay):
+  full      every place: 7 visitors on the floor + 1 mobile player     -> movies/game/
+  partial   a partial installation: 5 floor tiles + 1 mobile place (T01-T05, M1)
+            5 visitors + 1 mobile player     -> movies/game_deels_5tegels_1mobiel/deels_5tegels_1mobiel_*.mp4
+  mobile    only the 5 mobile places (M1-M5): 5 mobile players - the gamemaster turns on
+            "Ook mobiele plaatsen" in the app and scans them (fast assign to M1, M2 ...)
+                                             -> movies/game_alleen_mobiel/alleen_mobiel_*.mp4
+
 Needs: playwright (+ Chrome), qrcode, pillow, ffmpeg - in control/.venv:
-    control/.venv/bin/python tools/make_game_movies.py
+    control/.venv/bin/python tools/make_game_movies.py [--setup full|partial|mobile]
 """
-import json, os, queue, shutil, subprocess, sys, threading, time, urllib.request
+import argparse, json, os, queue, shutil, subprocess, sys, threading, time, urllib.request
 
 import qrcode
 from PIL import Image
@@ -37,9 +45,17 @@ FPS = 30                     # the game's frames
 WEB_EVERY = 2                # a web page frame every 2 game frames: 15 fps
 CARDS = [("CC-0101", "Anna", 11), ("CC-0102", "Bram", 13), ("CC-0103", "Cleo", 10), ("CC-0104", "Daan", 9),
          ("CC-0105", "Eva", 12), ("CC-0106", "Finn", 14), ("CC-0107", "Gust", 12)]
-MOBILE = ("CC-0108", "Hanne", 11)                    # on drone M1 (tile 14)
 ROUNDS = ["quiz", "cyclone", "rhythm", "quiz"]
 APP_SCANS = 3                # visitors Erik scans with the (filmed) app; Lies registers the others
+MOBILES = [("CC-0108", "Hanne", 11), ("CC-0109", "Ilias", 10), ("CC-0110", "Jules", 13),
+           ("CC-0111", "Kato", 12), ("CC-0112", "Lotte", 9)]
+SETUPS = {   # installed places (None: all), floor visitors, mobile players (on M1, M2, ...), folder, file prefix
+    "full": {"installed": None, "floor": CARDS, "mobile": MOBILES[:1], "dir": "game", "prefix": ""},
+    "partial": {"installed": [1, 2, 3, 4, 5, 14], "floor": CARDS[:5], "mobile": MOBILES[:1],
+                "dir": "game_deels_5tegels_1mobiel", "prefix": "deels_5tegels_1mobiel_"},
+    "mobile": {"installed": [14, 15, 16, 17, 18], "floor": [], "mobile": MOBILES, "scan_mobile": True,
+               "dir": "game_alleen_mobiel", "prefix": "alleen_mobiel_"},
+}
 
 
 def log(*a):
@@ -239,6 +255,15 @@ def fill_gaps(d, last):
 
 
 def main():
+    global OUT, TMP
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--setup", default="full", choices=sorted(SETUPS))
+    setup = SETUPS[ap.parse_args().setup]
+    OUT = os.path.join(ROOT, "movies", setup["dir"])
+    TMP = os.path.join(GODOT, "movie", "game_tmp" if setup["dir"] == "game" else setup["dir"] + "_tmp")
+    floor, mobiles = setup["floor"], setup["mobile"]
+    scan_mobile = setup.get("scan_mobile", False)          # the scanned cards go to the mobile places
+    scanned = mobiles if scan_mobile else floor
     shutil.rmtree(TMP, ignore_errors=True)
     os.makedirs(TMP)
     open(os.path.join(TMP, ".gdignore"), "w").close()
@@ -256,7 +281,7 @@ def main():
     # the people and the cards (as the registration website syncs them), a quick game
     for name, color in (("Erik", "#00ffcc"), ("Lies", "#ff44cc")):
         call("POST", "/api/gamemasters", {"name": name, "color": color})
-    for code, name, age in CARDS + [MOBILE]:
+    for code, name, age in floor + mobiles:
         call("PUT", f"/api/cards/{code}", {"name": name, "age": age})
     call("PUT", "/api/settings", {"game": {"auto_start_delay": 0, "intro_time": 7, "result_time": 8,
                                            "scoreboard_time": 8},
@@ -269,7 +294,7 @@ def main():
                              "--no-restore"], stdout=logs["game"], stderr=subprocess.STDOUT)
     procs.append(game)
     cam = os.path.join(TMP, "qr.y4m")
-    qr_video([c[0] for c in CARDS], cam)
+    qr_video([c[0] for c in scanned], cam)
     admin = Recorder("beheer", {"width": 1600, "height": 1000})
     phone = Recorder("gamemaster", {"width": 412, "height": 892}, scale=2, mobile=True, camera=cam)
     try:
@@ -287,6 +312,16 @@ def main():
         phone.do(lambda p: app_tap(p, "ERIK"))
         wait_frames(60)
 
+        if setup["installed"]:
+            log("--- the installation: places", setup["installed"])
+            admin.do(web_tab("tiles"))
+            wait_frames(30)
+            call("PUT", "/api/installation", {"installed": setup["installed"]})
+            until(lambda: state().get("installed") == setup["installed"], 30)
+            admin.do(lambda p: p.reload(wait_until="domcontentloaded"))
+            admin.do(web_tab("tiles"))
+            wait_frames(FPS * 3)
+            admin.do(web_tab("game"))
         log("--- the operator locks the setup and opens the game")
         admin.do(web_click('button[data-mode="closed"]'))
         until(lambda: state()["mode"] == "closed", 20)
@@ -294,9 +329,16 @@ def main():
         admin.do(web_click('button[data-mode="open"]'))
         until(lambda: state()["mode"] == "open", 20)
         wait_frames(45)
+        gm = {g["name"]: g for g in call("GET", "/api/gamemasters")}
+        if scan_mobile:                                # the gamemaster's choice: fast assign to the drones too
+            log("--- the gamemaster turns on 'Ook mobiele plaatsen' (Instellingen)")
+            phone.do(lambda p: app_tab(p, "Instellingen"))
+            phone.do(lambda p: p.wait_for_timeout(1500))
+            phone.do(lambda p: app_tap(p, "Ook mobiele plaatsen", role="switch"))
+            phone.do(lambda p: p.wait_for_timeout(2000))
         log("--- the gamemaster scans the visitors' cards")
-        phone.do(lambda p: app_tab(p, "Scannen"))
-        end = time.time() + 300                        # Erik scans the first visitors with the app ...
+        phone.do(lambda p: app_tab(p, "Scannen" if scanned else "Tegels"))
+        end = time.time() + (300 if scanned else 0)     # Erik scans the first visitors with the app ...
         while time.time() < end:
             st = state()
             if len(st.get("players", [])) + len(st.get("pending", [])) >= APP_SCANS:
@@ -306,22 +348,23 @@ def main():
         phone.do(app_next_if_shown)
         log("scanned with the app:", [p["name"] for p in state().get("players", []) + state().get("pending", [])])
         admin.do(web_tab("tiles"))
-        gm = {g["name"]: g for g in call("GET", "/api/gamemasters")}
         known = {p["name"] for p in state().get("players", []) + state().get("pending", [])}
-        for code, name, _ in CARDS:                    # ... and Lies (another phone) the others
+        for code, name, _ in scanned:                  # ... and Lies (another phone) the others
             if name in known:
                 continue
             pid = call("GET", f"/api/cards/{code}")["id"]
-            call("POST", f"/api/players/{pid}/assign", {"gamemaster": gm["Lies"]["id"]})
+            call("POST", f"/api/players/{pid}/assign", {"gamemaster": gm["Lies"]["id"], "mobile": scan_mobile})
             phone.do(app_next_if_shown)
             wait_frames(FPS * 4)
-        until(lambda: len(state().get("players", [])) >= len(CARDS), 300)
+        until(lambda: len(state().get("players", [])) >= len(scanned), 300)
         log("registered:", len(state().get("players", [])), "playing,", len(state().get("pending", [])), "invited")
-        log("--- a mobile player on drone M1 (the gamemaster puts them there)")
-        pid = call("GET", f"/api/cards/{MOBILE[0]}")["id"]
-        call("POST", f"/api/players/{pid}/assign", {"tile": 14, "gamemaster": gm["Lies"]["id"]})
         phone.do(lambda p: app_tab(p, "Tegels"))
-        until(lambda: any(p["tile"] == 14 for p in state().get("players", [])), 240)
+        for k, (code, name, _) in enumerate([] if scan_mobile else mobiles):   # the mobile players, on their drones
+            log(f"--- a mobile player on drone M{k + 1} (a gamemaster puts them there)")
+            pid = call("GET", f"/api/cards/{code}")["id"]
+            call("POST", f"/api/players/{pid}/assign", {"tile": 14 + k, "gamemaster": gm["Lies" if k % 2 else "Erik"]["id"]})
+            wait_frames(FPS * 4)
+        until(lambda: len(state().get("players", [])) >= len(floor) + len(mobiles), 300)
         admin.do(web_tab("game"))
         for slot, r in enumerate(ROUNDS[:3]):          # (the game plans 3 rounds ahead: the 4th later)
             call("POST", "/api/plan", {"slot": slot, "round": r})
@@ -376,10 +419,10 @@ def main():
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", os.path.join(TMP, "main.avi"), "-vn", audio], check=False)
     audio = audio if os.path.exists(audio) else None
     for name in ["overzicht"] + [f"scherm_{k}" for k in range(1, 6)] + ["mobiel_1", "mobiel_2"]:
-        build(name, os.path.join(TMP, name), FPS, audio, os.path.join(OUT, name + ".mp4"))
+        build(name, os.path.join(TMP, name), FPS, audio, os.path.join(OUT, setup["prefix"] + name + ".mp4"))
     for r in (admin, phone):
         fill_gaps(r.dir, last // WEB_EVERY)
-        build(r.name, r.dir, FPS // WEB_EVERY, None, os.path.join(OUT, r.name + ".mp4"))
+        build(r.name, r.dir, FPS // WEB_EVERY, None, os.path.join(OUT, setup["prefix"] + r.name + ".mp4"))
     log("done:", OUT)
 
 

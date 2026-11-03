@@ -1149,6 +1149,12 @@ card on the website; that is synced to the control server
 - **Mobile players** (wheelchair, blind, tablet): tap them in the recent list
   under the camera – *andere plaats* – and pick a drone M1–M5 (set up at their
   station first). With fast assign off, every card opens that choice.
+- **Ook mobiele plaatsen** (*Instellingen*, off by default – the gamemaster's
+  choice, never automatic): fast assign then also fills the mobile places when
+  no floor tile is free – M1 first, then M2 … (**GA NAAR DRONE M1**). For an
+  installation with few or no physical tiles (e.g. only M1–M5): scanning works
+  as fast as on the floor. The app sends `{"mobile": true}` with the assignment;
+  the game still picks the place (`tests/check_mobile_assign.gd`).
 - **Tegels** (setup, and swapping a broken tile): every place – T01–T13 and the
   mobile players' handheld tiles M1–M5 – with the physical tile on it (its MAC
   address: tiles announce themselves over MQTT, `device/<mac>/hello`), online
