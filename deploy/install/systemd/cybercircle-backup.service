@@ -1,0 +1,11 @@
+# A dump of the database (players, questions, scores, settings), kept
+# BACKUP_KEEP_DAYS days in BACKUP_DIR. Run by cybercircle-backup.timer;
+# by hand: sudo systemctl start cybercircle-backup
+[Unit]
+Description=Cyber Circle database backup
+After=mariadb.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/cybercircle/cybercircle.env
+ExecStart=@CC_ROOT@/deploy/install/backup.sh

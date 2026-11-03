@@ -20,7 +20,7 @@ func _ready() -> void:
 	var schema := game.settings_schema()
 	var groups: Array = schema.map(func(g): return g.group)
 	print("    groups: ", groups)
-	check(groups == ["game", "cyclone", "quiz", "reaction", "rhythm", "simon", "zwarte_piet", "randomizer", "questions", "sound"], "a group for the game and every round type")
+	check(groups == ["game", "cyclone", "quiz", "reaction", "rhythm", "simon", "zwarte_piet", "randomizer", "questions", "sound", "light", "voice"], "a group for the game and every round type")
 	var quiz_items: Array = schema[2].items
 	var qt: Dictionary = quiz_items.filter(func(t): return t.key == "question_time")[0]
 	check(qt.default == 15.0 and qt.value == 15.0 and qt.unit == "s", "quiz answer time: default 15 s")

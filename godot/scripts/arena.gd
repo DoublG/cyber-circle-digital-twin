@@ -61,6 +61,11 @@ extends Node3D
 ##   {"game": "plan", "slot": 0, "round": "quiz", "options": {"categories": ["Computers"]}}
 ##                                                    (operator: the next round(s); "" = random)
 ##   {"game": "plan_random"}                          (plan the next rounds at random again)
+##   {"sound": "attack"}                                 (play a sound now: a random file of that
+##                                                        event / folder, whatever the game is doing)
+##   {"sound": "gong", "file": "gong2.ogg", "volume": 60} (one file; volume in % for this sound only)
+##   {"sound_stop": true}                                (stop every sound that is playing)
+##   {"sound_reload": true}                              (scan the sound folders again: new files)
 ##   {"room": "door", "open": true}
 ##   {"room": "light", "color": "#b0d0ff"}               (ceiling ring light)
 ##   {"tile": 3, "result": {...}}       (result of the tile's own logic, see TileFirmware)
@@ -88,6 +93,8 @@ const DRONES := 5                       # mobile players (ids after the floor ti
 @onready var game: GameManager = $Game
 var observer: ObserverRig          # floating camera for the overview page (visitors)
 var sound := SoundBoard.new()      # sound effects for the game events
+var lights := LightDirector.new()  # the room's lights (virtual, and the real ones over MQTT)
+var narrator := Narrator.new()     # read-aloud: prebaked speech per screen text, its own channel
 var tiles: Array[CyberTile] = []
 var _cable_mats: Array[ShaderMaterial] = []   # index = tile_id - 1
 var _packets: Array[Dictionary] = []          # {tile, pos, color, on_arrive}
@@ -95,6 +102,7 @@ signal registered(tile_id: int, player: String, color: Color)  # e.g. to tell th
 signal activated(tile_id: int, player: String)
 signal exterminated(tile_id: int, player: String)   # the robot's shot hit: the death animation starts
 signal tile_message(tile_id: int, msg: Dictionary)  # to the real tile (e.g. via MQTT)
+signal light_cue(event: StringName, data: Dictionary)  # a game moment for the lights (cue(); MQTT light/event)
 
 var _players := {}                            # tile_id -> {name} (activated)
 var _pending := {}                            # tile_id -> {name, color, time_left} (registered)
@@ -107,6 +115,8 @@ var clip_waiting := {}                        # tile_id -> clock at the hit: dea
 var _clip_length := {}                        # clip path -> length (s)
 var clip_started := {}                        # tile_id -> clock when the death clip started in the player's view
 var _disabled := {}                           # tile_id -> true: out of service (not in the game)
+var _not_installed := {}                      # tile_id -> true: not part of this installation (hidden, see set_installed)
+var _voice_export := ""                        # --voice-export=FILE
 
 
 func _ready() -> void:
@@ -150,14 +160,25 @@ func _ready() -> void:
 	_apply_command_line()                    # after the tiles are known, before the screens
 	sound.name = "Sound"
 	add_child(sound)
-	robot.fired.connect(func(_to): sound.play(&"attack"))
-	activated.connect(func(_id, _who): sound.play(&"join"))
+	lights.name = "Lights"
+	add_child(lights)
+	narrator.name = "Narrator"
+	narrator.wall = screen_wall
+	add_child(narrator)
+	registered.connect(func(id, _who, _color):             # read out: where to go
+		narrator.say(Narrator.invite_name(id), Narrator.invite_line(id), "invite", {"tile": id}))
+	robot.fired.connect(func(_to): cue(&"attack"))
+	activated.connect(func(id, _who): cue(&"join", id))
+	registered.connect(func(id, who, color): cue(&"registered", id, {"color": "#" + color.to_html(false), "player": who}))
 	observer = ObserverRig.new()
 	observer.name = "Observer"
 	add_child(observer)
 	observer.setup(self)
 	screen_wall.setup(self)
 	game.setup(self)
+	lights.setup(self)
+	if _voice_export != "":
+		_export_voice.call_deferred()
 	($Mqtt as MqttBridge).setup(self)   # no-op while its url is empty
 
 
@@ -165,13 +186,66 @@ func _ready() -> void:
 
 ## In service: the tile can be used in the game (see set_tile_enabled).
 func is_enabled(tile_id: int) -> bool:
-	return not _disabled.has(tile_id)
+	return not _disabled.has(tile_id) and not _not_installed.has(tile_id)
+
+
+func is_installed(tile_id: int) -> bool:
+	return not _not_installed.has(tile_id)
+
+
+## The places that are part of this installation: e.g. only half the floor
+## tiles, or only the mobile places (control server: Tegels › Installatie;
+## --installed=1-7,14-18). The others are hidden - the tile or drone, its
+## ducts, cable and light strip - get no slot on the screens and are never
+## used. A player on one that goes leaves the game.
+func set_installed(ids: Array) -> void:
+	var keep := {}
+	for id in ids:
+		keep[int(id)] = true
+	var changed := false
+	for tile in tiles:
+		var id := tile.tile_id
+		var on := keep.has(id)
+		if on == is_installed(id):
+			continue
+		changed = true
+		if on:
+			_not_installed.erase(id)
+		else:
+			_not_installed[id] = true
+			leave(id)
+		tile.installed = on
+		tile.visible = on
+		set_cable_flow(id, cable_color, 0.15 if on and is_enabled(id) else 0.0)
+	if changed:
+		_show_installed()
+		game.log_event("INSTALLATIE: %d PLAATSEN" % (tiles.size() - _not_installed.size()), Retro.DIM)
+		game.on_players_changed()
+		screen_wall.refresh()
+
+
+## Hide the floor parts of the places that are not installed: the duct to the
+## robot with its cable, label and light strip, and the duct between two
+## neighbours (when either of them is not installed). Baked room: the per-tile
+## meshes Tile_Ducts_NN / Ring_NN (bake_models.py); unbaked: the floor's parts.
+func _show_installed() -> void:
+	var floor_model: Node = $Room if $Room.baked else $Floor
+	var n := Retro.FLOOR_TILES
+	for id in range(1, n + 1):
+		var on := is_installed(id)
+		for part in ["Tile_Ducts_%02d", "Spoke_%02d", "Cable_%02d", "Label_%02d", "Spoke_Light_%02d"]:
+			var node := floor_model.find_child(part % id, true, false) as Node3D
+			if node:
+				node.visible = on
+		var ring := floor_model.find_child("Ring_%02d" % id, true, false) as Node3D   # to the next tile
+		if ring:
+			ring.visible = on and is_installed(id % n + 1)
 
 
 ## Take a tile out of the game (setup, a broken or swapped tile) or back in.
 ## A player on it leaves the game (their result is saved).
 func set_tile_enabled(tile_id: int, on: bool) -> void:
-	if on == is_enabled(tile_id):
+	if on == not _disabled.has(tile_id):
 		return
 	if on:
 		_disabled.erase(tile_id)
@@ -318,7 +392,7 @@ func _activate(tile_id: int) -> void:
 	var tile := tiles[tile_id - 1]
 	tile.fill_ring(color)
 	get_tree().create_timer(0.6).timeout.connect(func():
-		if not tile.idle and not tile.is_dead:
+		if is_instance_valid(tile) and not tile.idle and not tile.is_dead:   # (the arena may be gone: tests)
 			tile.clear_ring())
 	send_packet(tile_id, color, func(): robot.look_at_side(robot_side(tile_id)))
 
@@ -363,6 +437,8 @@ func restore_invite(tile_id: int, player: String, color: Color, age: int, player
 ## The player leaves: back to the idle animation, view removed from the screen.
 func leave(tile_id: int) -> void:
 	_hits_on_way.erase(tile_id)
+	if _pending.has(tile_id) or _players.has(tile_id):
+		cue(&"leave", tile_id)
 	if _pending.erase(tile_id):
 		tiles[tile_id - 1].idle = true
 		set_cable_flow(tile_id, cable_color, 0.15)
@@ -423,13 +499,14 @@ func robot_attack(tile_ids: Array, color := Color(1.0, 0.1, 0.05), shielded: Arr
 	var costs_life := tile_ids.filter(func(id): return game.take_life(id)) if damage else []
 	for id in costs_life:
 		_hits_on_way[id] = _hits_on_way.get(id, 0) + 1
-	if targets.size() == 1:
-		robot.look_at_side(robot_side(targets[0]))
+	if targets.size() == 1:                          # (look_at_point: also tilts the eye gun, e.g. up at a drone)
+		robot.look_at_point(tiles[targets[0] - 1].global_position)
 		while not robot.is_facing_target():
 			await get_tree().process_frame
 	_attacks += 1
-	sound.play(&"charge")
+	cue(&"charge", 0, {"tiles": targets.duplicate()})
 	await robot.charge_attack(targets.map(func(id): return robot_side(id)), color)
+	cue(&"attack", 0, {"tiles": targets.duplicate()})   # the bolts leave the robot
 	get_tree().create_timer(3.0).timeout.connect(func(): _attacks -= 1)   # (the shots land in ~1-2 s)
 	if not tile_ids.is_empty():
 		game.log_event("ROBOT RAAKT " + ", ".join(tile_ids.map(func(id): return player_name(id).to_upper())), Retro.BAD)
@@ -440,11 +517,11 @@ func robot_attack(tile_ids: Array, color := Color(1.0, 0.1, 0.05), shielded: Arr
 		var blocked: bool = id in shielded
 		var on_arrive := func():
 			if blocked:
-				sound.play(&"shield")
+				cue(&"shield", id)
 				tile.play_block(color)
 				send_packet(id, CyberTile.SHIELD_COLOR)   # bounced back to the robot
 			else:
-				sound.play(&"hit")
+				cue(&"hit", id)
 				tile.play_hit(color)
 				if id in costs_life:
 					_hits_on_way[id] = maxi(_hits_on_way.get(id, 0) - 1, 0)
@@ -470,6 +547,26 @@ func death_clip_length() -> float:
 
 ## The death clip of this tile still has to be shown (waiting for the split
 ## view, at most clip_wait s) or is on screen (the clip, at least clip_time s).
+const DEATH_ANIMATION := 3.6           # s: the tile's / drone's death animation after the shot lands
+
+## An exterminated player's tile: seconds until it is free again (the death
+## animation, free_delay, and their death clip in their view), -1 while the
+## robot has not fired yet, 0 = not in the extermination. For the gamemasters
+## (state "dying"): when a tile comes free.
+func free_in(tile_id: int) -> float:
+	if dying.has(tile_id) and int(dying[tile_id]) == 0:
+		return -1.0
+	var left := 0.0
+	if dying.has(tile_id):
+		left = DEATH_ANIMATION + free_delay - (Time.get_ticks_msec() - int(dying[tile_id])) / 1000.0
+	var clip := maxf(death_clip_length(), clip_time)
+	if clip_started.has(tile_id):
+		left = maxf(left, clip - (clock - float(clip_started[tile_id])))
+	elif clip_waiting.has(tile_id) or dying.has(tile_id):
+		left = maxf(left, clip)                  # (the clip starts once their view is on screen)
+	return maxf(left, 0.01) if (dying.has(tile_id) or death_clip_pending(tile_id)) else 0.0
+
+
 func death_clip_pending(tile_id: int) -> bool:
 	if clip_started.has(tile_id):
 		return clock - float(clip_started[tile_id]) < maxf(death_clip_length(), clip_time)
@@ -517,7 +614,7 @@ func give_life(tile_id: int) -> void:
 	tile.max_health = maxi(tile.max_health, tile.health + 1)
 	tile.health += 1
 	tile.fx.emit(tile_id, "life", Color(0.1, 1.0, 0.3))
-	sound.play(&"life")
+	cue(&"life", tile_id)
 	tile.fill_ring(Color(0.1, 1.0, 0.3))
 	get_tree().create_timer(0.5).timeout.connect(func():
 		if not tile.idle and not tile.is_dead:
@@ -629,6 +726,13 @@ func _apply_command_line() -> void:
 				screen_wall.observer_page = false
 			"--screens":
 				screen_wall.screen_groups = _parse_screens(value, false)
+			"--installed":                                 # standalone: only these places, e.g. 1-7,14-18
+				var ids := []
+				for part in value.split(",", false):
+					var ab := part.split("-")
+					for id in range(int(ab[0]), int(ab[-1]) + 1):
+						ids.append(id)
+				set_installed.call_deferred(ids)
 			"--mobile-screens":
 				screen_wall.mobile_groups = _parse_screens(value, true)
 			"--monitors":
@@ -683,6 +787,10 @@ func _apply_command_line() -> void:
 				sound.enabled = false
 			"--sounds":
 				sound.extra_dir = value
+			"--voice":                                     # prebaked speech outside the project
+				narrator.extra_dir = value
+			"--voice-export":                              # the lines to record, as CSV; then quit
+				_voice_export = value
 			"--settings":
 				var data = JSON.parse_string(FileAccess.get_file_as_string(value))
 				if data is Dictionary:
@@ -748,7 +856,7 @@ func _on_tile_died(tile_id: int) -> void:
 	var tile := tiles[tile_id - 1]
 	var who := player_name(tile_id)
 	game.log_event("%s IS GEËXTERMINEERD!" % who.to_upper(), Retro.BAD)
-	sound.play(&"death")
+	cue(&"death", tile_id, {"player": who})
 	dying[tile_id] = 0
 	if dying.size() == 1:                        # the overview drifts over to watch
 		observer.focus(tile.global_position, 9.0)
@@ -757,7 +865,7 @@ func _on_tile_died(tile_id: int) -> void:
 	tile.blink_doomed()
 	robot.queue_death(robot_side(tile_id), tile.global_position + Vector3(0, 0.05, 0), func():
 		set_cable_flow(tile_id, Color(0.6, 0.0, 0.0), 0.25)
-		_death_sounds()
+		_death_sounds(tile_id)
 		dying[tile_id] = Time.get_ticks_msec()
 		exterminated.emit(tile_id, who)
 		clip_waiting[tile_id] = clock
@@ -775,9 +883,35 @@ func _on_tile_died(tile_id: int) -> void:
 
 
 ## The tile's death (CyberTile.play_death): 1 s electrocution, then the explosion.
-func _death_sounds() -> void:
-	sound.play(&"zap")
-	get_tree().create_timer(1.0).timeout.connect(func(): sound.play(&"explosion"))
+func _death_sounds(tile_id: int) -> void:
+	cue(&"zap", tile_id)
+	get_tree().create_timer(1.0).timeout.connect(func(): cue(&"explosion", tile_id))
+
+
+## --voice-export=FILE: every line the narrator can say, as CSV; then quit
+## (waits a moment for the questions from the control server).
+func _export_voice() -> void:
+	for i in 50:                                   # (the control server's list, not the JSON fallback)
+		if game.db == null or not game.db.questions().is_empty():
+			break
+		await get_tree().create_timer(0.2).timeout
+	var n := Narrator.export_csv(game, _voice_export)
+	print("voice: %d lines written to %s" % [n, _voice_export])
+	get_tree().quit()
+
+
+## A game moment: its sound (SoundBoard: data/sounds/<event>/, if there is
+## one) and its light cue (the virtual lights, and MQTT light/event for the
+## real ones). tile_id > 0: at that tile (adds "tile" and "angle", in degrees
+## clockwise from T01 seen from above).
+func cue(event: StringName, tile_id := 0, data := {}) -> void:
+	sound.play(event)
+	var d := data.duplicate()
+	if tile_id > 0 and tile_id <= tiles.size():
+		d["tile"] = tile_id
+		d["angle"] = snappedf(LightDirector.angle_of(tiles[tile_id - 1].global_position), 0.1)
+	lights.on_cue(event, d)
+	light_cue.emit(event, d)
 
 
 ## Operator / demo keys: S = start game, N = next phase,
@@ -828,6 +962,16 @@ func _on_robot_hit(target: Vector3) -> void:
 
 ## Single entry point for state coming from the real installation.
 func apply_command(cmd: Dictionary) -> void:
+	if cmd.has("sound"):     # external trigger (web interface, show control, ...)
+		if not sound.play_external(StringName(str(cmd.sound)), str(cmd.get("file", "")), int(cmd.get("volume", -1))):
+			push_warning("sound: no sound %s %s" % [cmd.sound, cmd.get("file", "")])
+		return
+	if cmd.get("sound_stop", false):
+		sound.stop_all()
+		return
+	if cmd.get("sound_reload", false):
+		sound.reload()
+		return
 	if cmd.get("attack") is Array:
 		players_attack(cmd.attack.map(func(v): return int(v)), bool(cmd.get("everyone", false)))
 		return
@@ -919,7 +1063,7 @@ func apply_command(cmd: Dictionary) -> void:
 				t.is_dead = true
 				var tid := int(id)
 				robot.queue_death(robot_side(tid), t.global_position + Vector3(0, 0.05, 0), func():
-					_death_sounds()
+					_death_sounds(tid)
 					t.play_death()
 					set_cable_flow(tid, Color(0.6, 0.0, 0.0), 0.25))
 		"look_at_tile":

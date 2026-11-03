@@ -7,6 +7,10 @@
 // The recent visitors below the camera follow live (waiting / playing); tap
 // one to choose another place (a drone) or cancel. Fast assign off: every
 // card opens the visitor page to choose the place.
+// MOBIELE SPELER (wheelchair, blind, tablet): choose a free station M1-M5
+// (a drone in the game) first, then scan the card: that visitor goes there.
+// Above the list: how many tiles and drones are free, every place at a
+// glance, and a countdown on tiles in an extermination (when they come free).
 // Card codes are never typed: only scanned. A visitor without a phone (at the
 // gamemaster's discretion): BEZOEKER ZONDER GSM - name, age and email
 // optional - then scan the card they got; an unknown card offers the same.
@@ -48,6 +52,7 @@ class _ScanPageState extends State<ScanPage> {
   String? _problem;                        // ... or what went wrong
   String? _unknown;                        // the problem: this card is not registered (offer to register it here)
   ({String name, int age, String email})? _newVisitor;   // without a phone: registered with the next scanned card
+  int? _station;                           // MOBIELE SPELER: the next scanned card goes to this mobile place (M1-M5)
   Timer? _tick;
 
   AppState get app => widget.app;
@@ -119,6 +124,27 @@ class _ScanPageState extends State<ScanPage> {
         _show('${player.name} staat al op ${app.live.state.label(where.$1)}.');
         return;
       }
+      final station = _station;
+      if (station != null) {                 // MOBIELE SPELER: to the chosen station
+        final s = app.live.state;
+        if (!s.open) {
+          _show('Het spel is niet open.');
+          return;
+        }
+        if (s.status(station) != PlaceStatus.free) {
+          _show('${s.label(station)} is niet meer vrij.\nKies een andere mobiele plaats.');
+          setState(() => _station = null);
+          return;
+        }
+        await app.api!.assign(player.id, station, app.gamemaster!);
+        setState(() {
+          _station = null;
+          _showing = _Recent(player, code);
+          _recent.insert(0, _showing!);
+          if (_recent.length > 30) _recent.removeLast();
+        });
+        return;
+      }
       if (!app.quickAssign) {
         await _scanner.stop();
         if (mounted) {
@@ -172,6 +198,105 @@ class _ScanPageState extends State<ScanPage> {
     );
     if (ok != true) return null;
     return (name: name.text.trim(), age: int.tryParse(age.text.trim()) ?? 0, email: email.text.trim());
+  }
+
+  /// MOBIELE SPELER: choose a free mobile place (M1-M5); the next scanned card goes there.
+  Future<void> _chooseStation() async {
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Retro.panel,
+      builder: (context) => ListenableBuilder(
+        listenable: app.live,
+        builder: (context, _) {
+          final s = app.live.state;
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                const Text('MOBIELE SPELER', style: TextStyle(color: Retro.amber, fontWeight: FontWeight.bold)),
+                const Text('Rolstoel, blind, tablet: eerst klaarzetten aan de mobiele plaats. '
+                    'Kies de plaats, scan dan de kaart.', style: TextStyle(color: Retro.dim)),
+                const SizedBox(height: 10),
+                for (final t in s.mobilePlaces) _stationTile(context, s, t),
+              ]),
+            ),
+          );
+        },
+      ),
+    );
+    if (picked != null) setState(() => _station = picked);
+  }
+
+  Widget _stationTile(BuildContext context, GameState s, int t) {
+    final st = s.status(t);
+    final free = st == PlaceStatus.free;
+    final who = switch (st) {
+      PlaceStatus.free => 'VRIJ',
+      PlaceStatus.pending => '${s.pending[t]!.name} (wacht)',
+      PlaceStatus.playing => s.isDying(t) ? '${s.players[t]!.name}  ·  vrij over ${s.dyingText(t)}' : s.players[t]!.name,
+      PlaceStatus.disabled => 'BUITEN GEBRUIK',
+    };
+    return ListTile(
+      enabled: free,
+      onTap: free ? () => Navigator.of(context).pop(t) : null,
+      leading: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        color: free ? Retro.amber : Retro.line,
+        child: Text(s.label(t), style: const TextStyle(color: Retro.bg, fontWeight: FontWeight.bold, fontSize: 18)),
+      ),
+      title: Text(who, style: TextStyle(color: free ? Retro.good : (s.isDying(t) ? Retro.bad : Retro.dim),
+          fontWeight: FontWeight.bold)),
+    );
+  }
+
+  /// How many places are free, every place at a glance (a countdown on the
+  /// tiles in an extermination: when they come free).
+  Widget _overview(GameState s) {
+    final dying = s.dying.values.where((v) => v >= 0).toList()..sort();
+    Widget chip(int t) {
+      final st = s.status(t);
+      final dyingNow = s.isDying(t);
+      final Color fill, text;
+      if (dyingNow) {
+        (fill, text) = (Retro.bad, Retro.cream);
+      } else {
+        (fill, text) = switch (st) {
+          PlaceStatus.free => (Retro.bg, Retro.good),
+          PlaceStatus.pending => (s.pending[t]!.color.withOpacity(0.55), Retro.bg),
+          PlaceStatus.playing => (Retro.orange.withOpacity(0.45), Retro.cream),
+          PlaceStatus.disabled => (Retro.line, Retro.dim),
+        };
+      }
+      final secs = s.dying[t];
+      final label = dyingNow ? (secs != null && secs >= 0 ? '$secs' : '☠') : (s.isMobile(t) ? 'M${t - s.floorTiles}' : '$t');
+      return Container(
+        width: s.isMobile(t) ? 30 : 24,
+        height: 26,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: fill,
+            border: Border.all(color: st == PlaceStatus.free && !dyingNow ? Retro.good : Colors.transparent)),
+        child: Text(label, style: TextStyle(color: text, fontSize: 11, fontWeight: FontWeight.bold)),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Text('VRIJ ', style: TextStyle(color: Retro.dim, fontSize: 13)),
+          Text('${s.freeFloor}/${s.enabledFloor} tegels', style: const TextStyle(color: Retro.good, fontWeight: FontWeight.bold)),
+          const Text('  ·  ', style: TextStyle(color: Retro.dim)),
+          Text('${s.freeMobile}/${s.enabledMobile} mobiel', style: const TextStyle(color: Retro.amber, fontWeight: FontWeight.bold)),
+          const Spacer(),
+          if (s.dying.isNotEmpty)
+            Text(dying.isEmpty ? '☠ ${s.dying.length} komen vrij' : '☠ ${s.dying.length} · eerste over ${dying.first}s',
+                style: const TextStyle(color: Retro.bad, fontWeight: FontWeight.bold, fontSize: 13)),
+        ]),
+        const SizedBox(height: 4),
+        if (s.floorPlaces.isNotEmpty) Wrap(spacing: 3, runSpacing: 3, children: [for (final t in s.floorPlaces) chip(t)]),
+        const SizedBox(height: 3),
+        if (s.mobilePlaces.isNotEmpty) Wrap(spacing: 3, runSpacing: 3, children: [for (final t in s.mobilePlaces) chip(t)]),
+      ]),
+    );
   }
 
   /// BEZOEKER ZONDER GSM: the form, then scan the card they got.
@@ -328,21 +453,45 @@ class _ScanPageState extends State<ScanPage> {
           ),
         ]),
       ),
+      _overview(s),
       Padding(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-        child: _newVisitor == null
-            ? OutlinedButton.icon(
-                onPressed: _withoutPhone,
-                icon: const Icon(Icons.person_add),
-                label: const Text('BEZOEKER ZONDER GSM'),
-              )
+        child: _newVisitor == null && _station == null
+            ? Row(children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _withoutPhone,
+                    icon: const Icon(Icons.person_add),
+                    label: const FittedBox(child: Text('ZONDER GSM')),
+                  ),
+                ),
+                if (s.mobilePlaces.isNotEmpty) const SizedBox(width: 8),
+                if (s.mobilePlaces.isNotEmpty) Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: s.freeMobile == 0 ? null : _chooseStation,
+                    style: OutlinedButton.styleFrom(foregroundColor: Retro.amber,
+                        side: BorderSide(color: s.freeMobile == 0 ? Retro.line : Retro.amber)),
+                    icon: const Icon(Icons.accessible),
+                    label: FittedBox(child: Text(s.freeMobile == 0 ? 'MOBIEL VOL' : 'MOBIELE SPELER')),
+                  ),
+                ),
+              ])
             : Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(border: Border.all(color: app.color, width: 2)),
+                decoration: BoxDecoration(border: Border.all(color: _station != null ? Retro.amber : app.color, width: 2)),
                 child: Row(children: [
-                  Expanded(child: Text('Scan nu de kaart van ${_newVisitor!.name}',
-                      style: TextStyle(color: app.color, fontWeight: FontWeight.bold))),
-                  TextButton(onPressed: () => setState(() => _newVisitor = null), child: const Text('annuleer')),
+                  Expanded(
+                    child: Text(
+                      'Scan nu de kaart${_newVisitor != null ? ' van ${_newVisitor!.name}' : ''}'
+                      '${_station != null ? '  →  ${s.label(_station!)} (mobiel)' : ''}',
+                      style: TextStyle(color: _station != null ? Retro.amber : app.color, fontWeight: FontWeight.bold)),
+                  ),
+                  TextButton(
+                      onPressed: () => setState(() {
+                            _newVisitor = null;
+                            _station = null;
+                          }),
+                      child: const Text('annuleer')),
                 ]),
               ),
       ),

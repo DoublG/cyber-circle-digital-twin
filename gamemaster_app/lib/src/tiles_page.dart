@@ -65,9 +65,9 @@ class _TilesPageState extends State<TilesPage> {
             if (hw == null) const Center(child: CircularProgressIndicator()),
             if (hw != null) ...[
               _head('VLOERTEGELS'),
-              for (var t = 1; t <= s.floorTiles; t++) _row(context, s, hw, t),
+              for (final t in s.floorPlaces) _row(context, s, hw, t),
               _head('MOBIEL (HANDTEGELS - DRONES)'),
-              for (var t = s.floorTiles + 1; t <= s.places; t++) _row(context, s, hw, t),
+              for (final t in s.mobilePlaces) _row(context, s, hw, t),
               _head('TEGELS ZONDER PLAATS (${hw.unplaced.length})'),
               if (hw.unplaced.isEmpty)
                 const Padding(padding: EdgeInsets.all(8),
@@ -93,6 +93,8 @@ class _TilesPageState extends State<TilesPage> {
     final enabled = place?.enabled ?? true;
     final who = !enabled
         ? ('BUITEN GEBRUIK', Retro.bad)
+        : player != null && s.isDying(t)
+            ? ('${player.name}  ·  vrij over ${s.dyingText(t)}', Retro.bad)     // exterminated: comes free
         : player != null
             ? ('${player.name}  ${'♥' * player.lives}', Retro.cream)
             : invite != null

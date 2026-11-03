@@ -34,3 +34,7 @@ deploy/certs/server.san
 godot/tests/_recovery*.db*
 godot/tests/_recovery_godot.log
 godot/tests/_recovery_broker.log
+
+# generated: the read-aloud lines export (--voice-export), release builds (deploy/install/build.sh)
+voice_lines.csv
+dist/

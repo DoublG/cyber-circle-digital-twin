@@ -19,7 +19,18 @@ func _init() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 
 
+var _row_panels := []              # [{tile, panel}]
+
+
+## The players at this screen's tiles: their row marked (ScoreboardView.mark_own).
+func highlight_tiles(tiles: Array) -> void:
+	for e in _row_panels:
+		if e.tile in tiles:
+			ScoreboardView.mark_own(e.panel)
+
+
 func show_ranking(title: String, label: String, rows: Array) -> void:
+	_row_panels.clear()
 	_badges.clear()
 	for c in get_children():
 		c.queue_free()
@@ -65,6 +76,7 @@ func show_ranking(title: String, label: String, rows: Array) -> void:
 		badge.modulate.a = 0.0
 		_badges.append(badge)
 		cols[ScoreboardView.column(i, n, cols.size())].add_child(row)
+		_row_panels.append({"tile": r.tile, "panel": row})
 		row.modulate.a = 0.0                       # in from the last place up to the 1st
 		var tw := row.create_tween()
 		tw.tween_interval(step * (n - 1 - i))

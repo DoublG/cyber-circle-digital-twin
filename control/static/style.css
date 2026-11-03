@@ -110,3 +110,16 @@ dialog label input, dialog label textarea, dialog label select { display: block;
 .gm-online .gm { border: 2px solid var(--line); padding: 4px 10px; background: var(--panel); font-weight: bold; }
 .layout { align-items: flex-start; } .layout p { max-width: 520px; }
 @media (max-width: 600px) { main, header, nav { padding-left: 16px; padding-right: 16px; } .answers { grid-template-columns: 1fr; } }
+
+/* sounds */
+.sounds { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; margin: 12px 0 24px; }
+.sound { background: var(--panel); border: 1px solid var(--line); padding: 10px; }
+.sound-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.sound-head button { white-space: nowrap; }
+.sound-files { display: flex; flex-wrap: wrap; gap: 6px; }
+.sound button.played { background: var(--orange); color: var(--bg); }
+#sound-api pre { white-space: pre-wrap; word-break: break-all; }
+
+/* installation (partial setups) */
+.install-place { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border: 1px solid var(--line); }
+.install-place.mobile { border-color: var(--amber); }

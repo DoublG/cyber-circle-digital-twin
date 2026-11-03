@@ -138,6 +138,9 @@ var _result_left := 0.0               # s the UITSLAG board still shows
 var _lives_shown := false              # the scoreboard shows the lives after the change
 var _score_seq := 0                    # (a skipped scoreboard stops its own sequence)
 var _sound_defaults := {}
+var _light_defaults := {}
+var _voice_defaults := {}
+var _countdown := 0                    # the last second announced (light cue "countdown")
 var recovery: Recovery                 # crash / power cut: the game comes back where it was
 @export var restore := true                # --no-restore: always a fresh start
 @export var restore_max_age := 3600.0      # s: an older checkpoint is a previous day's game
@@ -153,6 +156,10 @@ func setup(arena_node: Node3D) -> void:
 	_game_defaults["category_drought"] = category_drought
 	for t in arena.sound.tunables():
 		_sound_defaults[t.key] = arena.sound.get(t.key)
+	for t in arena.lights.tunables():
+		_light_defaults[t.key] = arena.lights.get(t.key)
+	for t in arena.narrator.tunables():
+		_voice_defaults[t.key] = arena.narrator.get(t.key)
 	screen_wall = arena.screen_wall
 	if control_url != "":
 		use_control_server(control_url)
@@ -239,6 +246,10 @@ func _process(delta: float) -> void:
 			current.update(delta)
 			if current and current.mode == "personal":
 				screen_wall.set_timer("%d" % ceili(maxf(current.time_left, 0.0)))
+				var left := ceili(current.time_left)
+				if left != _countdown and left >= 1 and left <= 5:   # the last seconds: a light cue each
+					arena.cue(&"countdown", 0, {"seconds": left})
+				_countdown = left
 			if current.is_finished() or _alive_players().is_empty():
 				_end_round()
 		State.SCOREBOARD:
@@ -316,6 +327,7 @@ func _next_round() -> void:
 	current.prepare(self, arena.player_ids().filter(func(id): return not arena.tiles[id - 1].is_dead))
 	Texts.dress(current, round_type_name(_last_type))   # the operator's name and rules for this game
 	_set_state(State.INTRO)
+	arena.narrator.say("round_" + round_type_name(_last_type), "%s. %s" % [current.title, current.rules], "round", {}, true)
 	_timer = intro_time / tempo
 	screen_wall.set_timer("")
 	screen_wall.show_shared(func(): return MessageView.new())
@@ -541,7 +553,20 @@ func status() -> Dictionary:
 		"timer": screen_wall.timer_text(), "players": players, "pending": pending,
 		"plan": planned_rounds(), "round_types": ROUND_TYPES.map(func(t): return {
 			"type": round_type_name(t), "title": t.new().title}),
-		"disabled": range(1, arena.tiles.size() + 1).filter(func(id): return not arena.is_enabled(id))}
+		"disabled": range(1, arena.tiles.size() + 1).filter(func(id): return not arena.is_enabled(id)),
+		"dying": _dying(),
+		"installed": range(1, arena.tiles.size() + 1).filter(func(id): return arena.is_installed(id))}
+
+
+## The tiles in an extermination and when they come free: [{tile, free_in}]
+## (whole seconds; -1: the robot has not fired yet).
+func _dying() -> Array:
+	var out := []
+	for id in arena.player_ids():
+		var f: float = arena.free_in(id)
+		if f != 0.0:
+			out.append({"tile": id, "free_in": -1 if f < 0.0 else ceili(f)})
+	return out
 
 
 ## The plan for the web interface: [{type, title, forced}].
@@ -573,7 +598,7 @@ func _begin_round() -> void:
 			t.revive(lives_for(id))
 			_started[id] = true
 	current.begin(self, ids)
-	arena.sound.play(&"round_start")
+	arena.cue(&"round_start", 0, {"round": round_type_name(current.get_script())})
 	log_event("%s BEGINT" % current.title.to_upper(), Retro.TEAL)
 	_set_state(State.PLAYING)
 	arena.robot.set_bulb_effect("chase")
@@ -977,7 +1002,7 @@ func _show_scores(title: String, subtitle: String, round_points: Dictionary, cha
 		lives_revealed.connect(v.reveal_lives)
 		return v)
 	scores_shown.emit(title, subtitle, rows)
-	arena.sound.play(&"scoreboard")
+	arena.cue(&"scoreboard")
 
 
 ## Robot turns to the leader and lights that side gold.
@@ -1012,6 +1037,10 @@ func settings_schema() -> Array:
 			"value": _get_game_setting(t.key)}))})
 	groups.append({"group": "sound", "title": "Geluid", "items": arena.sound.tunables().map(func(t): return t.merged(
 		{"default": _sound_defaults.get(t.key), "value": arena.sound.get(t.key)}))})
+	groups.append({"group": "light", "title": "Licht", "items": arena.lights.tunables().map(func(t): return t.merged(
+		{"default": _light_defaults.get(t.key), "value": arena.lights.get(t.key)}))})
+	groups.append({"group": "voice", "title": "Voorlezen", "items": arena.narrator.tunables().map(func(t): return t.merged(
+		{"default": _voice_defaults.get(t.key), "value": arena.narrator.get(t.key)}))})
 	return groups
 
 
@@ -1037,6 +1066,11 @@ func apply_settings(values: Dictionary) -> void:
 		_set_game_setting(t.key, clean.questions.get(t.key, 1.0 if t.key.begins_with("cat:") else _game_defaults[t.key]))
 	for t in arena.sound.tunables():
 		arena.sound.set(t.key, clean.sound.get(t.key, _sound_defaults[t.key]))
+	for t in arena.lights.tunables():
+		arena.lights.set(t.key, clean.light.get(t.key, _light_defaults[t.key]))
+	for t in arena.narrator.tunables():
+		arena.narrator.set(t.key, clean.voice.get(t.key, _voice_defaults[t.key]))
+	arena.lights.refresh()
 	_plan_rounds()
 	settings_changed.emit()
 

@@ -12,6 +12,13 @@ extends Node
 ##   round_start a round begins                    scoreboard the scoreboard
 ##   join        a player activates their tile     random     now and then, between the action
 ## Settings (web interface, group "Geluid"): volume, the random sounds' interval.
+##
+## Any other folder is an event too, e.g. data/sounds/announce/ or DIR/gong/:
+## external systems play sounds through the command {"sound": "gong"}
+## (Arena.apply_command, see play_external), and the web interface lists them
+## (catalog(), published retained on MQTT <prefix>/sounds).
+
+signal sounds_changed                  # after reload(): the catalog may be different
 
 const SOUND_DIR := "res://data/sounds/"
 const EXTENSIONS := ["ogg", "wav", "mp3"]
@@ -24,6 +31,7 @@ var random_max := 60.0
 var extra_dir := ""                    # --sounds=DIR
 
 var _sounds := {}                      # event -> [AudioStream]
+var _files := {}                       # event -> [file name], in the same order as _sounds
 var _players: Array[AudioStreamPlayer] = []
 var _next_random := 0.0
 var _clock := 0.0
@@ -35,9 +43,7 @@ func _ready() -> void:
 		var p := AudioStreamPlayer.new()
 		add_child(p)
 		_players.append(p)
-	_load_dir(SOUND_DIR, true)
-	if extra_dir != "":
-		_load_dir(extra_dir.path_join(""), false)
+	reload()
 	_next_random = randf_range(random_min, random_max)
 
 
@@ -63,6 +69,56 @@ func play(event: StringName, min_gap := 0.08) -> void:
 	p.stream = _sounds[event].pick_random()
 	p.volume_db = linear_to_db(volume / 100.0)
 	p.play()
+
+
+## A sound asked for from outside (web interface, an external system):
+## `file` = one file of the event (else a random one), `vol` = volume in %
+## for this sound only (-1: the setting). Plays whatever the game is doing.
+## Returns false when there is no such sound.
+func play_external(event: StringName, file := "", vol := -1) -> bool:
+	if not _sounds.has(event):
+		return false
+	var stream: AudioStream = _sounds[event].pick_random()
+	if file != "":
+		var i: int = _files[event].find(file)
+		if i < 0:
+			return false
+		stream = _sounds[event][i]
+	if not enabled:
+		return true
+	var v := float(volume if vol < 0 else clampi(vol, 0, 100))
+	if v <= 0.0:
+		return true
+	var p := _free_player()
+	p.stream = stream
+	p.volume_db = linear_to_db(v / 100.0)
+	p.play()
+	return true
+
+
+## Stops every sound that is playing now.
+func stop_all() -> void:
+	for p in _players:
+		p.stop()
+
+
+## Every event with its files: {"attack": ["laser1.ogg", ...], ...}.
+func catalog() -> Dictionary:
+	var out := {}
+	for e in _files:
+		out[String(e)] = _files[e].duplicate()
+	return out
+
+
+## Scans the sound folders again (new files in --sounds=DIR count at once;
+## new files in the project's own data/sounds/ need an import first).
+func reload() -> void:
+	_sounds.clear()
+	_files.clear()
+	_load_dir(SOUND_DIR, true)
+	if extra_dir != "":
+		_load_dir(extra_dir.path_join(""), false)
+	sounds_changed.emit()
 
 
 func has_sounds(event: StringName) -> bool:
@@ -102,7 +158,9 @@ func _load_dir(dir: String, packed: bool) -> void:
 			if stream:
 				if not _sounds.has(StringName(event)):
 					_sounds[StringName(event)] = []
+					_files[StringName(event)] = []
 				_sounds[StringName(event)].append(stream)
+				_files[StringName(event)].append(f.trim_suffix(".import").trim_suffix(".remap"))
 
 
 ## A sound file outside the project (--sounds=DIR).

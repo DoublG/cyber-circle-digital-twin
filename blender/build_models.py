@@ -26,6 +26,9 @@ from mathutils import Matrix, Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 GODOT_DIR = os.path.normpath(os.path.join(HERE, "..", "godot"))
+TEX_DIR = os.path.join(HERE, "textures")      # the generated room textures (retro_textures.py), as PNG
+sys.path.insert(0, HERE)
+import retro_textures  # noqa: E402
 
 
 # ---------------------------------------------------------------- helpers
@@ -67,6 +70,71 @@ def image_material(name, image):
     tex.image = image
     nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
     return m
+
+
+def np_image(name, arr, non_color=False):
+    """A Blender image from a numpy array (h, w[, 3]), row 0 = bottom; also saved
+    as textures/<name>.png and packed into the .blend."""
+    if arr.ndim == 2:
+        arr = np.repeat(arr[..., None], 3, axis=2)
+    h, w = arr.shape[:2]
+    rgba = np.ones((h, w, 4), dtype=np.float32)
+    rgba[..., :3] = np.clip(arr, 0, 1)
+    old = bpy.data.images.get(name)
+    if old:
+        bpy.data.images.remove(old)
+    im = bpy.data.images.new(name, w, h, alpha=False, float_buffer=not non_color)
+    if non_color:
+        im.colorspace_settings.name = "Non-Color"
+    im.pixels.foreach_set(rgba.ravel())
+    os.makedirs(TEX_DIR, exist_ok=True)
+    im.filepath_raw = os.path.join(TEX_DIR, name + ".png")
+    im.file_format = "PNG"
+    im.save()
+    im.pack()
+    return im
+
+
+def textured_material(name, albedo, height, roughness=0.6, bump=0.5, bump_distance=0.01):
+    """Colour from an image on the "Tex" UV map, its relief from a height image
+    (a Bump node: baked into the lighting by bake_models.py)."""
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    bsdf = nt.nodes["Principled BSDF"]
+    bsdf.inputs["Roughness"].default_value = roughness
+    uv = nt.nodes.new("ShaderNodeUVMap")
+    uv.uv_map = "Tex"
+    col = nt.nodes.new("ShaderNodeTexImage")
+    col.image = np_image(name + "_Albedo", albedo)
+    hgt = nt.nodes.new("ShaderNodeTexImage")
+    hgt.image = np_image(name + "_Height", height, non_color=True)
+    b = nt.nodes.new("ShaderNodeBump")
+    b.inputs["Strength"].default_value = bump
+    b.inputs["Distance"].default_value = bump_distance
+    for node in (col, hgt):
+        nt.links.new(uv.outputs["UV"], node.inputs["Vector"])
+    nt.links.new(col.outputs["Color"], bsdf.inputs["Base Color"])
+    nt.links.new(hgt.outputs["Color"], b.inputs["Height"])
+    nt.links.new(b.outputs["Normal"], bsdf.inputs["Normal"])
+    m.diffuse_color = (*albedo.reshape(-1, 3).mean(axis=0), 1.0)
+    return m
+
+
+def set_uv(obj, fn, name="Tex"):
+    """A UV map from a function of each corner's object-space position and its
+    face's normal: fn(co, normal) -> (u, v). With `wrap` set on fn (a period),
+    u is kept continuous within a face (for angles)."""
+    me = obj.data
+    layer = me.uv_layers.get(name) or me.uv_layers.new(name=name)
+    period = getattr(fn, "wrap", None)
+    for poly in me.polygons:
+        uvs = [fn(me.vertices[me.loops[li].vertex_index].co, poly.normal) for li in poly.loop_indices]
+        if period:
+            u0 = uvs[0][0]
+            uvs = [(u - round((u - u0) / period) * period, v) for u, v in uvs]
+        for li, uv in zip(poly.loop_indices, uvs):
+            layer.data[li].uv = uv
 
 
 def link(obj, mat=None, parent=None):
@@ -457,10 +525,10 @@ def set_linear(action):
                         kp.interpolation = "LINEAR"
 
 
-def hemisphere(name, r, center, normal, mat=None):
+def hemisphere(name, r, center, normal, mat=None, segs=20, rings=10):
     """Half sphere whose flat side lies on a plane with the given normal."""
     bm = bmesh.new()
-    bmesh.ops.create_uvsphere(bm, u_segments=20, v_segments=10, radius=r)
+    bmesh.ops.create_uvsphere(bm, u_segments=segs, v_segments=rings, radius=r)
     bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z < -1e-4], context="VERTS")
     obj = new_object(name, bm)
     obj.data.shade_smooth()
@@ -724,6 +792,21 @@ ROOM_R = 6.6            # wall corner radius (m)
 ROOM_H = 3.6            # wall height; the ceiling slopes up to the centre
 DOOR_WALL = 12          # wall at -Y (Godot +Z): in view behind the robot
 WINDOW_WALLS = (2, 6, 10, 14)
+GIMMICK_WALL = 13       # the console with the 60s gimmick (console_gimmick) instead of a CRT
+# each console's look, homages to 1960s / 70s TV sci-fi (console_style): the
+# eye-catching ones on the walls the overview camera sees behind the robot
+CONSOLE_COLORS = {               # desk body, panel, front stripe (linear RGB)
+    "classic": ((0.82, 0.78, 0.66), (0.06, 0.06, 0.07), (0.85, 0.35, 0.06)),
+    "trek": ((0.16, 0.17, 0.19), (0.03, 0.03, 0.035), (0.7, 0.04, 0.03)),
+    "lis": ((0.80, 0.78, 0.72), (0.35, 0.36, 0.38), (0.75, 0.76, 0.8)),
+    "alpha": ((0.92, 0.92, 0.90), (0.85, 0.85, 0.83), (0.95, 0.45, 0.08)),
+    "ufo": ((0.55, 0.57, 0.60), (0.02, 0.02, 0.025), (0.35, 0.1, 0.55)),
+    "dials": ((0.28, 0.14, 0.06), (0.12, 0.07, 0.03), (0.75, 0.55, 0.2)),
+    "orion": ((0.62, 0.64, 0.66), (0.03, 0.03, 0.035), (0.2, 0.2, 0.22)),
+}
+WALL_STYLES = ("lis",)          # no desk: the computer is a wall element (in the console's section)
+CONSOLE_STYLES = {0: "trek", 1: "lis", 3: "ufo", 4: "classic", 5: "alpha", 7: "dials",
+                  8: "ufo", 9: "alpha", 11: "trek", 13: "orion", 15: "lis"}
 DOME_H = 5.0            # dome height above the walls (top ~8.6 m)
 OCULUS_R = 0.9          # opening at the top of the dome
 
@@ -776,11 +859,18 @@ def build_room():
     orange = material("Retro_Orange", (0.85, 0.35, 0.06), roughness=0.4)
     teal = material("Retro_Teal", (0.05, 0.38, 0.40), roughness=0.4)
     chrome = material("Chrome", (0.85, 0.86, 0.9), metallic=1.0, roughness=0.15)
-    deck = material("Floor", (0.03, 0.03, 0.035), metallic=0.3, roughness=0.55)
-    navy = material("Ceiling_Navy", (0.04, 0.05, 0.09), roughness=0.7)
+    deck = textured_material("Deck_Plates", *retro_textures.floor_deck(radius=ROOM_R, tile_r=ARENA_R),
+                             roughness=0.55, bump=0.6, bump_distance=0.006)
+    wall_mat = textured_material("Wall_Panels", *retro_textures.wall_panels(sx=2 * ROOM_R * math.sin(math.pi / ROOM_SIDES), sy=ROOM_H),
+                                 roughness=0.5, bump=0.7, bump_distance=0.01)
+    pillar_mat = textured_material("Pillar_Ribs", *retro_textures.pillar_ribs(sy=ROOM_H),
+                                   roughness=0.4, bump=0.8, bump_distance=0.012)
+    navy = textured_material("Dome_Quilt", *retro_textures.dome_quilt(), roughness=0.7, bump=0.8,
+                             bump_distance=0.03)
     dark = material("Console_Dark", (0.06, 0.06, 0.07), roughness=0.4)
-    roundel = material("Roundel_Glow", (0.95, 0.88, 0.7), emission=(1.0, 0.82, 0.55),
-                       emission_strength=1.5)
+    cove = material("Cornice_Cove_Glow", (0.6, 0.95, 1.0), emission=(0.55, 0.9, 1.0), emission_strength=6.0)
+    roundel = material("Roundel_Glow", (0.95, 0.86, 0.66), emission=(1.0, 0.78, 0.5),
+                       emission_strength=0.55)
     lamp = material("Console_Lamp", (0.3, 0.3, 0.3), roughness=0.3, emission=(0, 0, 0))
     crt = material("Console_CRT", (0.02, 0.06, 0.03), roughness=0.1, emission=(0.1, 0.8, 0.3),
                    emission_strength=0.8)
@@ -798,7 +888,8 @@ def build_room():
     side_len = 2 * ROOM_R * math.sin(half)
 
     # Floor: one colour for the whole room (the play area has no separate cover)
-    frustum("Deck", n, ROOM_R, ROOM_R, -0.05, 0.0, mat=deck, angle0=half)
+    floor = frustum("Deck", n, ROOM_R, ROOM_R, -0.05, 0.0, mat=deck, angle0=half)
+    set_uv(floor, lambda co, nrm: (co.x / (2 * ROOM_R) + 0.5, co.y / (2 * ROOM_R) + 0.5))   # one texture: the whole floor
 
     # Cathedral dome: pointed (Gothic) profile from the wall top to an oculus
     # at the peak that looks out to space, chrome ribs above every pillar.
@@ -828,6 +919,24 @@ def build_room():
     dome_obj = new_object("Dome", bm)
     dome_obj.data.shade_smooth()
     link(dome_obj, navy)
+
+    # v along the dome's curve (arc length from the wall top), so the rows are
+    # not stretched where the dome rises steeply above the walls
+    prof_x = [ROOM_R - (ROOM_R - OCULUS_R) * k / 400 for k in range(401)]
+    prof_s = [0.0]
+    for a, b in zip(prof_x, prof_x[1:]):
+        prof_s.append(prof_s[-1] + math.hypot(a - b, dome_z(a) - dome_z(b)))
+
+    def arc_v(r):
+        k = min(max((ROOM_R - r) / (ROOM_R - OCULUS_R) * 400, 0.0), 399.999)
+        j = int(k)
+        return (prof_s[j] + (prof_s[j + 1] - prof_s[j]) * (k - j)) / prof_s[-1]
+
+    def dome_uv(co, nrm):              # u: one texture per bay between two ribs; v: wall top -> oculus
+        ang = math.atan2(co.y, co.x) - half
+        return (ang / (2 * math.pi) * n, arc_v(math.hypot(co.x, co.y)))
+    dome_uv.wrap = n
+    set_uv(dome_obj, dome_uv)
 
     top_z = dome_z(OCULUS_R)
     sky = disc("Oculus_Space", OCULUS_R + 0.05, top_z + 0.02, segs=48, mat=stars)
@@ -871,9 +980,11 @@ def build_room():
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
         link(new_object(f"Dome_Rib_{k:02d}", bm), chrome)
         # wall pillar at the corner
-        box(f"Pillar_{k:02d}", (0.22, 0.3, ROOM_H),
-            ((ROOM_R - 0.12) * math.cos(a), (ROOM_R - 0.12) * math.sin(a), ROOM_H / 2),
-            rot=(0, 0, a + math.pi / 2), mat=teal)
+        pillar = box(f"Pillar_{k:02d}", (0.22, 0.3, ROOM_H),
+                     ((ROOM_R - 0.12) * math.cos(a), (ROOM_R - 0.12) * math.sin(a), ROOM_H / 2),
+                     rot=(0, 0, a + math.pi / 2), mat=pillar_mat)
+        set_uv(pillar, lambda co, nrm: ((co.x / 0.22 if abs(nrm.y) > abs(nrm.x) else co.y / 0.3) + 0.5,
+                                        co.z / ROOM_H + 0.5))
 
     lamp_index = 0
     for i in range(n):
@@ -885,10 +996,19 @@ def build_room():
         def at(x, depth, z):
             return out * (apothem - depth) + tan * x + Vector((0, 0, z))
 
-        box(f"Wall_{i:02d}", (side_len, 0.1, ROOM_H), at(0, -0.05, ROOM_H / 2), rot=rot, mat=cream)
+        wall = box(f"Wall_{i:02d}", (side_len, 0.1, ROOM_H), at(0, -0.05, ROOM_H / 2), rot=rot, mat=wall_mat)
+        set_uv(wall, lambda co, nrm: (co.x / side_len + 0.5, co.z / ROOM_H + 0.5))   # one panel set per wall
         box(f"Baseboard_{i:02d}", (side_len, 0.12, 0.18), at(0, 0.06, 0.09), rot=rot, mat=orange)
         box(f"Stripe_{i:02d}", (side_len, 0.04, 0.08), at(0, 0.02, ROOM_H - 0.35), rot=rot,
             mat=orange)
+        # the cornice: an orange fascia with chrome edges where the wall meets the
+        # dome, a ledge under it and a glowing cove strip lighting the wall below
+        ext = side_len + 0.05                      # (a little past the corners: no gaps)
+        box(f"Cornice_{i:02d}", (ext, 0.05, 0.2), at(0, 0.2, ROOM_H - 0.1), rot=rot, mat=orange)
+        box(f"Cornice_Ledge_{i:02d}", (ext, 0.2, 0.035), at(0, 0.1, ROOM_H - 0.215), rot=rot, mat=cream)
+        for z in (ROOM_H - 0.005, ROOM_H - 0.2):
+            box(f"Cornice_Edge_{i:02d}_{int(z * 100)}", (ext, 0.06, 0.018), at(0, 0.205, z), rot=rot, mat=chrome)
+        box(f"Cornice_Glow_{i:02d}", (side_len - 0.1, 0.02, 0.012), at(0, 0.04, ROOM_H - 0.24), rot=rot, mat=cove)
 
         if i == DOOR_WALL:
             box("Door_Frame", (1.7, 0.18, 2.5), at(0, 0.04, 1.25), rot=rot, mat=chrome)
@@ -913,16 +1033,25 @@ def build_room():
             continue
 
         # Console bank: desk with sloped panel, buttons, lamps and a small CRT
-        box(f"Console_{i:02d}_Base", (2.1, 0.55, 0.85), at(0, 0.35, 0.425), rot=rot, mat=cream)
+        style = CONSOLE_STYLES.get(i, "classic")
+        body, top, trim = CONSOLE_COLORS[style]          # each show its own desk
+        base_mat = material(f"Console_Body_{style}", body, roughness=0.45, metallic=0.0)
+        top_mat = material(f"Console_Top_{style}", top, roughness=0.4)
         panel_c = at(0, 0.42, 0.95)
-        box(f"Console_{i:02d}_Panel", (2.1, 0.6, 0.06), panel_c,
-            rot=(math.radians(-30), 0, phi + math.pi / 2), mat=dark)
+        if style in WALL_STYLES or style == "orion":     # no desk: a wall computer / Orion's round drum
+            pass
+        else:
+            box(f"Console_{i:02d}_Base", (2.1, 0.55, 0.85), at(0, 0.35, 0.425), rot=rot, mat=base_mat)
+            box(f"Console_{i:02d}_Panel", (2.1, 0.6, 0.06), panel_c,
+                rot=(math.radians(-30), 0, phi + math.pi / 2), mat=top_mat)
+            box(f"Console_{i:02d}_Trim", (2.12, 0.03, 0.07), at(0, 0.63, 0.74), rot=rot,   # a stripe along the front
+                mat=material(f"Console_Trim_{style}", trim, roughness=0.3))
         normal = (Matrix.Rotation(phi + math.pi / 2, 4, "Z") @ Matrix.Rotation(math.radians(-30), 4, "X")
                   @ Vector((0, 0, 1, 0))).to_3d()
         up_slope = (Matrix.Rotation(phi + math.pi / 2, 4, "Z") @ Matrix.Rotation(math.radians(-30), 4, "X")
                     @ Vector((0, 1, 0, 0))).to_3d()
         rows = {}
-        for row in range(2):
+        for row in range(2 if style == "classic" else 0):
             for col in range(8):
                 p = panel_c + tan * (-0.75 + col * 0.15) + up_slope * (-0.12 + row * 0.12) + normal * 0.04
                 bpy.ops.mesh.primitive_cylinder_add(vertices=12, radius=0.035, depth=0.03,
@@ -935,15 +1064,26 @@ def build_room():
             link(join(objs, f"Console_{i:02d}_Buttons_{m_i}"), btn_mats[m_i])
         for k in range(6):  # blinking lamps (driven by room.gd)
             p = panel_c + tan * (0.55 + (k % 3) * 0.12) + up_slope * (0.2 - (k // 3) * 0.1) + normal * 0.035
+            if style in WALL_STYLES:                      # on the wall computer's lower panel
+                p = at(0.62 + (k % 3) * 0.12, 0.08, 1.32 - (k // 3) * 0.1)
+            elif style == "orion":                        # round the front of the drum's rim
+                t = math.radians((28, 48, 68, 112, 132, 152)[k])
+                p = at(-0.57 * math.cos(t), 0.05 + 0.57 * math.sin(t), 0.875)
             sphere(f"Console_Lamp_{lamp_index:03d}", 0.025, p, segs=10, rings=5, mat=lamp)
             lamp_index += 1
-        crt_c = at(0, 0.18, 1.32)
-        box(f"Console_{i:02d}_Monitor", (0.5, 0.35, 0.38), crt_c, rot=rot, mat=cream)
-        screen_window(f"Console_Screen_{i:02d}", crt_c - out * 0.18, -out, 0.15, mat=crt,
-                      square=True)
+        console_style(style, i, panel_c, tan, up_slope, normal, out, at, rot, chrome, dark, cream)
+        if style == "orion":
+            console_gimmick(at, phi, chrome)
+        elif style in ("classic", "dials"):
+            crt_c = at(0, 0.18, 1.32)
+            box(f"Console_{i:02d}_Monitor", (0.5, 0.35, 0.38), crt_c, rot=rot, mat=cream)
+            screen_window(f"Console_Screen_{i:02d}", crt_c - out * 0.18, -out, 0.15, mat=crt,
+                          square=True)
 
-        # Retro roundels on the wall above the console
-        discs = []
+        # Retro roundels on the wall above the console (not where the tape drives are)
+        if style == "lis":
+            continue
+        discs, bezels = [], []
         for row in range(2):
             for col in range(5):
                 p = at(-0.9 + col * 0.45, 0.005, 2.05 + row * 0.5)
@@ -952,9 +1092,295 @@ def build_room():
                 o = bpy.context.active_object
                 o.rotation_euler = (math.pi / 2, 0, phi + math.pi / 2)
                 discs.append(o)
+                bezel = torus("g", 0.168, 0.014, p - out * 0.008, mat=chrome)   # a chrome bezel: a lamp, not a blob
+                bezel.rotation_euler = (math.pi / 2, 0, phi + math.pi / 2)
+                bezels.append(bezel)
         link(join(discs, f"Roundels_{i:02d}"), roundel)
+        link(join(bezels, f"Roundel_Bezels_{i:02d}"), chrome)
 
     save_and_export("room")
+
+
+def console_style(style, i, panel_c, tan, up_slope, normal, out, at, rot, chrome, dark, cream):
+    """The controls and the screen of one console, in the style of a 60s / 70s
+    TV show (original homages, all static: baked into the room, no cost at
+    runtime). "classic" / "orion": the round buttons (and a CRT / the gimmick,
+    made by the caller).
+      trek   rows of rectangular jewel buttons, lit; a viewer with coloured bands
+      alpha  long rows of small square keys, white and orange; a slanted white monitor
+      lis    toggle switches and a big red button; a 60s computer cabinet with two
+             tape reels and a grid of indicator lights
+      dials  three big round gauges with needles, a row of toggle switches
+      ufo    a grid of flat square light tiles; a big framed wall display with a
+             glowing grid and radar rings
+    The panel's right end (the blinking lamps) stays free, and everything stays
+    in the console's own block: within its width, under the roundels on the
+    wall above (below ~1.85 m)."""
+    panel = Matrix((tan, up_slope, normal)).transposed().to_4x4()        # x along, y up the slope, z out of it
+    wall = Matrix((tan, -out, Vector((0, 0, 1)))).transposed().to_4x4()  # x along, y into the room, z up
+
+    def mat(name, color, glow=0.0, rough=0.4):
+        return material(name, color, roughness=rough, emission=color if glow else None, emission_strength=glow)
+
+    def on(frame, obj, p):                       # place an object built at the origin
+        obj.matrix_world = Matrix.Translation(p) @ frame @ obj.matrix_world
+        return obj
+
+    def joined(objs, name, m):
+        if objs:
+            link(join(objs, name), m)
+
+    def facing_room(r, depth, centre, verts=32):  # a disc on the wall's face, its axis into the room
+        o = cylinder("g", r, depth, (0, 0, 0), rot=(math.pi / 2, 0, 0), verts=verts)
+        return on(wall, o, centre)
+
+    def p_at(x, y, h=0.035):
+        return panel_c + tan * x + up_slope * y + normal * h
+
+    def toggles(x0, n, y, step=0.09):
+        bases, levers = [], []
+        for k in range(n):
+            bases.append(on(panel, cylinder("g", 0.018, 0.02, (0, 0, 0), verts=12), p_at(x0 + k * step, y, 0.04)))
+            lev = cylinder("g", 0.006, 0.07, (0, 0, 0.035), rot=(math.radians(25 if k % 3 else -25), 0, 0), verts=8)
+            levers.append(on(panel, lev, p_at(x0 + k * step, y, 0.04)))
+        return bases, levers
+
+    n = f"Console_{i:02d}"
+    if style == "trek":
+        cols = [mat("Jewel_Red", (1.0, 0.12, 0.08), 1.6), mat("Jewel_Yellow", (1.0, 0.8, 0.1), 1.6),
+                mat("Jewel_Green", (0.15, 1.0, 0.3), 1.6), mat("Jewel_Blue", (0.2, 0.5, 1.0), 1.6)]
+        groups = [[] for _ in cols]
+        for row in range(3):
+            for col in range(9):
+                k = (col * 7 + row * 3) % 4
+                groups[k].append(on(panel, box("g", (0.1, 0.05, 0.022), (0, 0, 0)),
+                                    p_at(-0.9 + col * 0.14, -0.17 + row * 0.11)))
+        for k, g in enumerate(groups):
+            joined(g, f"{n}_Jewels_{k}", cols[k])
+        # the viewer: a black housing, bands of light
+        c = at(0, 0.16, 1.3)
+        joined([on(wall, box("g", (0.62, 0.1, 0.34), (0, 0, 0)), c)], f"{n}_Viewer", dark)
+        for k, (z, m) in enumerate(((0.09, cols[3]), (0.0, cols[0]), (-0.09, cols[1]))):
+            joined([on(wall, box("g", (0.54, 0.01, 0.05), (0, 0, 0)), c - out * 0.055 + Vector((0, 0, z)))],
+                   f"{n}_Viewer_Band_{k}", m)
+    elif style == "alpha":
+        white = mat("Key_White", (0.92, 0.92, 0.88), rough=0.5)
+        orange = mat("Key_Orange", (0.95, 0.45, 0.08), rough=0.5)
+        keys = {0: [], 1: []}
+        for row in range(4):
+            for col in range(16):
+                keys[1 if (col in (3, 11) or (row == 0 and col % 5 == 0)) else 0].append(
+                    on(panel, box("g", (0.048, 0.048, 0.02), (0, 0, 0)), p_at(-0.92 + col * 0.082, -0.2 + row * 0.075, 0.03)))
+        joined(keys[0], f"{n}_Keys", white)
+        joined(keys[1], f"{n}_Keys_Orange", orange)
+        # a slanted white monitor (tilted back), its screen
+        tilt = Matrix.Rotation(math.radians(-14), 4, "X")
+        c = at(-0.25, 0.13, 1.38)                       # (behind the keys)
+        joined([on(wall @ tilt, box("g", (0.56, 0.36, 0.4), (0, 0, 0)), c)], f"{n}_Monitor", white)
+        scr = on(wall @ tilt, box("g", (0.44, 0.01, 0.3), (0, 0, 0)), c - out * 0.181)
+        joined([scr], f"{n}_Monitor_Screen", mat("Console_CRT_Alpha", (0.1, 0.55, 0.85), 0.9))
+    elif style == "lis":
+        # no desk: a wall computer from 0.75 m up. Below: a control panel with
+        # light grids, toggle switches and a big red button (and the blinking lamps)
+        lower = at(0, 0.03, 1.25)
+        joined([on(wall, box("g", (2.0, 0.06, 0.95), (0, 0, 0)), lower)], f"{n}_Control_Wall", cream)
+        joined([on(wall, box("g", (2.04, 0.12, 0.04), (0, 0, 0)), at(0, 0.06, 0.76))], f"{n}_Control_Shelf", chrome)
+        front = lower - out * 0.031
+        bases, levers = [], []
+        for k in range(10):
+            pos = front + tan * (-0.85 + k * 0.1) + Vector((0, 0, -0.3))
+            bases.append(facing_room(0.018, 0.02, pos, 12))
+            lev = facing_room(0.006, 0.07, pos - out * 0.035 + Vector((0, 0, 0.012 if k % 3 else -0.012)), 8)
+            levers.append(lev)
+        joined(bases, f"{n}_Toggle_Bases", chrome)
+        joined(levers, f"{n}_Toggles", chrome)
+        joined([facing_room(0.07, 0.04, front + tan * 0.3 + Vector((0, 0, -0.27)), 24)],
+               f"{n}_Big_Button", mat("Big_Red", (0.9, 0.05, 0.03), 0.6, 0.3))
+        grid = [[] for _ in range(3)]
+        glit = [mat("Lamp_Grid_Red", (1.0, 0.15, 0.1), 2.0), mat("Lamp_Grid_Amber", (1.0, 0.6, 0.1), 2.0),
+                mat("Lamp_Grid_White", (1.0, 0.95, 0.85), 1.5)]
+        for row in range(4):
+            for col in range(18):
+                k = (row * 7 + col * 5) % 3
+                grid[k].append(facing_room(0.016, 0.012, front + tan * (-0.9 + col * 0.075) + Vector((0, 0, 0.32 - row * 0.08)), 10))
+        for k, g in enumerate(grid):
+            joined(g, f"{n}_Panel_Lights_{k}", glit[k])
+        # the 60s computer in the wall above the desk (instead of the roundels):
+        # three tape units, each two reels one above the other, light grids between
+        c = at(0, 0.0, 2.3)
+        joined([on(wall, box("g", (2.0, 0.05, 0.86), (0, 0, 0)), c)], f"{n}_Tape_Wall", cream)
+        joined([on(wall, box("g", (2.04, 0.07, 0.03), (0, 0, 0)), c + Vector((0, 0, z)))
+                for z in (0.44, -0.44)], f"{n}_Tape_Wall_Trim", chrome)
+        face = c - out * 0.026
+        reels, hubs, windows = [], [], []
+        for x in (-0.62, 0.0, 0.62):
+            windows.append(on(wall, box("g", (0.38, 0.006, 0.78), (0, 0, 0)), face + tan * x))
+            for z in (0.19, -0.19):
+                reels.append(facing_room(0.15, 0.012, face - out * 0.006 + tan * x + Vector((0, 0, z))))
+                hubs.append(facing_room(0.04, 0.03, face - out * 0.006 + tan * x + Vector((0, 0, z)), verts=12))
+        joined(windows, f"{n}_Tape_Windows", mat("Tape_Window", (0.25, 0.27, 0.3), rough=0.2))
+        joined(reels, f"{n}_Reels", mat("Reel_Dark", (0.05, 0.05, 0.06), rough=0.3))
+        joined(hubs, f"{n}_Reel_Hubs", chrome)
+        lights = [[] for _ in range(3)]
+        lit = [mat("Lamp_Grid_Red", (1.0, 0.15, 0.1), 2.0), mat("Lamp_Grid_Amber", (1.0, 0.6, 0.1), 2.0),
+               mat("Lamp_Grid_White", (1.0, 0.95, 0.85), 1.5)]
+        for gx in (-0.31, 0.31):
+            for row in range(8):
+                for col in range(3):
+                    k = (row * 5 + col * 3 + (gx > 0)) % 3
+                    lights[k].append(facing_room(0.016, 0.012, face + tan * (gx + (col - 1) * 0.055) + Vector((0, 0, 0.3 - row * 0.085)), 10))
+        for k, g in enumerate(lights):
+            joined(g, f"{n}_Light_Grid_{k}", lit[k])
+    elif style == "ufo":
+        tiles = [[] for _ in range(3)]
+        lit = [mat("Tile_Light_Blue", (0.45, 0.75, 1.0), 1.4), mat("Tile_Light_White", (0.95, 0.95, 1.0), 1.2),
+               mat("Tile_Light_Amber", (1.0, 0.65, 0.15), 1.4)]
+        for row in range(3):
+            for col in range(13):
+                k = 1 if (row + col) % 4 else (2 if col % 3 == 0 else 0)
+                tiles[k].append(on(panel, box("g", (0.085, 0.085, 0.008), (0, 0, 0)), p_at(-0.92 + col * 0.105, -0.16 + row * 0.11, 0.032)))
+        for k, g in enumerate(tiles):
+            joined(g, f"{n}_Light_Tiles_{k}", lit[k])
+        # the big wall display: a frame, a dark green screen, a grid and radar rings of light
+        c = at(0, 0.1, 1.5)
+        joined([on(wall, box("g", (1.1, 0.08, 0.62), (0, 0, 0)), c)], f"{n}_Display_Frame",
+               mat("Display_Frame", (0.75, 0.76, 0.78), rough=0.3))
+        face = c - out * 0.041
+        joined([on(wall, box("g", (1.0, 0.004, 0.52), (0, 0, 0)), face)], f"{n}_Display",
+               mat("Display_Screen", (0.01, 0.12, 0.08), 0.6))
+        grid = []
+        for k in range(-4, 5):
+            grid.append(on(wall, box("g", (0.006, 0.004, 0.5), (0, 0, 0)), face - out * 0.003 + tan * (k * 0.11)))
+        for k in range(-2, 3):
+            grid.append(on(wall, box("g", (0.98, 0.004, 0.006), (0, 0, 0)), face - out * 0.003 + Vector((0, 0, k * 0.1))))
+        for r in (0.08, 0.16, 0.23):                    # radar rings, standing in the screen's plane
+            ring = torus("g", r, 0.004, (0, 0, 0))
+            ring.matrix_world = (Matrix.Translation(face - out * 0.004 + tan * 0.22) @ wall
+                                 @ Matrix.Rotation(math.pi / 2, 4, "X"))
+            grid.append(ring)
+        joined(grid, f"{n}_Display_Grid", mat("Display_Grid", (0.3, 1.0, 0.55), 2.0))
+    elif style == "dials":
+        faces, rims, needles = [], [], []
+        for k in range(3):
+            pc = p_at(-0.75 + k * 0.33, 0.04, 0.04)
+            faces.append(on(panel, cylinder("g", 0.11, 0.02, (0, 0, 0), verts=32), pc))
+            rims.append(on(panel, torus("g", 0.112, 0.012, (0, 0, 0.012)), pc))
+            nd = box("g", (0.006, 0.09, 0.006), (0, 0.035, 0.024))
+            nd.rotation_euler = (0, 0, math.radians((-50, 20, 65)[k]))
+            bpy.context.view_layer.update()
+            nd.data.transform(nd.matrix_basis)
+            nd.matrix_basis = Matrix.Identity(4)
+            needles.append(on(panel, nd, pc))
+        joined(faces, f"{n}_Gauges", mat("Gauge_Face", (0.95, 0.93, 0.85), rough=0.6))
+        joined(rims, f"{n}_Gauge_Rims", chrome)
+        joined(needles, f"{n}_Gauge_Needles", mat("Gauge_Needle", (0.85, 0.1, 0.05)))
+        bases, levers = toggles(-0.85, 12, -0.2, 0.1)
+        joined(bases, f"{n}_Toggle_Bases", chrome)
+        joined(levers, f"{n}_Toggles", chrome)
+
+
+def boat_outline(length, width, n=24):
+    """A 60s clothes iron's sole seen from above: pointed at the front (+X),
+    round at the heel (CCW points)."""
+    pts = []
+    for k in range(n):
+        t = 2 * math.pi * k / n
+        x, y = math.cos(t), math.sin(t)
+        x = x if x < 0 else x ** 1.6                   # long, narrowing nose
+        y *= (1 - max(x, 0) * 0.75)                    # pointed tip
+        pts.append((x * length / 2, y * width / 2))
+    return pts
+
+
+def console_gimmick(at, phi, chrome):
+    """Orion: a homage to 1960s TV sci-fi bridges built from household things.
+    A half-round drum against the wall (instead of a desk) - brushed aluminium,
+    a black top with a chrome band, chrome dome studs round its edge - with, set
+    into the top, a tilted pale "acrylic" disc studded with dome nuts and
+    grooved rings, a clothes iron lying on it as the control lever, a finned
+    rod rising behind it and a small disc standing on its edge at the side.
+    Static and baked into the room like the rest (no cost at runtime); the six
+    blinking lamps on the rim are made by the caller. 1.24 m wide, 0.62 m deep,
+    under the roundels."""
+    acrylic = material("Gimmick_Acrylic", (0.55, 0.66, 0.74), roughness=0.08)
+    black = material("Gimmick_Black", (0.02, 0.02, 0.025), roughness=0.25)
+    alu = material("Gimmick_Alu", (0.62, 0.64, 0.67), roughness=0.35)
+    # the wall's frame at the floor: x along the wall, y into the room, z up
+    tan = Vector((-math.sin(phi), math.cos(phi), 0))
+    inward = Vector((-math.cos(phi), -math.sin(phi), 0))
+    frame = Matrix((tan, inward, Vector((0, 0, 1)))).transposed().to_4x4()
+    origin = at(0, 0.05, 0)                     # the drum's centre, against the wall
+
+    def place(obj, m=None):
+        obj.matrix_world = Matrix.Translation(origin) @ frame @ (m or Matrix.Identity(4)) @ obj.matrix_world
+        return obj
+
+    def half_round(r, n=32):                    # a half disc, its flat side on the wall (CCW)
+        return [(r * math.cos(math.pi * k / n), r * math.sin(math.pi * k / n)) for k in range(n + 1)]
+
+    place(prism("Gimmick_Drum", half_round(0.6), 0.0, 0.82, mat=alu))
+    place(prism("Gimmick_Drum_Band", half_round(0.612), 0.80, 0.83, mat=chrome))
+    place(prism("Gimmick_Drum_Top", half_round(0.62), 0.83, 0.86, mat=black))
+    studs = []
+    for k in range(1, 18):                      # dome studs round the top's edge
+        t = math.pi * k / 18
+        stud = sphere("g", 0.014, (0.585 * math.cos(t), 0.585 * math.sin(t), 0.862), segs=10, rings=5, mat=chrome)
+        stud.scale.z = 0.6
+        studs.append(stud)
+    bpy.context.view_layer.update()
+    place(join(studs, "Gimmick_Drum_Studs"))
+
+    # the studded disc, set into the top and tilted to the room
+    tilt = Matrix.Translation((0, 0.27, 0.9)) @ Matrix.Rotation(math.radians(-14), 4, "X")
+    R = 0.27
+    place(cylinder("Gimmick_Disc", R, 0.012, (0, 0, 0), verts=64, mat=acrylic), tilt)
+    parts = [cylinder("g", R + 0.012, 0.03, (0, 0, -0.02), verts=48, mat=chrome)]    # its chrome collar
+    for k in range(16):
+        a = 2 * math.pi * k / 16
+        stud = sphere("g", 0.012, (math.cos(a) * (R - 0.025), math.sin(a) * (R - 0.025), 0.006), segs=10, rings=5, mat=chrome)
+        stud.scale.z = 0.6
+        parts.append(stud)
+    rng = (0.11, 0.17, 0.62, 0.81, 0.24, 0.47, 0.93, 0.36)  # (fixed: the same every build)
+    for k in range(8):
+        a, r = 2 * math.pi * rng[k], 0.07 + 0.13 * rng[(k + 3) % 8]
+        stud = sphere("g", 0.01, (math.cos(a) * r, math.sin(a) * r, 0.006), segs=10, rings=5, mat=chrome)
+        stud.scale.z = 0.6
+        parts.append(stud)
+    for r in (0.12, 0.17, 0.21):                # grooved rings
+        parts.append(torus("g", r, 0.0018, (0, 0, 0.0065), mat=chrome))
+    bpy.context.view_layer.update()
+    place(join(parts, "Gimmick_Studs"), tilt)
+
+    # the iron: chrome sole, black body, a handle on two posts, lying on the disc
+    iron = [prism("Gimmick_Iron", boat_outline(0.21, 0.115), 0.006, 0.018, mat=chrome),
+            prism("g", boat_outline(0.18, 0.09), 0.018, 0.058, mat=black),
+            box("g", (0.13, 0.024, 0.024), (-0.01, 0, 0.105), mat=black),
+            box("g", (0.022, 0.02, 0.05), (0.04, 0, 0.078), rot=(0, math.radians(-20), 0), mat=black),
+            box("g", (0.022, 0.02, 0.05), (-0.065, 0, 0.078), mat=black)]
+    iron_obj = join(iron, "Gimmick_Iron")
+    iron_obj.rotation_euler = (0, 0, math.radians(25))
+    place(iron_obj, tilt)
+
+    # the finned rod: from the top behind the disc, up and to the left (under the roundels)
+    d = Vector((-0.45, -0.2, 0.87)).normalized()
+    base = Vector((-0.3, 0.12, 0.86))
+    rod = cylinder("Gimmick_Fins", 0.009, 0.5, base + d * 0.25, verts=12, mat=chrome)
+    rod.rotation_mode = "QUATERNION"
+    rod.rotation_quaternion = d.to_track_quat("Z", "Y")
+    fins = [rod]
+    for k in range(9):
+        fin = cylinder("g", 0.05 - k * 0.002, 0.004, base + d * (0.26 + k * 0.025), verts=24, mat=chrome)
+        fin.rotation_mode = "QUATERNION"
+        fin.rotation_quaternion = d.to_track_quat("Z", "Y")
+        fins.append(fin)
+    bpy.context.view_layer.update()
+    place(join(fins, "Gimmick_Fins"))
+
+    # a small pale disc on its edge at the right, with a chrome hub and stand
+    spin = cylinder("Gimmick_Spinner", 0.13, 0.006, (0.42, 0.2, 1.02), rot=(math.pi / 2, 0, 0), verts=48, mat=acrylic)
+    hub = cylinder("g", 0.02, 0.03, (0.42, 0.2, 1.02), rot=(math.pi / 2, 0, 0), verts=16, mat=chrome)
+    stand = cylinder("g", 0.012, 0.04, (0.42, 0.2, 0.875), verts=10, mat=chrome)
+    place(join([spin, hub, stand], "Gimmick_Spinner"))
 
 
 def oriented_disc(name, centre, normal, r, segs=40, mat=None):
@@ -998,7 +1424,8 @@ DRONE_R = 0.20         # body radius: a flying mini tile for a mobile player
 DRONE_TOP = 0.030      # top plate (LEDs, hearts)
 DRONE_GLASS_TOP = 0.044
 DRONE_LED_R = 0.172
-DRONE_BUTTON_R = 0.098
+DRONE_K = DRONE_LED_R / LED_RING_R   # the tile's top layout scaled to the drone (~0.57)
+DRONE_BUTTON_R = BUTTON_R * DRONE_K
 DRONE_ARM_R = 0.31     # body centre -> rotor centre
 DRONE_ROTOR_R = 0.10
 
@@ -1021,7 +1448,8 @@ def build_drone():
 
     # body: a flat disc, rounded underside, aluminium rim
     cylinder("Drone_Body", DRONE_R, 0.026, (0, 0, 0.013), verts=64, mat=black)
-    hull = sphere("Drone_Hull", DRONE_R * 0.92, (0, 0, 0.0), segs=48, rings=16, mat=black)
+    # only the lower half: a whole sphere pokes its black top through the top plate and the glass
+    hull = hemisphere("Drone_Hull", DRONE_R * 0.92, (0, 0, 0.0), (0, 0, -1), mat=black, segs=48, rings=16)
     hull.scale.z = 0.28
     tube("Drone_Rim", DRONE_R - 0.008, DRONE_R + 0.006, 0.0, DRONE_GLASS_TOP + 0.002, segs=64, mat=alu)
     band = material("Drone_Band", (0.1, 0.1, 0.1), roughness=0.3, emission=(0, 0, 0))
@@ -1034,15 +1462,30 @@ def build_drone():
         box(f"LED_{i:02d}", (0.009, 0.006, 0.003),
             (DRONE_LED_R * math.cos(a), DRONE_LED_R * math.sin(a), DRONE_TOP + 0.002),
             rot=(0, 0, a + math.pi / 2), mat=led)
-    for i in range(HEART_COUNT):   # Heart_0 nearest the centre, towards the front
-        y = 0.022 + i * 0.019
-        prism(f"Heart_{i}_Frame", heart_outline(0.019), DRONE_TOP, DRONE_TOP + 0.0025,
+    # the same top as a floor tile, scaled: the logo in the middle, the hearts
+    # between the logo and the LED ring towards the front, screws in the rim
+    tex_path = os.path.join(GODOT_DIR, "textures", "yin_yang_01.png")
+    if os.path.exists(tex_path):
+        img = bpy.data.images.load(tex_path)
+        img.pack()
+    else:
+        img = yin_yang_image(tex_path)
+    disc("Logo", 0.16 * DRONE_K, DRONE_TOP + 0.0012, mat=image_material("Logo_YinYang", img))
+    box("Heart_Wire", (0.002, 0.13 * DRONE_K, 0.001), (0, 0.235 * DRONE_K, DRONE_TOP + 0.0006), mat=black)
+    for i in range(HEART_COUNT):   # Heart_0 nearest the logo, Heart_4 nearest the rim
+        y = (0.18 + i * 0.024) * DRONE_K
+        prism(f"Heart_{i}_Frame", heart_outline(0.026 * DRONE_K), DRONE_TOP, DRONE_TOP + 0.0025,
               loc=(0, y, 0), mat=black)
-        prism(f"Heart_{i}", heart_outline(0.014), DRONE_TOP, DRONE_TOP + 0.0035,
+        prism(f"Heart_{i}", heart_outline(0.019 * DRONE_K), DRONE_TOP, DRONE_TOP + 0.0035,
               loc=(0, y, 0), mat=led)
+    for i in range(12):            # rim screws
+        a = 2 * math.pi * (i + 0.5) / 12
+        cylinder(f"Screw_{i:02d}", 0.0045, 0.003,
+                 ((DRONE_R - 0.001) * math.cos(a), (DRONE_R - 0.001) * math.sin(a), DRONE_GLASS_TOP + 0.003),
+                 verts=12, mat=alu)
     glass_plate = cylinder("Glass_Plate", DRONE_R - 0.012, 0.004,
                            (0, 0, DRONE_GLASS_TOP - 0.002), verts=64, mat=glass)
-    etched_buttons(glass_plate, DRONE_GLASS_TOP, DRONE_BUTTON_R, 0.55, sym)
+    etched_buttons(glass_plate, DRONE_GLASS_TOP, DRONE_BUTTON_R, DRONE_K, sym)
 
     # 4 arms with ducted rotors (diagonals, clear of the front)
     for k in range(4):

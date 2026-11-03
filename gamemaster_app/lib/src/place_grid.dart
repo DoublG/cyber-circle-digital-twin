@@ -23,11 +23,15 @@ class PlaceGrid extends StatelessWidget {
           children: [for (final t in tiles) _place(context, t)],
         );
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const _Head('VLOERTEGELS'),
-      grid([for (var t = 1; t <= state.floorTiles; t++) t]),
-      const SizedBox(height: 14),
-      const _Head('MOBIEL (DRONE)'),
-      grid([for (var t = state.floorTiles + 1; t <= state.places; t++) t]),
+      if (state.floorPlaces.isNotEmpty) ...[
+        const _Head('VLOERTEGELS'),
+        grid(state.floorPlaces),
+        const SizedBox(height: 14),
+      ],
+      if (state.mobilePlaces.isNotEmpty) ...[
+        const _Head('MOBIEL (DRONE)'),
+        grid(state.mobilePlaces),
+      ],
     ]);
   }
 
@@ -40,7 +44,7 @@ class PlaceGrid extends StatelessWidget {
     final border = isSel
         ? Retro.amber
         : switch (st) {
-            PlaceStatus.playing => Retro.orange,
+            PlaceStatus.playing => state.isDying(t) ? Retro.bad : Retro.orange,
             PlaceStatus.pending => invite!.color,
             PlaceStatus.disabled => Retro.bad,
             PlaceStatus.free => Retro.line,
@@ -71,9 +75,11 @@ class PlaceGrid extends StatelessWidget {
             Text(who, maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13,
                     color: st == PlaceStatus.free ? Retro.dim : (st == PlaceStatus.pending ? invite!.color : Retro.cream))),
-            if (st == PlaceStatus.playing)
+            if (st == PlaceStatus.playing && !state.isDying(t))
               Text('♥' * player!.lives, style: const TextStyle(color: Color(0xFFFF3355), fontSize: 11)),
             if (st == PlaceStatus.pending) const Text('wacht…', style: TextStyle(color: Retro.dim, fontSize: 11)),
+            if (state.isDying(t))
+              Text('vrij over ${state.dyingText(t)}', style: const TextStyle(color: Retro.bad, fontSize: 11, fontWeight: FontWeight.bold)),
           ]),
         ),
       ),

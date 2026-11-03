@@ -20,6 +20,14 @@ extends MqttClient
 ##   <prefix>/tiles            control -> game  retained {"enabled": {"3": false, ...}}: tiles out of service
 ##   <prefix>/db               control -> game  {"changed": "players" | "questions" | "ranking"}: fetch again
 ##   <prefix>/mode             control -> game  retained {"mode": "setup" | "closed" | "open" | "paused"}
+##   <prefix>/light/event      game -> all    a game moment for the lights: {"event": "hit", "tile": 3,
+##                                            "angle": 27.7, ...} (Arena.cue; docs/SETUP.md §5)
+##   <prefix>/light/scene      game -> all    retained: the base look {"scene": "playing", "round": "quiz",
+##                                            "color": "#8c40ff", "flashes": true} (LightDirector)
+##   <prefix>/voice            game -> all    a line read out (Narrator): {"name": "question_12", "text": ...,
+##                                            "kind": "question", "screens": [1, 2, 3, 4, 5], "file": ...}
+##   <prefix>/sounds           game -> all    retained {"events": {"attack": ["laser1.ogg", ...], ...}}:
+##                                            the sounds {"sound": "<event>"} on <prefix>/cmd can play
 ## Leave url empty to run without MQTT.
 
 @export var topic_prefix := "cybercircle"
@@ -51,6 +59,8 @@ func setup(arena_node: Node3D) -> void:
 		publish(topic_prefix + "/status", "online", true)
 		_announce()
 		_publish_settings()
+		_publish_sounds()
+		_publish_light_scene()
 		_state_json = ""
 		_tile_states.clear())                         # (the tiles' displays again)
 	arena.tile_message.connect(func(id, msg):
@@ -74,6 +84,16 @@ func setup(arena_node: Node3D) -> void:
 	subscribe(topic_prefix + "/texts")
 	subscribe(topic_prefix + "/db")
 	arena.game.settings_changed.connect(_publish_settings)
+	arena.sound.sounds_changed.connect(_publish_sounds)
+	arena.light_cue.connect(func(event, data):
+		if online and role == "master":
+			var msg: Dictionary = data.duplicate()
+			msg["event"] = String(event)
+			publish_json(topic_prefix + "/light/event", msg))
+	arena.lights.scene_changed.connect(func(_s): _publish_light_scene())
+	arena.narrator.line_said.connect(func(line):
+		if online and role == "master":
+			publish_json(topic_prefix + "/voice", line))
 	start()
 
 
@@ -83,6 +103,18 @@ func _publish_settings() -> void:
 	if role == "master":
 		publish_json(topic_prefix + "/settings/schema", arena.game.settings_schema(), true)
 		publish_json(topic_prefix + "/texts/defaults", Texts.defaults(arena.game), true)   # (rules follow the settings)
+
+
+## The base look for the real lights (retained: a lighting system that starts later gets it).
+func _publish_light_scene() -> void:
+	if role == "master" and online:
+		publish_json(topic_prefix + "/light/scene", arena.lights.scene, true)
+
+
+## The sounds an external system can play (the web interface lists them).
+func _publish_sounds() -> void:
+	if role == "master" and online:
+		publish_json(topic_prefix + "/sounds", {"events": arena.sound.catalog(), "node": node_id}, true)
 
 
 func _on_message(topic: String, payload: PackedByteArray) -> void:
@@ -105,6 +137,8 @@ func _on_message(topic: String, payload: PackedByteArray) -> void:
 		arena.screen_wall.refresh()                      # (free tiles: their line)
 		return
 	if topic == topic_prefix + "/tiles":                 # tiles in / out of service
+		if data.get("installed") is Array:               # the places of this installation
+			arena.set_installed(data.installed)
 		var enabled: Dictionary = data.get("enabled", {})
 		for n in enabled:
 			arena.set_tile_enabled(int(n), bool(enabled[n]))

@@ -33,6 +33,7 @@ class MqttLink:
         self.on_change = on_change or (lambda kind: None)
         self.nodes = {}                      # id -> announcement + "seen"
         self.schema = []                     # the game's settings (settings/schema)
+        self.sounds = {}                     # the sounds the game can play: event -> [file] (sounds)
         self.text_defaults = {}              # the game's texts as they are without changes (texts/defaults)
         self.devices = {}                    # physical tile id -> hello + "seen"
         self.state = {}
@@ -110,6 +111,9 @@ class MqttLink:
             elif topic == "settings/schema":
                 self.schema = data or []
                 kind = "settings"
+            elif topic == "sounds":
+                self.sounds = (data or {}).get("events", {}) if isinstance(data, dict) else {}
+                kind = "sounds"
             elif topic == "texts/defaults":
                 self.text_defaults = data or {}
                 kind = "texts"
@@ -151,15 +155,17 @@ class MqttLink:
     def command(self, msg):
         self.client.publish(f"{self.prefix}/cmd", json.dumps(msg))
 
-    def publish_tiles(self, tiles):
-        """Tell every physical tile its place, and the game which places are in service."""
+    def publish_tiles(self, tiles, installed=None):
+        """Tell every physical tile its place, and the game which places are in
+        service and which are installed at all (a partial installation)."""
         placed = {t["device"]: t["number"] for t in tiles if t["device"]}
         for dev in set(placed) | set(self.devices):
             self.client.publish(f"{self.prefix}/device/{dev}/config", json.dumps({"tile": placed.get(dev, 0)}),
                                 retain=True)
         self.client.publish(f"{self.prefix}/tiles", json.dumps({
             "enabled": {str(t["number"]): bool(t["enabled"]) for t in tiles},
-            "devices": {str(t["number"]): t["device"] for t in tiles if t["device"]}}), retain=True)
+            "devices": {str(t["number"]): t["device"] for t in tiles if t["device"]},
+            **({"installed": installed} if installed is not None else {})}), retain=True)
 
     def publish_mode(self, mode):
         self.client.publish(f"{self.prefix}/mode", json.dumps({"mode": mode}), retain=True)

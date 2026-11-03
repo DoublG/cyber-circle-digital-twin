@@ -66,6 +66,11 @@ class CardIn(BaseModel):
     email: str | None = None
 
 
+class SoundIn(BaseModel):
+    file: str = ""          # one file of the event; empty = a random one
+    volume: int = -1        # % for this sound only; -1 = the game's setting
+
+
 class GamemasterIn(BaseModel):
     name: str
     color: str
@@ -143,6 +148,10 @@ MODES = {
 }
 
 
+class InstallationIn(BaseModel):
+    installed: list[int]                     # the places of this installation (1-13 floor, 14-18 mobile)
+
+
 class TileIn(BaseModel):
     device: str | None = "-"                 # "-" = leave as it is; None / "" = no device
     enabled: bool | None = None
@@ -157,9 +166,17 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
     listeners: set[asyncio.Queue] = set()
     loop: dict = {}
 
+    def installed():
+        """The places of this installation (default: all of them)."""
+        try:
+            ids = json.loads(db.setting("installed", "null"))
+        except ValueError:
+            ids = None
+        return sorted({int(i) for i in ids if 1 <= int(i) <= PLACES}) if isinstance(ids, list) else list(range(1, PLACES + 1))
+
     def changed(kind):                       # called from the MQTT thread
         if kind in ("mqtt", "devices"):
-            link.publish_tiles(db.tiles())       # (re)connected / a tile appeared: send the layout
+            link.publish_tiles(db.tiles(), installed())   # (re)connected / a tile appeared: send the layout
         if kind == "mqtt":
             link.publish_mode(db.setting("mode", "setup"))
             link.publish_settings(game_settings())
@@ -209,7 +226,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
 
     def live_snapshot():
         return {"checkpoint": checkpoint_info(),"mqtt": link.online, "state": link.state, "nodes": link.node_list(), "master": link.master,
-                "events": list(link.events), "devices": link.device_list(), "mode": db.setting("mode", "setup"),
+                "events": list(link.events), "sounds": link.sounds, "installed": installed(), "devices": link.device_list(), "mode": db.setting("mode", "setup"),
                 "t01_clock": float(db.setting("t01_clock", "12") or 12),
                 "website": {k: v for k, v in site.snapshot().items() if k != "history"},
                 "gamemasters_online": online_ref[0]() if online_ref else []}
@@ -282,6 +299,41 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         link.command({"game": "plan_random"})
         return {"ok": True}
 
+    # ------------------------------------------------------------ sounds (external triggers)
+
+    @app.get("/api/sounds")
+    def sounds():
+        """The sounds the game can play: {event: [file, ...]} (from the master's MQTT `sounds`)."""
+        return {"events": link.sounds}
+
+    @app.post("/api/sound/{event}")
+    def play_sound(event: str, s: SoundIn | None = None):
+        """Play a sound now, whatever the game is doing: a random file of `event` (a folder in
+        godot/data/sounds/ or the game's --sounds=DIR), or `file`. Body optional."""
+        s = s or SoundIn()
+        if link.sounds:                       # (known once a game has announced its sounds)
+            if event not in link.sounds:
+                raise HTTPException(404, f"unknown sound: {event}")
+            if s.file and s.file not in link.sounds[event]:
+                raise HTTPException(404, f"unknown file for {event}: {s.file}")
+        cmd = {"sound": event}
+        if s.file:
+            cmd["file"] = s.file
+        if s.volume >= 0:
+            cmd["volume"] = max(0, min(100, s.volume))
+        link.command(cmd)
+        return {"ok": True}
+
+    @app.post("/api/sounds/stop")
+    def stop_sounds():
+        link.command({"sound_stop": True})
+        return {"ok": True}
+
+    @app.post("/api/sounds/reload")
+    def reload_sounds():
+        link.command({"sound_reload": True})
+        return {"ok": True}
+
     @app.post("/api/cmd")
     def raw_command(cmd: dict):
         """Any command the game understands (see the top of godot/scripts/arena.gd)."""
@@ -323,7 +375,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
             # locked: swap a physical tile only on a place that is out of service
             raise HTTPException(409, "setup locked: take the tile out of service first, then swap it")
         db.set_tile(number, ... if t.device == "-" else t.device, t.enabled)
-        link.publish_tiles(db.tiles())
+        link.publish_tiles(db.tiles(), installed())
         return {"ok": True}
 
     # ------------------------------------------------------------ game settings
@@ -504,6 +556,25 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
             return float(db.setting("t01_clock", "12"))
         except ValueError:
             return 12.0
+
+    @app.get("/api/installation")
+    def get_installation():
+        """Which places this installation has: all, half the floor, only the mobile places, ..."""
+        return {"installed": installed(), "floor_tiles": FLOOR_TILES, "places": PLACES}
+
+    @app.put("/api/installation")
+    def put_installation(i: InstallationIn):
+        """Setup only: the places of this installation. The game hides the others
+        (tile, ducts, cable), gives them no slot on the screens and never uses them."""
+        if db.setting("mode", "setup") != "setup":
+            raise HTTPException(409, "only in SETUP: unlock the setup first")
+        ids = sorted({n for n in i.installed if 1 <= n <= PLACES})
+        if not ids:
+            raise HTTPException(400, "at least one place")
+        db.set_setting("installed", json.dumps(ids))
+        link.publish_tiles(db.tiles(), ids)
+        changed("layout")
+        return {"installed": ids}
 
     @app.put("/api/layout")
     def put_layout(l: LayoutIn):

@@ -1,0 +1,21 @@
+# The control server: web interface, HTTP API, the database's owner.
+# Installed by install_server.sh (@CC_ROOT@ / @CC_USER@ filled in).
+#   sudo systemctl status cybercircle-control      journalctl -u cybercircle-control -f
+[Unit]
+Description=Cyber Circle control server
+After=network-online.target mariadb.service mosquitto.service
+Wants=network-online.target mariadb.service mosquitto.service
+
+[Service]
+User=@CC_USER@
+EnvironmentFile=/etc/cybercircle/cybercircle.env
+ExecStart=@CC_ROOT@/deploy/install/start_control.sh
+Restart=always
+RestartSec=3
+# (a little hardening: it only needs its own folder)
+NoNewPrivileges=yes
+ProtectSystem=full
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

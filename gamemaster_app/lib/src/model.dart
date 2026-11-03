@@ -79,9 +79,13 @@ class GameState {
     Map<int, TilePlayer>? players,
     Map<int, Invite>? pending,
     Set<int>? disabled,
-  })  : players = players ?? {},
+    Map<int, int>? dying,
+    Set<int>? installed,
+  })  : installed = installed ?? {for (var t = 1; t <= places; t++) t},
+        players = players ?? {},
         pending = pending ?? {},
-        disabled = disabled ?? {};
+        disabled = disabled ?? {},
+        dying = dying ?? {};
 
   final String state;            // LOBBY / INTRO / PLAYING / SCOREBOARD ('' = no game yet)
   final String mode;             // setup / closed / open / paused
@@ -93,6 +97,12 @@ class GameState {
   final Map<int, TilePlayer> players;
   final Map<int, Invite> pending;
   final Set<int> disabled;
+  /// Exterminated players' tiles: seconds until the tile is free again
+  /// (-1: the robot has not fired yet).
+  final Map<int, int> dying;
+  /// The places of this installation (a partial one: e.g. half the floor, or
+  /// only the mobile places); the others are not shown and never used.
+  final Set<int> installed;
 
   factory GameState.fromJson(Map<String, dynamic> j) {
     int i(dynamic v) => v is num ? v.toInt() : 0;
@@ -119,17 +129,42 @@ class GameState {
       players: players,
       pending: pending,
       disabled: {for (final d in (j['disabled'] as List? ?? [])) i(d)},
+      installed: j['installed'] is List ? {for (final d in j['installed'] as List) i(d)} : null,
+      dying: {
+        for (final d in (j['dying'] as List? ?? []))
+          i((d as Map<String, dynamic>)['tile']): (d['free_in'] as num?)?.toInt() ?? -1
+      },
     );
   }
 
   PlaceStatus status(int tile) {
-    if (disabled.contains(tile)) return PlaceStatus.disabled;
+    if (disabled.contains(tile) || !installed.contains(tile)) return PlaceStatus.disabled;
     if (players.containsKey(tile)) return PlaceStatus.playing;
     if (pending.containsKey(tile)) return PlaceStatus.pending;
     return PlaceStatus.free;
   }
 
   bool isMobile(int tile) => tile > floorTiles;
+
+  /// The tile is in an extermination (comes free soon).
+  bool isDying(int tile) => dying.containsKey(tile);
+
+  /// "☠ 12s" / "☠ …" (the robot still has to fire).
+  String dyingText(int tile) {
+    final s = dying[tile];
+    return s == null ? '' : (s < 0 ? '☠ …' : '☠ ${s}s');
+  }
+
+  /// Free places now: floor tiles, and mobile places (drones).
+  /// The installed floor tiles / mobile places (in order).
+  List<int> get floorPlaces => [for (var t = 1; t <= floorTiles; t++) if (installed.contains(t)) t];
+  List<int> get mobilePlaces => [for (var t = floorTiles + 1; t <= places; t++) if (installed.contains(t)) t];
+  bool isInstalled(int tile) => installed.contains(tile);
+
+  int get freeFloor => floorPlaces.where((t) => status(t) == PlaceStatus.free).length;
+  int get freeMobile => mobilePlaces.where((t) => status(t) == PlaceStatus.free).length;
+  int get enabledFloor => floorPlaces.where((t) => !disabled.contains(t)).length;
+  int get enabledMobile => mobilePlaces.where((t) => !disabled.contains(t)).length;
 
   /// Where a player is now: (tile, playing) - invited or playing - or null.
   (int, bool)? whereIs(int playerId) {

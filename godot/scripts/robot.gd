@@ -22,6 +22,9 @@ const BULB_COUNT := SIDE_COUNT * BULBS_PER_SIDE
 @export var head_speed_deg := 120.0   # max turn speed for turn_head_to / look_at_point
 @export var idle_spin_deg := 30.0      # idle spin speed of the top (deg/s, 0 = stop)
 @export var hold_after_target := 2.0   # seconds to keep facing a target before spinning again
+@export var eye_pitch_speed_deg := 90.0   # how fast the eye gun tilts up / down
+@export var eye_pitch_min_deg := -25.0    # down (at the floor tiles)
+@export var eye_pitch_max_deg := 60.0     # up (at the drones)
 @export var shot_speed := 6.0          # m/s of the plunger shot
 @export var death_color := Color.RED   # colour of the 5 half spheres in the death animation
 @export var party_lamp := true: set = set_party_lamp   # rotating colours inside the dome
@@ -43,6 +46,8 @@ var _effect_before_hit := ""
 var _death_queue: Array[Dictionary] = []
 var _death_running := false
 var _plunger_rest := {}                 # part -> resting position
+var _eye_pivot: Node3D                  # the eye gun tilts on it (pitch); made from the Eye_* parts at start
+var _target_pitch := 0.0                # radians, + = up
 var _plunger_lens: Node3D
 var _muzzle_light: OmniLight3D
 var _bulbs: Array[MeshInstance3D] = []
@@ -86,6 +91,7 @@ func _ready() -> void:
 	head.add_child(_dome_light)
 	set_party_lamp(party_lamp)
 	set_party_spin_speed(party_spin_speed)
+	_build_eye_pivot()
 	for part in ["Eye_Tip", "Eye_Lens", "Eye_Fins"]:
 		var node := _model.find_child(part, true, false) as Node3D
 		_plunger_parts.append(node)
@@ -99,6 +105,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	var pitch_step := deg_to_rad(eye_pitch_speed_deg) * delta   # the eye gun tilts on its own
+	_eye_pivot.rotation.x += clampf(_target_pitch - _eye_pivot.rotation.x, -pitch_step, pitch_step)
 	if _head_locked:
 		if bulb_effect != "none":
 			_effect_time += delta * bulb_effect_speed
@@ -151,6 +159,36 @@ func _run_bulb_effect() -> void:
 # ---------------------------------------------------------------- head
 
 ## Turn smoothly to a yaw angle in degrees (0 = front, positive = turn left).
+## The eye gun (base, stalk, fins, tip, lens) on one pivot at its mount on
+## the head, so it can tilt up and down (aim at a drone, down at a tile).
+func _build_eye_pivot() -> void:
+	var base := _model.find_child("Eye_Base", true, false) as Node3D
+	_eye_pivot = Node3D.new()
+	_eye_pivot.name = "EyePivot"
+	head.add_child(_eye_pivot)
+	_eye_pivot.position = base.position
+	for part in ["Eye_Base", "Eye_Stalk", "Eye_Fins", "Eye_Tip", "Eye_Lens"]:
+		var node := _model.find_child(part, true, false) as Node3D
+		var keep := node.global_transform
+		node.get_parent().remove_child(node)
+		_eye_pivot.add_child(node)
+		node.global_transform = keep
+
+
+## Tilt the eye gun towards a point (clamped to its range); null = level.
+func aim_pitch_at(global_point = null) -> void:
+	if global_point == null:
+		_target_pitch = 0.0
+		return
+	var d: Vector3 = global_point - _eye_pivot.global_position
+	var pitch := atan2(d.y, Vector2(d.x, d.z).length())
+	_target_pitch = clampf(pitch, deg_to_rad(eye_pitch_min_deg), deg_to_rad(eye_pitch_max_deg))
+
+
+func get_eye_pitch() -> float:
+	return rad_to_deg(_eye_pivot.rotation.x)
+
+
 func turn_head_to(deg: float) -> void:
 	_target_yaw = deg_to_rad(deg)
 	_has_target = true
@@ -183,13 +221,16 @@ static func nearest_side(yaw: float) -> int:
 
 func look_at_side(side: int) -> void:
 	_target_yaw = side_yaw(side)
+	_target_pitch = 0.0
 	_has_target = true
 	_hold = 0.0
 
 
+## Turn the head and tilt the eye gun to a point (a tile, a drone up in the air).
 func look_at_point(global_point: Vector3) -> void:
 	var p := to_local(global_point)
 	_target_yaw = atan2(-p.x, -p.z)
+	aim_pitch_at(global_point)
 	_has_target = true
 	_hold = 0.0
 
@@ -204,6 +245,7 @@ func lock_on(side: int) -> void:
 func release_head() -> void:
 	_has_target = false
 	_locked = false
+	_target_pitch = 0.0
 
 
 ## Plays the baked "HeadSpin" or "HeadScan" animation from the glb.
@@ -214,7 +256,8 @@ func play_head_animation(anim_name: StringName) -> void:
 
 
 func is_facing_target() -> bool:
-	return _has_target and absf(wrapf(_target_yaw - head.rotation.y, -PI, PI)) < 0.02
+	return _has_target and absf(wrapf(_target_yaw - head.rotation.y, -PI, PI)) < 0.02 \
+		and absf(_target_pitch - _eye_pivot.rotation.x) < 0.03
 
 
 # ---------------------------------------------------------------- plunger
@@ -237,13 +280,13 @@ func fire_at_side(side: int) -> void:
 ## Fire straight ahead of the eye (or at `global_target` if given).
 func fire(global_target = null, on_hit := Callable()) -> void:
 	var from := _plunger_lens.global_position
-	var forward := -head.global_basis.z
+	var forward := -_eye_pivot.global_basis.z
 	var to: Vector3 = global_target if global_target != null else from + forward * 3.0
 	_hold = 0.0
 	fired.emit(to)
 
 	# recoil: the tip kicks back along the rod and springs out again
-	var recoil := head.global_basis.z * 0.06
+	var recoil := _eye_pivot.global_basis.z * 0.06
 	for part in _plunger_parts:
 		var rest: Vector3 = _plunger_rest[part]
 		var kick: Vector3 = part.get_parent().global_basis.inverse() * recoil
@@ -449,6 +492,7 @@ func _run_deaths() -> void:
 					v = c
 			_death_queue.erase(v)
 			look_at_side(v.side)
+			aim_pitch_at(v.target)                # a drone: the eye gun tilts up to it
 			while not is_facing_target():
 				await get_tree().process_frame
 			head.rotation.y = side_yaw(v.side)  # land exactly on the plate centre

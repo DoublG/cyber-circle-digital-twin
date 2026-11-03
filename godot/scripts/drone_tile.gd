@@ -79,7 +79,7 @@ func _process(delta: float) -> void:
 		_gone = false
 		_falling = false
 		_flight = 0.0
-		visible = true
+		visible = installed
 		_glow()
 	if _falling or _doomed:
 		return                                    # (the robot aims at where it is)
@@ -198,7 +198,8 @@ func play_hit(color := Color(1.0, 0.1, 0.05)) -> void:
 	tw.tween_property(self, "_drop", 0.35, 0.15)
 	tw.chain().tween_property(self, "_wobble:z", 0.0, 0.9).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 	tw.tween_property(self, "_drop", 0.0, 0.8).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	_sparks(color, 18)
+	_sparks(color, 40)
+	_puff()
 	await super(color)
 
 
@@ -214,6 +215,14 @@ func play_death() -> void:
 	var start := position
 	var a0 := atan2(start.x, start.z)
 	var smoke := _smoke_trail()
+	_glow_ball(Color(1.0, 0.4, 0.1), 0.2, 1.4, 0.5, 0.0)      # struck: a burst where it hangs
+	_flash(Color(1.0, 0.5, 0.2), 8.0, 3.0, 0.05, 0.6, 0.0)
+	var breaking := true                                      # pieces break off on the way down
+	var shed := func():
+		while breaking and is_inside_tree():
+			_debris(3, 0.04, 0.4, 0.3, 0.0)
+			await get_tree().create_timer(0.25).timeout
+	shed.call()
 	var fall := create_tween()
 	fall.tween_method(func(k: float):
 		var a := a0 + k * 2.6
@@ -222,13 +231,57 @@ func play_death() -> void:
 		basis = Basis.from_euler(Vector3(0.6 * k, a * 3.0, 0.9 * k)), 0.0, 1.0, 1.7)
 	fall.parallel().tween_method(func(v: float): fill_ring(Color(v, 0, 0)), 1.0, 0.0, 1.7)
 	await fall.finished
+	breaking = false
 	smoke.emitting = false
+	_fx_root = Node3D.new()                                   # the explosion stays when the drone hides
+	get_parent().add_child(_fx_root)
+	_fx_root.global_position = global_position
+	var anchor := _fx_root
+	get_tree().create_timer(3.0).timeout.connect(anchor.queue_free)
 	_explode()
+	_fx_root = null
 	set_status(Color.RED)
 	await get_tree().create_timer(0.15).timeout
 	_gone = true
 	visible = false
 	await get_tree().create_timer(1.2).timeout
+
+
+## Where a shot from the robot hits the bubble: its side towards the robot.
+func _shield_impact() -> Vector3:
+	var to_robot := to_local(Vector3(0, 1.6, 0)) - _shield.position
+	return _shield.position + to_robot.normalized() * 0.3
+
+
+## A small puff of smoke where it was hit.
+func _puff() -> void:
+	var smoke := CPUParticles3D.new()
+	smoke.one_shot = true
+	smoke.amount = 8
+	smoke.lifetime = 1.2
+	smoke.explosiveness = 0.9
+	smoke.local_coords = false
+	smoke.spread = 180.0
+	smoke.initial_velocity_min = 0.2
+	smoke.initial_velocity_max = 0.6
+	smoke.gravity = Vector3(0, 0.3, 0)
+	var puff := QuadMesh.new()
+	puff.size = Vector2(0.3, 0.3)
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	mat.vertex_color_use_as_albedo = true
+	mat.albedo_texture = _soft_texture([0.0, 1.0], [0.8, 0.0])
+	puff.material = mat
+	smoke.mesh = puff
+	var grey := Gradient.new()
+	grey.set_color(0, Color(0.4, 0.38, 0.36, 0.7))
+	grey.set_color(1, Color(0.25, 0.25, 0.25, 0.0))
+	smoke.color_ramp = grey
+	add_child(smoke)
+	smoke.emitting = true
+	get_tree().create_timer(1.5).timeout.connect(smoke.queue_free)
 
 
 func _sparks(color: Color, n: int) -> void:

@@ -195,6 +195,8 @@ func _load_image(file: String) -> Texture2D:
 func _read() -> void:
 	_phase = "read"
 	_phase_left = read_time
+	var q: Dictionary = _questions[_index]
+	game.arena.narrator.say(Narrator.question_name(q), str(q.question), "question", {}, true)
 	for id in players:
 		for b in CyberTile.BUTTONS:
 			tile(id).set_button_led(b, Color.BLACK)
@@ -203,6 +205,10 @@ func _read() -> void:
 func _start_answering() -> void:
 	_phase = "question"
 	_phase_left = _question_time
+	var q: Dictionary = _questions[_index]
+	var qn := Narrator.question_name(q)
+	for n in mini(q.answers.size(), 4):                     # read out after the question
+		game.arena.narrator.say("%s_answer_%d" % [qn, n + 1], Narrator.answer_line(q, n), "answer")
 	for id in players:
 		for b in CyberTile.BUTTONS:
 			tile(id).set_button_led(b, CyberTile.BUTTON_COLORS[b])
@@ -249,6 +255,7 @@ func _update(delta: float) -> void:
 	elif _phase == "question" and _phase_left <= 0.0:   # always the full time: answers can change
 		_phase = "timeup"
 		_phase_left = timeup_time
+		game.arena.narrator.say("time_up", "Tijd om!", "time_up", {}, true)
 	elif _phase == "timeup" and _phase_left <= 0.0:
 		_phase = "answers"               # everyone's answer icon
 		_phase_left = answers_time

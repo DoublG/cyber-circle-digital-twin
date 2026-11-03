@@ -56,7 +56,7 @@ class _PlanPainter extends CustomPainter {
     _text(canvas, 'ACHTER', c - Offset(0, room + tileR * 0.05), tileR * 0.42, Retro.dim);
 
     // cables and the robot
-    for (var t = 1; t <= s.floorTiles; t++) {
+    for (final t in s.floorPlaces) {                          // (only the installed places)
       canvas.drawLine(c, _tile(c, ring, t), Paint()..color = Retro.line..strokeWidth = 1.5);
     }
     canvas.drawCircle(c, tileR * 1.15, Paint()..color = Retro.panel);
@@ -64,14 +64,15 @@ class _PlanPainter extends CustomPainter {
     _text(canvas, 'ROBOT', c, tileR * 0.42, Retro.teal);
 
     // the floor tiles
-    for (var t = 1; t <= s.floorTiles; t++) {
+    for (final t in s.floorPlaces) {
       _place(canvas, _tile(c, ring, t), tileR, t);
     }
     // the mobile stations: a row under the room
-    final n = s.places - s.floorTiles;
+    final mobile = s.mobilePlaces;
+    final n = mobile.length;
     for (var k = 0; k < n; k++) {
       final x = size.width / 2 + (k - (n - 1) / 2) * tileR * 2.3;
-      _place(canvas, Offset(x, size.height - tileR * 1.05), tileR * 0.85, s.floorTiles + k + 1);
+      _place(canvas, Offset(x, size.height - tileR * 1.05), tileR * 0.85, mobile[k]);
     }
   }
 
@@ -88,7 +89,7 @@ class _PlanPainter extends CustomPainter {
     final fill = lit
         ? color
         : switch (st) {
-            PlaceStatus.playing => Retro.orange.withOpacity(0.35),
+            PlaceStatus.playing => s.isDying(t) ? Retro.bad.withOpacity(0.45) : Retro.orange.withOpacity(0.35),
             PlaceStatus.pending => invite!.color.withOpacity(0.45),
             PlaceStatus.disabled => Retro.bad.withOpacity(0.25),
             PlaceStatus.free => Retro.panel,

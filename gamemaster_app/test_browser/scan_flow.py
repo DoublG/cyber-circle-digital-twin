@@ -2,7 +2,9 @@
 end: test broker + control server + the game (headless) + Chrome with a fake
 camera playing QR cards. Three cards synced from the website are scanned and
 assigned one after the other (VOLGENDE in between); then a visitor without a
-phone is registered in the app and their new card scanned.
+phone is registered in the app and their new card scanned; a mobile player
+(MOBIELE SPELER: station M1 chosen first, then their card); an extermination:
+the tile shows when it comes free.
     pip install playwright qrcode pillow            (Chrome must be installed)
     (cd gamemaster_app && flutter build web --release --base-href /gm/ --no-web-resources-cdn)
     python gamemaster_app/test_browser/scan_flow.py
@@ -32,7 +34,7 @@ def qr_video(codes, path):
                     "-pix_fmt", "yuv420p", path], check=True)
 
 
-qr_video(["CC-0001", "CC-0002", "CC-0003", "CC-0100"], os.path.join(S, "qr.y4m"))
+qr_video(["CC-0001", "CC-0002", "CC-0003", "CC-0100", "CC-0004"], os.path.join(S, "qr.y4m"))
 PORT, MQ = 8097, 9018; BASE = f"http://127.0.0.1:{PORT}"; DB = os.path.join(S, "cam.db")
 for f in (DB, DB + "-wal", DB + "-shm"):
     if os.path.exists(f): os.remove(f)
@@ -64,7 +66,7 @@ try:
     call("POST", "/api/mode", {"mode": "closed"}); time.sleep(1); call("POST", "/api/mode", {"mode": "open"}); time.sleep(2)
     call("POST", "/api/gamemasters", {"name": "Lies", "color": "#ff44cc"})
     gm = call("POST", "/api/gamemasters", {"name": "Erik", "color": "#00ffcc"})["id"]
-    for code, name in [("CC-0001", "Anna"), ("CC-0002", "Bram"), ("CC-0003", "Cleo")]:
+    for code, name in [("CC-0001", "Anna"), ("CC-0002", "Bram"), ("CC-0003", "Cleo"), ("CC-0004", "Mila")]:
         call("PUT", f"/api/cards/{code}", {"name": name, "age": 11})
     with sync_playwright() as p:
         b = p.chromium.launch(channel="chrome", headless=True, args=["--use-fake-ui-for-media-stream",
@@ -83,8 +85,9 @@ try:
             if i == 0: pg.screenshot(path=os.path.join(S, "gm_cam1.png"))
             pg.mouse.click(215, 760)                         # VOLGENDE
             pg.wait_for_timeout(300)
+            if i == 0: pg.screenshot(path=os.path.join(S, "gm_scan.png"))
             if i == 2:                                       # before the new card: a visitor without a phone
-                pg.mouse.click(215, 511)                     # BEZOEKER ZONDER GSM
+                pg.mouse.click(110, 546)                     # ZONDER GSM
                 pg.wait_for_timeout(800)
                 pg.keyboard.type("Zoe")
                 pg.keyboard.press("Tab"); pg.keyboard.type("9")
@@ -98,6 +101,29 @@ try:
         z = call("GET", "/api/cards/CC-0100")
         check(z["name"] == "Zoe" and z["age"] == 9, f"card CC-0100 is Zoe's now ({z})")
         pg.wait_for_timeout(700); pg.screenshot(path=os.path.join(S, "gm_cam4.png"))
+        pg.mouse.click(215, 760)                             # VOLGENDE
+        pg.wait_for_timeout(300)
+        pg.mouse.click(318, 546)                             # MOBIELE SPELER
+        pg.wait_for_timeout(700)
+        pg.screenshot(path=os.path.join(S, "gm_mobile_choose.png"))
+        pg.mouse.click(215, int(os.environ.get("CC_M1_Y", "650")))   # M1 in the list
+        pg.wait_for_timeout(300)
+        pg.screenshot(path=os.path.join(S, "gm_mobile_armed.png"))
+        check(until(lambda: any(x["name"] == "Mila" and x["tile"] == 14 for x in state()["pending"]), 30),
+              "Mila (mobile): M1 chosen, then her card scanned: invited on M1 (tile 14)")
+        pg.wait_for_timeout(700); pg.screenshot(path=os.path.join(S, "gm_mobile_go.png"))
+        pg.mouse.click(215, 760)                             # VOLGENDE
+        # an extermination: the tile counts down till it is free
+        call("POST", "/api/cmd", {"tile": 8, "join": "Kai"}); time.sleep(1)
+        call("POST", "/api/tiles/8/lives", {"lives": 0})
+        check(until(lambda: any(d["tile"] == 8 for d in state().get("dying", [])), 10), "Kai exterminated: T08 in 'dying'")
+        check(until(lambda: any(d["tile"] == 8 and d["free_in"] > 0 for d in state().get("dying", [])), 15),
+              f"T08 counts down till it is free ({state().get('dying')})")
+        pg.wait_for_timeout(1500); pg.screenshot(path=os.path.join(S, "gm_dying.png"))
+        pg.mouse.click(215, 850)                             # the Tegels tab: the same countdown per place
+        pg.wait_for_timeout(1200); pg.screenshot(path=os.path.join(S, "gm_dying_tiles.png"))
+        pg.mouse.click(72, 850)                              # back to Scannen
+        check(until(lambda: not any(d["tile"] == 8 for d in state().get("dying", [])), 40), "T08 free again")
         print("pending:", [(x["tile"], x["name"], x["color"]) for x in state()["pending"]])
         check(all(x["color"] == "#00ffcc" for x in state()["pending"]), "every tile in Erik's colour")
         b.close()

@@ -201,6 +201,8 @@ func refresh() -> void:
 			var view: Control = _shared_factory.call()
 			view.set_anchors_preset(Control.PRESET_FULL_RECT)
 			screen.add_child(view)
+			if view.has_method("highlight_tiles"):     # player lists: the players facing this screen find their row
+				view.highlight_tiles(groups()[k])
 			shared_views.append(view)
 			_add_timer_label(screen)
 			continue
@@ -215,6 +217,8 @@ func refresh() -> void:
 			ids = shown if not shown.is_empty() else ids
 		for id in ids:                            # floor screens: fixed, one equal slot per tile
 			row.add_child(_player_view(id) if arena.is_playing(id) else _tile_slot(id))
+		if ids.is_empty():                        # no installed place on this screen: how to join
+			row.add_child(_join_panel())
 		_add_timer_label(screen)
 	_test_patterns(arena.game.mode == GameManager.Mode.SETUP)
 	for screen in _screens:
@@ -360,6 +364,26 @@ func _player_view(tile_id: int) -> Control:
 	return cell
 
 
+## A screen without installed places (a partial installation): the call to
+## action and how to join, instead of an empty screen.
+func _join_panel() -> Control:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_theme_stylebox_override("panel", Retro.panel(Color(Retro.PANEL, 0.95), Retro.ORANGE, 2, 0, 40))
+	var box := VBoxContainer.new()
+	box.alignment = BoxContainer.ALIGNMENT_CENTER
+	box.add_theme_constant_override("separation", 40)
+	panel.add_child(box)
+	box.add_child(Retro.label(96, Retro.TEAL, "CYBER CIRCLE"))
+	var cta := CallToAction.new(64)
+	cta.custom_minimum_size.y = 220
+	box.add_child(cta)
+	var how := Retro.label(40, Retro.CREAM, Texts.join_text())
+	how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(how)
+	return panel
+
+
 func _tile_slot(tile_id: int) -> Control:
 	var slot := TileSlot.new()
 	slot.tile_id = tile_id
@@ -369,6 +393,7 @@ func _tile_slot(tile_id: int) -> Control:
 	if not invite.is_empty():
 		slot.player = invite.name
 		slot.color = invite.color
+		slot.tile = arena.tiles[tile_id - 1]     # (the icons pressed so far)
 	return slot
 
 
@@ -418,8 +443,12 @@ func _tilt(cam: Camera3D, from: Transform3D, to: Transform3D) -> void:
 
 
 ## The floor screens and then the mobile screens: the tile ids of each screen.
+## The tiles on each screen (floor screens, then the mobile screens), without
+## the places that are not installed (Arena.set_installed).
 func groups() -> Array:
-	return screen_groups + mobile_groups
+	if arena == null:
+		return screen_groups + mobile_groups
+	return (screen_groups + mobile_groups).map(func(g): return g.filter(func(id): return arena.is_installed(id)))
 
 
 ## A drone player's camera, third person: behind and well above the drone,

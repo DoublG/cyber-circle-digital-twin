@@ -49,6 +49,64 @@ digital_twin/
 * **The database** holds players, questions, and every play's score; the
   overall ranking is every player's highest score.
 
+## Setup, step by step
+
+The order for a new installation; the details are in the sections named.
+Assumed below: the overview PC is `192.168.1.10` and also runs the broker,
+the database and the game (one game computer).
+
+1. **Network** – one wired LAN (with DHCP) for the overview PC, the game
+   computer and the tiles; the gamemasters' phones on a wifi in the same
+   network. Give the overview PC a **fixed address**: the tiles and the app
+   point to it.
+2. **MQTT broker** on the overview PC – Mosquitto with a plain listener (1883,
+   the tiles) and a WebSocket listener (9001, the game and the control
+   server), and a user + password (§2 *MQTT broker*).
+3. **Database** – MariaDB / MySQL, a database `cybercircle` and its user (§10).
+4. **Control server** – the virtualenv, `pip install -r requirements.txt`,
+   started at boot as a systemd service (§10). Check that
+   `http://192.168.1.10:8080/` opens.
+5. **Game** – Godot 4.7, the project in `/srv/cybercircle`, import once (§3).
+   Start it once with `--windows`, see which monitor shows which screen, set
+   `--screens` / `--mobile-screens` / `--monitors`, and put the final command
+   in the autostart file (§4).
+6. **Tiles** – in `tile_firmware/include/config.h`: `MQTT_HOST` (the overview
+   PC), `MQTT_USER` / `MQTT_PASSWORD` (the broker login) and the Ethernet
+   module's pins (`TILE_ETH_*`); then flash every tile with the same firmware
+   (`pio run -t upload`, §5). Nobody on a tile at power-up (the sensors
+   calibrate).
+7. **Web interface, in SETUP mode** (§10):
+   * *Tegels* – put each physical tile (by its MAC address) on its place
+     1–13; *laat oplichten* to find one, the hearts show the place number in
+     binary. *Tegels › Opstelling*: the clock hour T01 is on.
+   * the screens show test patterns: check each monitor is above the right
+     tiles, nothing cut off, no scaling.
+   * *Gamemasters* (names, colours), *Vragen* (or CSV import), *Teksten*,
+     *Instellingen*; *Website*: start the control server with
+     `--website=https://…/health` for the real registration website.
+8. **Gamemaster app** (§11) – the Android APK, or the web version at
+   `/gm/` (iPhones: the control server on https, `tools/make_cert.sh`). In the
+   app's *Instellingen*: the control server's address and the MQTT login.
+9. **Lock the setup** 🔒 and press **Start spel**.
+
+Try it all first without hardware: the Docker test setup (§12), or the tile
+emulator (§5).
+
+### Where each setting lives
+
+| setting | set it in | must be the same in |
+|---|---|---|
+| broker user / password | `mosquitto_passwd` (§2) | control server `--mqtt-user` / `--mqtt-password`; game `--mqtt-user=` / `--mqtt-password=`; tiles `MQTT_USER` / `MQTT_PASSWORD` (`config.h`); the app's *Instellingen* |
+| broker address | the broker's listeners (1883 plain, 9001 WebSocket) | control server `--mqtt ws://…:9001`; game `--mqtt=ws://…:9001`; tiles `MQTT_HOST` + `MQTT_PORT 1883`. The app gets it from `/api/config` (the control server's `--mqtt`, `localhost` replaced by the address the app used; `--public-mqtt` behind NAT / Docker) |
+| database login | MySQL `CREATE USER` (§10) | control server `--db mysql+pymysql://user:pw@host/cybercircle?charset=utf8mb4` |
+| control server address | `--host` (default `0.0.0.0`), `--port` (default 8080) | game `--control=http://…:8080`; the app's *Instellingen* |
+| https | `tools/make_cert.sh`, or `deploy/certs/` (§12); control server `--ssl-cert` / `--ssl-key` | game `--ca=` for an own CA; phones trust the certificate once |
+| registration website | control server `--website=URL` | – |
+| which tiles each screen shows, which monitor | game `--screens`, `--mobile-screens`, `--monitors` | the physical layout |
+| tiles' places, layout, gamemasters, questions, texts, game settings, operating mode | the web interface | stored in the database: every game process and app follows it |
+| tile hardware (LED counts, sensor thresholds, Ethernet pins) | `tile_firmware/include/config.h` | – |
+| Docker test ports, passwords | `deploy/.env` (from `.env.example`) | – |
+
 ## 2. What you need
 
 ### Game computer (current, tested setup)
@@ -69,9 +127,12 @@ Any broker with a **WebSocket listener**, e.g. Mosquitto on the game computer
 or a separate box (`apt install mosquitto`). `/etc/mosquitto/conf.d/cybercircle.conf`:
 
 ```
-listener 1883                 # plain MQTT (tiles, app backend)
+# plain MQTT: the tiles (comments only on their own line in mosquitto.conf)
+listener 1883
+protocol mqtt
+# WebSocket: the game and the control server, ws://host:9001
 listener 9001
-protocol websockets           # the game connects here: ws://host:9001
+protocol websockets
 allow_anonymous false
 password_file /etc/mosquitto/passwd
 ```
@@ -185,6 +246,8 @@ Options (everything after `--`):
 | `--settings=FILE` | standalone: game settings as JSON, the same as the web interface's *Instellingen*, e.g. `{"game": {"tempo": 1.2}, "quiz": {"question_time": 20}}` |
 | `--no-sound` | no sound effects |
 | `--sounds=DIR` | extra sound files, `DIR/<event>/*.ogg` (see *Sound* below) |
+| `--texts=FILE` | standalone: the screen texts as JSON, the same as the web interface's *Teksten* (`godot/scripts/data/texts.gd`) |
+| `--rounds=quiz,simon` | only these round types (`cyclone`, `quiz`, `reaction`, `rhythm`, `simon`, `zwarte_piet`) – for testing |
 | `--demo[=N]` `--demo-idle=S` | N bot players (default 6, max 13) keep the game going; they walk up after S seconds of an idle game |
 
 Without any options the game starts in preview mode, without MQTT, with the
@@ -222,6 +285,42 @@ is open, every 20–60 s). The current files are synthesised placeholders
 those folders – or in a folder outside the project with `--sounds=DIR`, no
 re-export needed. Volume and the random interval are in *Instellingen*. Sound
 comes from the computer running the master.
+
+**Read aloud (a separate voice track).** For players who find reading hard,
+the game can read out what the screens show: the question, its answers
+("Vierkant: …"), each round's intro, "Tijd om!" and the invite ("Ga naar tegel 3
+en druk op de 4 iconen."). It plays **prebaked audio files only** – no speech
+engine in the game: `godot/data/voice/<name>.ogg` (`.wav`, `.mp3`) or a folder
+outside the project with `--voice=DIR` (no import needed). Every line has a
+fixed name; get the list to record or generate:
+
+```bash
+godot-4 --headless --path godot -- --control=http://localhost:8080 --voice-export=$HOME/voice_lines.csv
+```
+
+(CSV: `file;text;kind`, the questions as they are in the database now. A
+question's name comes from its text – `question_wat-betekent-cpu_c80166` – so
+an edited question gets a new name and an old recording never plays with it.)
+The voice has its own audio bus, `Voice`. *Instellingen › Voorlezen*: output
+0 = off, 1 = stereo (mixed with the sound effects), 2 = the **centre channel**
+of a 5.1 / 7.1 sound card (its own jack: a separate speaker or headphones);
+volume. Every line is linked to the screens that show its text and goes out on
+MQTT, also when there is no file: `cybercircle/voice` `{"name":
+"question_wat-betekent-cpu_c80166", "text": "Wat betekent CPU?", "kind":
+"question", "screens": [1, 2, 3, 4, 5], "file": "…"}` (an invite: the screen
+with that tile, and `"tile"`) – so a speaker, headphones or a Pi per screen can
+play its own screen's lines. A line without a file is logged once
+(`voice: no file for …`).
+
+**Sounds from outside** (a show controller, a button, the operator): the
+web interface's **Geluid** tab has a button per sound and per file, and
+other systems use the HTTP API, `POST /api/sound/<event>` (body optional:
+`{"file": "gong2.ogg", "volume": 60}`), or MQTT, `{"sound": "<event>"}` on
+`cybercircle/cmd`. The sound plays at once, whatever the game is doing. Any
+folder is an event, so for your own sounds add folders: in the `--sounds=DIR`
+folder (new files count after **Opnieuw inlezen** / `{"sound_reload": true}`,
+no restart) or in `godot/data/sounds/` (needs an import or re-export first).
+`POST /api/sounds/stop` stops every sound; `GET /api/sounds` lists them.
 
 **Start automatically at login** (game computer, or later each Pi):
 `~/.config/autostart/cybercircle.desktop`
@@ -291,6 +390,12 @@ X-GNOME-Autostart-enabled=true
 5. When the last player is gone the game idles again. **Stop spel** ends it
    at once. Every play is saved.
 
+**Finding your name.** The scoreboard and the round's UITSLAG list every
+player on every screen; on each screen the players at the tiles in front of it
+(`--screens`) are marked – a thick teal frame with a bar on the left, ▶ before
+the name, the tile number in teal – so they find their row at once. The order
+stays the ranking.
+
 **Counters** (as named on the screens):
 
 | | |
@@ -338,7 +443,11 @@ Prefix `cybercircle` (setting `topic_prefix` on the *Mqtt* node). Payloads are J
 
 | topic | direction | |
 |---|---|---|
-| `cybercircle/cmd` | app/operator → game | `{"assign": 42, "tile": 3}`, `{"game": "start"}`, … |
+| `cybercircle/cmd` | app/operator → game | `{"assign": 42, "tile": 3}`, `{"game": "start"}`, `{"sound": "attack", "file"?: "laser2.ogg", "volume"?: 60}`, `{"sound_stop": true}`, `{"sound_reload": true}`, … |
+| `cybercircle/light/event` | game → lighting | a game moment for the real lights, see *Lights* below |
+| `cybercircle/light/scene` | game → lighting | retained: the base look, see *Lights* below |
+| `cybercircle/voice` | game → all | a line read out (§4 *Read aloud*): `{name, text, kind, screens, tile?, file}` |
+| `cybercircle/sounds` | master → all | retained `{"events": {"attack": ["laser1.ogg", …], …}}`: the sounds `{"sound": …}` can play |
 | `cybercircle/tile/<n>/cmd` | game → tile | `{"program": {...}}`, `{"start": "<id>"}`, `{"stop": true}`, `{"pause": true}`, `{"piet": {"on": true, "speed": 20, "color": "#ff2a00"}}`, effects `{"fx": "attack" \| "hit" \| "block" \| "life" \| "doomed" \| "death", "color": "#rrggbb"}` |
 | `cybercircle/tile/<n>/state` | game → tile | retained: what the tile shows – `{"mode": "off" \| "setup" \| "pending" \| "idle" \| "dead" \| "playing", "number": n, "color": "#…" (pending), "lives", "max_lives", "shield", "buttons": {"Square": "#…" \| "", …}}` |
 | `cybercircle/tile/<n>/event` | tile → game | `{"press": "Cross"}`, `{"pressure": {...}}`, `{"result": {...}}` |
@@ -358,6 +467,66 @@ Prefix `cybercircle` (setting `topic_prefix` on the *Mqtt* node). Payloads are J
 | `cybercircle/settings/schema` | master → all | retained: every setting with label, range, unit, default and current value |
 | `cybercircle/device/<dev>/identify` | control → tile | `{"seconds": 6}`: light up so the crew finds this tile (setup, swapping) |
 | `cybercircle/device/<dev>/config` | control → tile | retained `{"tile": n}`: the place it stands on; the tile then uses `tile/<n>/…` |
+
+### Lights (DMX)
+
+The game does not speak DMX itself: it puts the moments on MQTT and the
+lighting system (a DMX bridge, Art-Net/sACN node software, a lighting desk with
+MQTT/OSC input) turns them into looks for the fixtures. Two topics:
+
+**`cybercircle/light/scene`** (retained, so a lighting system that starts
+later gets it at once): the base look, as long as it lasts.
+
+```json
+{"scene": "playing", "round": "quiz", "color": "#8c40ff", "flashes": true}
+```
+
+| scene | when | the virtual room does |
+|---|---|---|
+| `setup` | operating mode SETUP | bright white work light |
+| `closed` | GESLOTEN | dim blue |
+| `lobby` | OPEN, nobody playing / between games | cyan, a brighter spot running round |
+| `intro` | a round's intro | the round's colour, running round fast |
+| `playing` | a round is played | the round's colour, dim, breathing |
+| `scoreboard` | UITSLAG / scoreboard | gold, breathing |
+| `paused` | PAUZE | dim amber |
+
+`round` (intro, playing): `quiz`, `cyclone`, `reaction`, `simon`,
+`zwarte_piet`, `rhythm`; `color`: the colour the game uses for it (each round
+type has its own). `flashes`: the operator's setting *Licht › Flitsen*: false
+= the lighting should not flash or strobe either.
+
+**`cybercircle/light/event`** (not retained): one message per moment, at the
+moment itself (the same moments as the sounds: `godot/scripts/arena.gd`,
+`cue()`). An event at a tile has `tile` (1–13, 14–18 = M1–M5) and `angle`:
+where it is, in degrees clockwise from T01 seen from above (T01 = 0, T02 ≈
+27.7, …; the drones: where they fly) – map fixtures by tile number or by
+angle.
+
+| event | fields | when |
+|---|---|---|
+| `registered` | tile, angle, color, player | a visitor is sent to a tile: the tile lights up in this colour until they activate it (help them find it) |
+| `join` | tile, angle | the player activated their tile |
+| `leave` | tile, angle | a player leaves / an invite is cancelled |
+| `round_start` | round | a round begins |
+| `countdown` | seconds | the last 5 seconds of a personal round, one per second (5 … 1) |
+| `charge` | tiles | the robot charges up to attack these tiles (~0.5 s) |
+| `attack` | tiles (or none: the plunger shot) | the robot fires |
+| `hit` / `shield` | tile, angle | the shot hits a player / a shield blocks it |
+| `life` | tile, angle | a player gets +1 life |
+| `death` | tile, angle, player | a player is exterminated: the robot turns to the tile |
+| `zap` | tile, angle | the tile is electrocuted (1 s) … |
+| `explosion` | tile, angle | … then explodes |
+| `scoreboard` | – | the scoreboard comes up |
+
+Keep flashing to at most 3 flashes a second (the photosensitive epilepsy
+guideline; visitors include children), and none when `flashes` is false. In
+the game the room's virtual lights react the same way: a wash of light up
+each wall pillar, the ceiling ring, and lightning (arcs to the ceiling ring
+when the robot charges, a bolt onto an exterminated tile, arcs from a zapped
+tile to the wall, an arc round the room at a round's start, now and then a
+crackle between two pillars). *Instellingen › Licht*: their brightness, and
+*Flitsen*.
 
 The tile programs and results for Cyclone, Reaction and Simon are described
 in the header of `godot/scripts/tile_firmware.gd` – that file is also the
@@ -475,6 +644,9 @@ godot-4 --headless --path . --fixed-fps 60 res://tests/test_settings.tscn  # set
 godot-4 --path . --disable-vsync --fixed-fps 30 res://tests/test_drones.tscn       # mobile players (video frames)
 godot-4 --path . --disable-vsync --fixed-fps 30 res://tests/test_13_players.tscn   # end-of-round screens, 13 players
 godot-4 --path . --disable-vsync --fixed-fps 30 res://tests/test_many_players.tscn # the same views with 24
+godot-4 --path . --disable-vsync res://tests/test_installed_shot.tscn      # a partial installation: hidden places, screens (shots/86_*)
+godot-4 --path . --disable-vsync res://tests/test_invite_shot.tscn         # the invite: tile drawn, pressed icons greyed (shots/85_*)
+godot-4 --path . --disable-vsync res://tests/test_explosion_shot.tscn       # hit, explosion, shield, drone, room lights (shots/80-84_*)
 python3 tests/mqtt_test_broker.py 9011 &                                 # then:
 godot-4 --headless --path . res://tests/test_mqtt.tscn                   # MQTT end to end
 ```
@@ -533,6 +705,33 @@ blender -b -P build_models.py -- all                    # tile, robot, arena, ro
 blender -b -P bake_models.py -- environment --samples 256 --size 4096
 ```
 
+**Consoles** (`build_models.py`, `CONSOLE_STYLES`): each wall console is a
+homage to a 1960s / 70s TV show, each with its own desk colours and front
+stripe (`CONSOLE_COLORS`) – a charcoal desk with jewel buttons, a banded viewer
+and a red rail (Star Trek); toggles and a big red button under a wall of tape
+drives and light grids (Lost in Space, in place of the roundels); an all-white
+desk with rows of square keys and a slanted monitor (Space: 1999); a silver
+desk with light tiles and a radar wall display (UFO); a wooden desk with big
+gauges and toggles (Thunderbirds); and right of the door, instead of a desk,
+Orion's half-round aluminium drum with a studded disc set into its top, a
+clothes iron lying on it as the lever, a finned rod and a small disc on its
+edge. Everything stays in the
+console's own block, under the roundels.
+All static and baked into the room: no extra cost at runtime (only the six
+blinking lamps per console are live, as before).
+
+**Room textures** (70s sci-fi): `blender/retro_textures.py` generates them
+(numpy, no image files to keep): padded cream wall panels with an orange waist
+stripe, ribbed teal pillars with chrome bands, the round floor as concentric
+deck plates with an orange dashed circle round the play area and a vent band at
+the wall, and a tufted navy dome. `build_models.py -- room` puts them on the
+room (colour + a height map as bump; PNGs in `blender/textures/`), and the bake
+below bakes colour, relief and light into the two atlases – at runtime they
+cost nothing extra (the same two textures, the same draw calls). Change a
+texture: edit `retro_textures.py`, then `build_models.py -- room` and
+`bake_models.py -- environment` (~6 min). Keep features bold: the atlas has
+~5–6 mm per pixel on the walls and floor.
+
 `bake_models.py` bakes the room, floor, ducts and cables (with the robot and
 tiles as shadow casters) into two texture atlases with Cycles on the GPU
 (OptiX/CUDA) and exports `godot/models/environment_baked.glb`. **Work in
@@ -561,11 +760,44 @@ Web interface: **http://\<overview pc\>:8080/** (reachable on the LAN). An empty
 database gets the tables and the example questions. (`--db FILE`: a SQLite
 file instead – for trying things out.)
 
+All the control server's options: `--db`, `--mqtt`, `--mqtt-user`,
+`--mqtt-password`, `--public-mqtt`, `--ca`, `--prefix` (default
+`cybercircle`), `--host`, `--port`, `--ssl-cert`, `--ssl-key`, `--gm-web` (the
+app's web build), `--website`, `--website-interval` (`server.py --help`).
+
+**Start at boot** – `/etc/systemd/system/cybercircle-control.service`:
+
+```
+[Unit]
+Description=Cyber Circle control server
+After=network-online.target mariadb.service mosquitto.service
+Wants=network-online.target
+
+[Service]
+User=cybercircle
+WorkingDirectory=/srv/cybercircle/digital_twin/control
+ExecStart=/srv/cybercircle/digital_twin/control/.venv/bin/python server.py \
+    --db "mysql+pymysql://cybercircle:DBSECRET@localhost/cybercircle?charset=utf8mb4" \
+    --mqtt ws://localhost:9001 --mqtt-user cybercircle --mqtt-password SECRET
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+```
+
+(`User=`: the account that owns `/srv/cybercircle`.) Then
+`sudo systemctl daemon-reload && sudo systemctl enable --now cybercircle-control`;
+the log: `journalctl -u cybercircle-control -f`.
+
 ### Operating modes (top bar)
 
 | mode | | next |
 |---|---|---|
 | **SETUP** | physical setup: assign tiles and screens; the game is closed; empty screen slots show their tile number big | 🔒 lock the setup |
+| **GESLOTEN** | setup locked, game closed | 🔓 unlock · ▶ **Start spel** |
+| **OPEN** | players can join; nobody playing = the game idles; rounds start by themselves | ⏸ pause · ■ **Stop spel** |
+| **PAUZE** | everything frozen (round timers, tile games) | ▶ resume · ■ stop |
 
 **Test screens (SETUP).** In SETUP every screen and the overview show a test
 pattern (`scripts/ui/test_pattern.gd`) over the tile numbers:
@@ -584,9 +816,6 @@ pattern (`scripts/ui/test_pattern.gd`) over the tile numbers:
 The CRT effect is off in SETUP so lines and colours are exact. Still images of
 the patterns are in `docs/test_screens/` (to test a monitor without the game);
 `tests/test_setup_shot.tscn` regenerates them in `tests/shots/`.
-| **GESLOTEN** | setup locked, game closed | 🔓 unlock · ▶ **Start spel** |
-| **OPEN** | players can join; nobody playing = the game idles; rounds start by themselves | ⏸ pause · ■ **Stop spel** |
-| **PAUZE** | everything frozen (round timers, tile games) | ▶ resume · ■ stop |
 
 **Stop spel** ends the game: everyone leaves (their results are saved), the
 game is closed again. The mode is kept in the database, so a restarted game
@@ -600,7 +829,13 @@ or a new master continues in the same mode.
   restore, attack, robot fires, remove; next phase / start round now; the
   event feed.
 * **Tegels** – which physical tile stands on which place (1–13), online or
-  not, in or out of service. Swapping a tile: in SETUP just pick the new
+  not, in or out of service. **Installatie** (SETUP only): which places this
+  installation has – all, all floor tiles, half (T01–T07), half + mobile, only
+  mobile, or any choice of places. The others are gone from the game: the
+  digital twin hides their tile (or drone), its ducts, cable and light strip,
+  the screens give them no slot (a screen left without any shows how to join),
+  the app and the light / voice events leave them out (`PUT /api/installation
+  {installed: [1, …]}`; standalone: `--installed=1-7,14-18`). Swapping a tile: in SETUP just pick the new
   device; when locked, first put the place *buiten gebruik*, swap, then back
   in service. A place out of service is skipped by the game (a player on it
   leaves).
@@ -621,6 +856,9 @@ or a new master continues in the same mode.
   default (shown in grey); a game's name and rules from its next round. The
   default rules follow the settings (points, times) – a changed text does
   not. Standalone: `--texts=FILE` (JSON, `godot/scripts/data/texts.gd`).
+* **Geluid** – play any sound now: a button per sound (a random file) and per
+  file, optionally at its own volume; *Alles stoppen*; *Opnieuw inlezen* after
+  adding files. Below: how other systems trigger them (HTTP, MQTT). See §4 *Sound*.
 * **Website** – the connection with the registration website (visitors
   register there with their card; it syncs them here): its health endpoint
   is checked every 15 s (`--website=https://…/health` when starting the
@@ -654,7 +892,8 @@ or a new master continues in the same mode.
   light speed, penalty; Ritme: fall time and spacing at the start / end, when
 two at once start, band and line size, points, tile delay), *Randomizer* and *Vragen* (weights per round type and
   per question category, see below) and *Geluid* (volume, random
-  sound interval).
+  sound interval) and *Licht* (the brightness of the virtual lights in the
+  room, flashes on / off – also sent to the real lights).
   **Tempo** (×) scales every time at once: 1.25 = everything 25 % faster.
   Game settings apply at once, round settings from the next round. Empty =
   the default (shown greyed out); "Alles standaard" resets everything. The
@@ -700,6 +939,7 @@ when there are enough others.
 `POST /api/session {device, gamemaster}` (the app's sign of life) · `POST /api/players {name, age}` → `{id}` ·
 `POST /api/players/<id>/assign {tile, gamemaster}` (tile 0 = a free floor tile, 14–18 = M1–M5) ·
 `GET /api/questions` · `POST /api/questions/import` (CSV) · `GET /api/questions.csv` · `GET /api/ranking` · `POST /api/games` · `POST /api/games/<id>/rounds|results|end` ·
+`GET /api/sounds` · `POST /api/sound/<event> {file?, volume?}` · `POST /api/sounds/stop` · `POST /api/sounds/reload` ·
 `GET /api/master` · `POST /api/mode {mode}` · `GET|PUT /api/settings` · · `POST /api/plan {slot, round, options}` ·
 `POST /api/tiles/<n>/points|lives|leave|revive|attack|attacked|fire` · `POST /api/cmd {...}` (any game
 command). Interactive documentation: **http://\<overview pc\>:8080/docs**.
@@ -811,7 +1051,47 @@ python3 check.py              # certificates, lookup, every link, a visitor on a
   `docker compose -f docker-compose.yml -f display.yml up -d` (OpenGL through
   Mesa – slow without a GPU the container can use).
 
-## 13. Troubleshooting
+## 13. Final installation (scripts)
+
+`deploy/install/` installs everything on the machines – x86-64 PCs or ARM
+boards (Raspberry Pi OS 64-bit, Debian arm64 and similar): the same scripts,
+they pick the right builds themselves. One settings file for all of it:
+`/etc/cybercircle/cybercircle.env` (from `cybercircle.env.example`).
+
+| script | where | what |
+|---|---|---|
+| `build.sh [--test] [--apk] [--no-export]` | development PC | Godot import, (tests), the gamemaster web app (and APK), the game exported for **x86_64 and arm64** (needs Godot's export templates; otherwise the machines run the project), `dist/cybercircle-<date>.tar.gz` |
+| `sudo install_server.sh [SERVER_IP]` | overview PC / server Pi | settings file (random passwords), Mosquitto (plain + WebSocket, a password), MariaDB (database + user), the control server (virtualenv, **systemd: `cybercircle-control`**), nightly backup (**`cybercircle-backup.timer`**), https certificate (`CONTROL_HTTPS=1`), firewall ports (ufw) – then checks the broker and the web interface |
+| `sudo install_game.sh` | game computer (can be the server) | the kiosk user logging in automatically (GDM, LightDM or `raspi-config` on a Pi), Godot for this CPU (official x86_64 / arm64 build, unless exported), screen never blanks / locks / sleeps, the game as a **user service `cybercircle-game`** started with the desktop session (also via `/etc/xdg/autostart` for desktops without `graphical-session.target`, e.g. Raspberry Pi OS); ARM: the Compatibility renderer (OpenGL ES 3) |
+| `sudo update.sh [release.tar.gz]` | each machine | a new version in place (settings, database, certificates kept), dependencies, restart |
+| `flash_tiles.sh [esp32dev-wifi]` | any PC / Pi with PlatformIO | the tile firmware with this installation's broker and login (no editing of `config.h`) |
+| `backup.sh` | (the timer) | `mysqldump` → `/var/backups/cybercircle/cybercircle-<date>.sql.gz`, kept 30 days |
+
+```bash
+# the server (once; prints the web interface's address)
+sudo deploy/install/install_server.sh 192.168.1.10
+# the game computer: copy /etc/cybercircle/cybercircle.env from the server, then
+sudo deploy/install/install_game.sh && sudo reboot
+# every tile (USB), one after the other
+deploy/install/flash_tiles.sh
+```
+
+Logs: `journalctl -u cybercircle-control -f` (server), `journalctl --user-unit
+cybercircle-game -f` (as the kiosk user). The systemd units are in
+`deploy/install/systemd/` (the installers fill in the paths); the game's
+command line is built from the settings by `start_game.sh` (screens, monitors,
+broker, control server, voice folder, extra options).
+
+**Raspberry Pi.** Tested: `install_server.sh` on Debian arm64 (MariaDB, the
+control server's Python packages as arm64 wheels, the broker) – a Pi 4/5 runs
+the server well. The game installs on a Pi (Godot arm64, OpenGL ES 3, ETC2/ASTC
+textures: `import_etc2_astc` is on in the project) – what it can render is in
+§8: today the full 5 + 1 screens need a PC; on a Pi plan one or two screens,
+and the *display mode* (a Pi per screen following one master) is the next step.
+The `godot-sqlite` add-on has no arm64 binaries in the project: not needed with
+the control server (`--control`), only for the standalone `--db=FILE`.
+
+## 14. Troubleshooting
 
 | problem | fix |
 |---|---|

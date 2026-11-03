@@ -1,0 +1,16 @@
+# The game (all screens), in the kiosk user's desktop session: starts with the
+# session (auto-login), restarts when it stops. A user unit:
+# install_game.sh puts it in /etc/systemd/user/ and enables it for GAME_KIOSK_USER.
+#   systemctl --user status cybercircle-game        journalctl --user -u cybercircle-game -f
+[Unit]
+Description=Cyber Circle game
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=@CC_ROOT@/deploy/install/start_game.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=graphical-session.target

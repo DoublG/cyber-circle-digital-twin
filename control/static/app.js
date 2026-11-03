@@ -28,7 +28,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button, .tab").forEach(e => e.classList.remove("active"));
   b.classList.add("active");
   $(`#tab-${b.dataset.tab}`).classList.add("active");
-  ({ recovery: renderRecovery, mqtt: startMqttLog, website: loadWebsite, texts: loadTexts, gamemasters: loadGamemasters, players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: loadTiles, settings: loadSettings })[b.dataset.tab]?.();
+  ({ recovery: renderRecovery, mqtt: startMqttLog, website: loadWebsite, sounds: renderSounds, texts: loadTexts, gamemasters: loadGamemasters, players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: loadTiles, settings: loadSettings })[b.dataset.tab]?.();
 });
 
 // ---------------------------------------------------------------- live
@@ -48,6 +48,7 @@ function renderLive() {
   $("#links").innerHTML = `MQTT ${live.mqtt ? "✓" : "✗"} · <span class="${w.status === "down" ? "bad" : ""}">website ${
     w.status === "ok" ? "✓" : w.status === "down" ? "✗ OFFLINE" : "?"}</span> · ${esc(master)}`;
   if ($("#tab-website").classList.contains("active")) loadWebsite();
+  if ($("#tab-sounds").classList.contains("active")) renderSounds();
   $("#mode").textContent = MODE_NAMES[live.mode] || live.mode;
   $("#mode").className = `mode ${live.mode}`;
   $("#mode-buttons").innerHTML = (MODE_ACTIONS[live.mode] || []).map(([m, label, ask]) =>
@@ -240,7 +241,40 @@ async function loadTiles() {
 }
 
 // the circle in the venue, like a clock seen from above: the entrance at 6, T01 at t01_clock
+// ---------------------------------------------------------------- installation (partial setups)
+let installDraft = null;                    // the checkboxes being edited (null: follow the server)
+
+function parseRanges(s) {
+  return s.split(",").flatMap(p => { const [a, b] = p.split("-").map(Number); return Array.from({ length: (b || a) - a + 1 }, (_, i) => a + i); });
+}
+
+function renderInstallation() {
+  const on = new Set(installDraft || live.installed || Array.from({ length: PLACES }, (_, i) => i + 1));
+  const setup = live.mode === "setup";
+  $("#install-places").innerHTML = Array.from({ length: PLACES }, (_, i) => i + 1).map(t =>
+    `<label class="install-place ${t > FLOOR_TILES ? "mobile" : ""}"><input type="checkbox" data-place="${t}" ${on.has(t) ? "checked" : ""}
+      ${setup ? "" : "disabled"}> ${label(t)}</label>`).join("");
+  document.querySelectorAll("#install-presets button, #install-save").forEach(b => b.disabled = !setup);
+  $("#install-msg").textContent = setup ? (installDraft ? "niet opgeslagen" : `${on.size} plaatsen`) : "alleen in SETUP";
+}
+$("#install-presets").onclick = e => {
+  const b = e.target.closest("button[data-preset]");
+  if (b) { installDraft = parseRanges(b.dataset.preset); renderInstallation(); }
+};
+$("#install-places").onchange = () => {
+  installDraft = [...document.querySelectorAll("#install-places input:checked")].map(i => Number(i.dataset.place));
+  renderInstallation();
+};
+$("#install-save").onclick = async () => {
+  if (!installDraft) return;
+  await api("PUT", "/api/installation", { installed: installDraft });
+  installDraft = null;
+  renderInstallation();
+};
+
 function renderLayout() {
+  renderInstallation();
+  const installedSet = new Set(live.installed || []);
   const h = live.t01_clock || 12;
   const sel = $("#t01-clock");
   if (!sel.options.length)
@@ -253,8 +287,9 @@ function renderLayout() {
     <circle r="16" fill="var(--panel)" stroke="var(--teal)"/><text y="4" text-anchor="middle" fill="var(--teal)" font-size="8">ROBOT</text>`;
   for (let t = 1; t <= FLOOR_TILES; t++) {
     const [x, y] = pt(-Math.PI / 2 + h * Math.PI / 6 + 2 * Math.PI * (t - 1) / FLOOR_TILES, 78);
-    svg += `<line x2="${x}" y2="${y}" stroke="var(--line)"/><circle cx="${x}" cy="${y}" r="13" fill="${t === 1 ? "var(--amber)" : "var(--panel)"}" stroke="var(--orange)"/>
-      <text x="${x}" y="${y + 3.5}" text-anchor="middle" font-size="9" fill="${t === 1 ? "var(--bg)" : "var(--cream)"}">${label(t)}</text>`;
+    const inst = !live.installed || installedSet.has(t);
+    svg += `<g opacity="${inst ? 1 : 0.2}"><line x2="${x}" y2="${y}" stroke="var(--line)"/><circle cx="${x}" cy="${y}" r="13" fill="${t === 1 ? "var(--amber)" : "var(--panel)"}" stroke="var(--orange)" ${inst ? "" : 'stroke-dasharray="3 3"'}/>
+      <text x="${x}" y="${y + 3.5}" text-anchor="middle" font-size="9" fill="${t === 1 ? "var(--bg)" : "var(--cream)"}">${label(t)}</text></g>`;
   }
   $("#layout-plan").innerHTML = svg;
 }
@@ -349,6 +384,57 @@ $("#website").onclick = async e => {
   const b = e.target.closest("button[data-mock]");
   if (b) { await api("POST", "/api/website/mock", { up: b.dataset.mock === "1" }); loadWebsite(); }
 };
+
+// ---------------------------------------------------------------- sounds
+const SOUND_NAMES = {             // the game's own events (any other folder is shown by its name)
+  charge: "robot laadt op", attack: "schot van de robot", hit: "tegel geraakt", shield: "schild blokkeert",
+  death: "speler geëxtermineerd", zap: "tegel geëlektrocuteerd", explosion: "tegel ontploft", life: "+1 leven",
+  round_start: "ronde begint", scoreboard: "scorebord", join: "speler doet mee", random: "willekeurig tussendoor",
+};
+let soundsJson = "";
+
+function renderSounds() {
+  const events = live.sounds || {};
+  const json = JSON.stringify(events);
+  if (json !== soundsJson) {                   // (only redraw when the list changed: keeps the buttons steady)
+    soundsJson = json;
+    const names = Object.keys(events).sort((a, b) => (a in SOUND_NAMES) - (b in SOUND_NAMES) || a.localeCompare(b));
+    $("#sounds").innerHTML = names.length ? names.map(e => `<div class="sound">
+        <div class="sound-head"><button data-sound="${esc(e)}">▶ ${esc(e)}</button>
+          <span class="hint">${esc(SOUND_NAMES[e] || "eigen geluid")}</span></div>
+        <div class="sound-files">${events[e].map(f =>
+          `<button class="small" data-sound="${esc(e)}" data-file="${esc(f)}">${esc(f)}</button>`).join("")}</div>
+      </div>`).join("")
+      : `<p class="bad">Nog geen geluiden: er is geen spel (master) verbonden met MQTT.</p>`;
+  }
+  const base = location.origin;
+  $("#sound-api").innerHTML = `
+    <p><b>HTTP</b> (bv. een showcontroller, Bitfocus Companion, QLab): <code>POST ${esc(base)}/api/sound/&lt;geluid&gt;</code>,
+      zonder body of met <code>{"file": "gong2.ogg", "volume": 60}</code>.
+      Stoppen: <code>POST ${esc(base)}/api/sounds/stop</code>. De lijst: <code>GET ${esc(base)}/api/sounds</code>.</p>
+    <pre>curl -X POST ${esc(base)}/api/sound/attack
+curl -X POST ${esc(base)}/api/sound/attack -H 'Content-Type: application/json' -d '{"file": "laser2.ogg", "volume": 60}'</pre>
+    <p><b>MQTT</b>: publiceer op <code>cybercircle/cmd</code>: <code>{"sound": "attack"}</code>,
+      <code>{"sound": "attack", "file": "laser2.ogg", "volume": 60}</code>, <code>{"sound_stop": true}</code>.
+      De lijst staat (retained) op <code>cybercircle/sounds</code>.</p>`;
+}
+
+function soundVolume() {
+  return $("#sound-own-volume").checked ? Number($("#sound-volume").value) : -1;
+}
+$("#sound-volume").oninput = $("#sound-own-volume").onchange = () => {
+  $("#sound-volume-label").textContent = $("#sound-own-volume").checked
+    ? `${$("#sound-volume").value} %` : "volume uit Instellingen › Geluid";
+};
+$("#sounds").onclick = async e => {
+  const b = e.target.closest("button[data-sound]");
+  if (!b) return;
+  await api("POST", `/api/sound/${encodeURIComponent(b.dataset.sound)}`, { file: b.dataset.file || "", volume: soundVolume() });
+  b.classList.add("played");
+  setTimeout(() => b.classList.remove("played"), 400);
+};
+$("#sound-stop").onclick = () => api("POST", "/api/sounds/stop");
+$("#sound-reload").onclick = () => api("POST", "/api/sounds/reload");
 
 // ---------------------------------------------------------------- texts
 const GAME_ORDER = ["quiz", "cyclone", "reaction", "simon", "zwarte_piet", "rhythm"];

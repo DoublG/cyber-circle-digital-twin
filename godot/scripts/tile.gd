@@ -71,6 +71,8 @@ var show_number := false: set = set_show_number   # setup: the hearts show tile_
 ## Protected (e.g. the question is too hard for the player's age): attacks are
 ## blocked. Twin: energy dome over the tile. Real tile: the LED ring glows blue.
 var shielded := false: set = set_shielded
+var _fx_root: Node3D = null      # see _fx_node()
+var installed := true            # false: this place is not part of the installation (hidden, never used)
 var _shield: MeshInstance3D
 var _shield_mat: ShaderMaterial
 var _shield_tween: Tween
@@ -95,6 +97,8 @@ func _ready() -> void:
 		_add_click_area(b, anchor)
 	_status_led = _led("Status_LED")
 	_build_shield()
+	if not (self is DroneTile):
+		_contact_shadow()
 	_idle_time = randf() * 10.0  # tiles don't animate in lockstep
 	clear_ring()
 	set_health(health)
@@ -123,6 +127,11 @@ func start_activation(color := Color.WHITE) -> void:
 	_activation_pressed.clear()
 	for h in _hearts:
 		_paint(h, Color.BLACK)
+
+
+## The icons pressed so far during activation (the invite on the screen greys them out).
+func activation_pressed() -> Array[StringName]:
+	return _activation_pressed
 
 
 ## Registers one press during activation; returns true once all 4 were pressed.
@@ -392,30 +401,26 @@ func _bolt(mesh: ImmediateMesh, from: Vector3, to_xz: Vector2, y: float) -> void
 ## Death part 2: small explosion - orange flash, sparks and a puff of smoke.
 func _explode() -> void:
 	var y: float = (_anchors[BUTTONS[0]] as Node3D).position.y + 0.05
-	var flash := OmniLight3D.new()
-	flash.light_color = Color(1.0, 0.55, 0.15)
-	flash.omni_range = 3.0
-	flash.light_energy = 8.0
-	flash.position = Vector3(0, y + 0.2, 0)
-	add_child(flash)
-	var ft := flash.create_tween()
-	ft.tween_property(flash, "light_energy", 0.0, 0.5)
-	ft.tween_callback(flash.queue_free)
+	_flash(Color(1.0, 0.7, 0.4), 12.0, 4.5, 0.08, 0.8, y + 0.4)   # white-hot, then orange in the glow
+	_glow_ball(Color(1.0, 0.95, 0.8), 0.15, 1.2, 0.3, y + 0.25)   # the white core
+	_glow_ball(Color(1.0, 0.45, 0.05), 0.3, 2.0, 0.8, y + 0.35)   # the fireball
+	_shockwave(Color(1.0, 0.5, 0.1), 2.6, 0.7, y)
+	_debris(30, 0.08, 1.0, 0.35, y)                      # the tile breaks: chunks rain down
 
 	var sparks := CPUParticles3D.new()
 	sparks.position = Vector3(0, y, 0)
 	sparks.one_shot = true
-	sparks.amount = 48
-	sparks.lifetime = 0.8
+	sparks.amount = 120
+	sparks.lifetime = 1.1
 	sparks.explosiveness = 1.0
 	sparks.direction = Vector3.UP
-	sparks.spread = 75.0
-	sparks.initial_velocity_min = 1.5
-	sparks.initial_velocity_max = 3.5
+	sparks.spread = 80.0
+	sparks.initial_velocity_min = 2.5
+	sparks.initial_velocity_max = 6.0
 	sparks.gravity = Vector3(0, -9.8, 0)
 	var spark_mesh := SphereMesh.new()
-	spark_mesh.radius = 0.012
-	spark_mesh.height = 0.024
+	spark_mesh.radius = 0.022
+	spark_mesh.height = 0.044
 	var spark_mat := StandardMaterial3D.new()
 	spark_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	spark_mat.vertex_color_use_as_albedo = true
@@ -425,14 +430,14 @@ func _explode() -> void:
 	fire.set_color(0, Color(1.0, 0.95, 0.6))
 	fire.set_color(1, Color(1.0, 0.25, 0.0))
 	sparks.color_ramp = fire
-	add_child(sparks)
+	_fx_node().add_child(sparks)
 	sparks.emitting = true
 
 	var smoke := CPUParticles3D.new()
 	smoke.position = Vector3(0, y, 0)
 	smoke.one_shot = true
-	smoke.amount = 14
-	smoke.lifetime = 1.6
+	smoke.amount = 24
+	smoke.lifetime = 2.0
 	smoke.explosiveness = 0.85
 	smoke.direction = Vector3.UP
 	smoke.spread = 35.0
@@ -440,7 +445,7 @@ func _explode() -> void:
 	smoke.initial_velocity_max = 0.8
 	smoke.gravity = Vector3(0, 0.2, 0)
 	var puff := QuadMesh.new()
-	puff.size = Vector2(0.3, 0.3)
+	puff.size = Vector2(0.5, 0.5)
 	var puff_mat := StandardMaterial3D.new()
 	puff_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	puff_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -465,11 +470,167 @@ func _explode() -> void:
 	grow.add_point(Vector2(0, 0.4))
 	grow.add_point(Vector2(1, 1.6))
 	smoke.scale_amount_curve = grow
-	add_child(smoke)
+	_fx_node().add_child(smoke)
 	smoke.emitting = true
-	get_tree().create_timer(2.0).timeout.connect(func():
+	get_tree().create_timer(2.5).timeout.connect(func():
 		sparks.queue_free()
 		smoke.queue_free())
+
+
+## Debris (one draw call) from this tile, landing on the floor around it.
+func _debris(count: int, size: float, speed: float, hot: float, y: float) -> void:
+	var parent := get_parent() as Node3D
+	Debris.spawn(parent, parent.to_local(to_global(Vector3(0, y, 0))), count, size, speed, hot)
+
+
+## A soft dark disc on the floor under the tile: it stands on the floor (the
+## baked room has no tile shadows, so a place that is not installed leaves no
+## dark spot - bake_models.py), and it goes when the tile is hidden.
+static var _shadow_mat: StandardMaterial3D
+
+func _contact_shadow() -> void:
+	if _shadow_mat == null:
+		_shadow_mat = StandardMaterial3D.new()
+		_shadow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_shadow_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_shadow_mat.albedo_color = Color(0, 0, 0, 0.85)
+		_shadow_mat.albedo_texture = _soft_texture([0.0, 0.66, 0.78, 1.0], [1.0, 0.9, 0.45, 0.0])
+	var quad := QuadMesh.new()
+	quad.size = Vector2(0.98, 0.98)                  # the tile is 0.70 across: a soft edge round it
+	quad.orientation = PlaneMesh.FACE_Y
+	quad.material = _shadow_mat
+	var mi := MeshInstance3D.new()
+	mi.name = "ContactShadow"
+	mi.mesh = quad
+	mi.position.y = 0.003
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+
+
+## Where the effects go (flash, fireball, sparks, ...): this tile, or an
+## anchor in the room standing where it is (a drone hides itself right after
+## its explosion, which would hide them too).
+func _fx_node() -> Node3D:
+	return _fx_root if is_instance_valid(_fx_root) else self
+
+
+## Where a shot from the robot hits the shield (tile space): the dome's robot
+## side (-Z). DroneTile: its bubble.
+func _shield_impact() -> Vector3:
+	return _shield.position + Vector3(0, 0.9, -0.45)
+
+
+## Sparks bouncing off the shield, back towards the robot (one draw call).
+func _deflect_sparks(at: Vector3) -> void:
+	var sparks := CPUParticles3D.new()
+	sparks.position = at
+	sparks.one_shot = true
+	sparks.amount = 36
+	sparks.lifetime = 0.6
+	sparks.explosiveness = 1.0
+	sparks.direction = (to_local(Vector3(0, global_position.y + 1.5, 0)) - at).normalized()   # (the robot)
+	sparks.spread = 55.0
+	sparks.initial_velocity_min = 2.0
+	sparks.initial_velocity_max = 4.5
+	sparks.gravity = Vector3(0, -6.0, 0)
+	var m := SphereMesh.new()
+	m.radius = 0.014
+	m.height = 0.028
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(0.7, 0.9, 1.0)
+	m.material = mat
+	sparks.mesh = m
+	_fx_node().add_child(sparks)
+	sparks.emitting = true
+	get_tree().create_timer(1.0).timeout.connect(sparks.queue_free)
+
+
+## A short bright light: full `energy` for `hold` s, then out in `fade` s
+## (at height y, or at `at` when given).
+func _flash(color: Color, energy: float, light_range: float, hold: float, fade: float, y: float, at = null) -> void:
+	var flash := OmniLight3D.new()
+	flash.light_color = color
+	flash.omni_range = light_range
+	flash.light_energy = energy
+	flash.shadow_enabled = false
+	flash.position = at if at != null else Vector3(0, y, 0)
+	_fx_node().add_child(flash)
+	var t := flash.create_tween()
+	t.tween_interval(hold)
+	t.tween_property(flash, "light_energy", 0.0, fade).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+	t.tween_callback(flash.queue_free)
+
+
+## A soft glowing ball (always facing the camera) that grows from `r0` to
+## `r1` m across and fades out: a fireball, an impact. Additive, so it shows
+## also where real lights do not (the baked room).
+func _glow_ball(color: Color, r0: float, r1: float, seconds: float, y: float) -> void:
+	_glow_ball_at(color, r0, r1, seconds, Vector3(0, y, 0))
+
+
+func _glow_ball_at(color: Color, r0: float, r1: float, seconds: float, at: Vector3) -> void:
+	var quad := QuadMesh.new()
+	quad.size = Vector2.ONE
+	var mat := _additive(color, _soft_texture([0.0, 0.35, 1.0], [1.0, 0.6, 0.0]))
+	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	quad.material = mat
+	_grow_and_fade(quad, mat, color, r0, r1, seconds, at)
+
+
+## A bright ring that runs out flat over the floor to `r1` m across.
+func _shockwave(color: Color, r1: float, seconds: float, y: float) -> void:
+	var quad := QuadMesh.new()
+	quad.size = Vector2.ONE
+	quad.orientation = PlaneMesh.FACE_Y
+	var mat := _additive(color, _soft_texture([0.0, 0.7, 0.88, 1.0], [0.0, 0.0, 1.0, 0.0]))
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	quad.material = mat
+	_grow_and_fade(quad, mat, color, 0.2, r1, seconds, Vector3(0, y + 0.01, 0))
+
+
+func _grow_and_fade(quad: QuadMesh, mat: StandardMaterial3D, color: Color, r0: float, r1: float,
+		seconds: float, at: Vector3) -> void:
+	var mi := MeshInstance3D.new()
+	mi.mesh = quad
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.position = at
+	mi.scale = Vector3.ONE * r0
+	_fx_node().add_child(mi)
+	var t := mi.create_tween().set_parallel()
+	t.tween_property(mi, "scale", Vector3.ONE * r1, seconds).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_CUBIC)
+	t.tween_method(func(v: float): mat.albedo_color = color * v, 1.0, 0.0, seconds) \
+		.set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	t.chain().tween_callback(mi.queue_free)
+
+
+func _additive(color: Color, tex: Texture2D) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.no_depth_test = false
+	mat.albedo_color = color
+	mat.albedo_texture = tex
+	return mat
+
+
+## A round texture, brightness by radius: offsets 0 (centre) .. 1 (edge).
+func _soft_texture(offsets: Array, values: Array) -> GradientTexture2D:
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array(offsets)
+	var colors := PackedColorArray()
+	for v in values:
+		colors.append(Color(1, 1, 1, v))
+	g.colors = colors
+	var tex := GradientTexture2D.new()
+	tex.gradient = g
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(0.5, 0.0)
+	tex.width = 128
+	tex.height = 128
+	return tex
 
 
 ## Attack towards the robot: two lights run from the back of the ring along
@@ -496,6 +657,11 @@ func play_attack(color := Color(0.2, 1.0, 0.3)) -> void:
 ## back of the ring, then the whole ring flashes.
 func play_hit(color := Color(1.0, 0.1, 0.05)) -> void:
 	fx.emit(tile_id, "hit", color)
+	var y: float = (_anchors[BUTTONS[0]] as Node3D).position.y + 0.05
+	_flash(color, 7.0, 3.0, 0.06, 0.4, y + 0.3)            # the impact: visible from across the room
+	_glow_ball(color.lightened(0.3), 0.1, 0.9, 0.35, y + 0.1)
+	_shockwave(color, 1.1, 0.45, y)
+	_debris(6, 0.03, 0.6, 0.0, y)                        # a few chips off the glass
 	var half := LED_COUNT / 2
 	for step in half + 1:
 		clear_ring()
@@ -565,7 +731,15 @@ func _shield_glow() -> void:
 func play_block(color := Color(1.0, 0.1, 0.05)) -> void:
 	fx.emit(tile_id, "block", color)
 	_shield.visible = true
+	var hit_at := _shield_impact()                     # (tile space) where the shot hits the shield
+	_shield_mat.set_shader_parameter("impact", _shield.transform.affine_inverse() * hit_at)
 	_shield_mat.set_shader_parameter("flash", 1.0)
+	_shield_mat.set_shader_parameter("heat", 1.0)
+	create_tween().tween_method(func(v): _shield_mat.set_shader_parameter("heat", v), 1.0, 0.0, 1.8) \
+		.set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_SINE)
+	_flash(SHIELD_COLOR, 8.0, 3.0, 0.05, 0.5, 0.0, hit_at)
+	_glow_ball_at(Color(0.75, 0.9, 1.0), 0.1, 0.9, 0.3, hit_at)
+	_deflect_sparks(hit_at)
 	var t := create_tween().set_parallel()
 	t.tween_property(_shield_mat, "shader_parameter/flash", 0.0, 0.8)
 	t.tween_method(func(v): _shield_mat.set_shader_parameter("ripple", v), 0.0, 1.0, 0.9)

@@ -209,6 +209,32 @@ func _mark_exterminated(e: Dictionary) -> void:
 	tw.tween_property(e.panel, "modulate:a", 1.0, 0.18)
 
 
+## The players at the tiles in front of this screen (ScreenWall: the tiles
+## this screen shows) find their row at once: a thick teal frame with a bar
+## on the left, ▶ before their name, their tile number in teal. The order
+## stays the ranking.
+func highlight_tiles(tiles: Array) -> void:
+	for e in _rows:
+		if e.data.tile in tiles:
+			mark_own(e.panel)
+
+
+## (Also used by RankingView.) Row cells: 0 #, 1 name, 2 tile, ...
+static func mark_own(panel: PanelContainer) -> void:
+	var style := panel.get_theme_stylebox("panel") as StyleBoxFlat
+	style = style.duplicate() if style else Retro.panel(Retro.PANEL, Retro.TEAL, 2, 14, 20)
+	style.border_color = Retro.TEAL
+	style.set_border_width_all(5)
+	style.border_width_left = 18
+	panel.add_theme_stylebox_override("panel", style)
+	var h := panel.get_child(0)
+	var name_label := h.get_child(1) as Label
+	if not name_label.text.begins_with("▶"):
+		name_label.text = "▶ " + name_label.text
+	if style.bg_color.v < 0.5:                     # (not on the 1st place's amber: unreadable)
+		(h.get_child(2) as Label).add_theme_color_override("font_color", Retro.TEAL)
+
+
 ## One table row; widths are fixed so the columns line up without a grid.
 func _row(px: int, col: Color, cells: Array, style: StyleBoxFlat) -> PanelContainer:
 	var panel := PanelContainer.new()

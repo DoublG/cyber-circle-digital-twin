@@ -24,6 +24,7 @@
   <button data-tab="gamemasters">Gamemasters</button>
   <button data-tab="questions">Vragen</button>
   <button data-tab="texts">Teksten</button>
+  <button data-tab="sounds">Geluid</button>
   <button data-tab="website">Website</button>
   <button data-tab="mqtt">MQTT</button>
   <button data-tab="ranking">Ranglijst</button>
@@ -60,6 +61,17 @@
       Op welk uur staat <b>T01</b>? (Daarna met de klok mee.) De gamemaster-apps tekenen hun plan zo.</p>
       <label>T01 op <select id="t01-clock"></select> uur</label></div>
   </div>
+  <h2>Installatie</h2>
+  <p class="hint">Welke plaatsen deze opstelling heeft, bv. maar de helft van de vloertegels, of alleen de mobiele
+    plaatsen. De andere verdwijnen uit het spel: geen tegel, kabel of goot in de digitale tweeling, geen vak op de
+    schermen, niet in de app. Alleen in <b>SETUP</b>.</p>
+  <div class="row" id="install-presets">
+    <button data-preset="1-18">Alles</button><button data-preset="1-13">Alle vloertegels</button>
+    <button data-preset="1-7">Helft (T01–T07)</button><button data-preset="1-7,14-18">Helft + mobiel</button>
+    <button data-preset="14-18">Alleen mobiel</button>
+  </div>
+  <div class="row" id="install-places"></div>
+  <div class="row"><button id="install-save">Opslaan</button><span id="install-msg" class="hint"></span></div>
   <table id="tile-table"><thead><tr><th>Plaats</th><th>Fysieke tegel</th><th>Status</th><th>In gebruik</th></tr></thead><tbody></tbody></table>
   <h2>Niet toegewezen tegels</h2>
   <ul id="free-devices" class="events"></ul>
@@ -166,6 +178,23 @@
   <div class="row"><button id="texts-save">Opslaan</button><button id="texts-reset" class="danger">Alles standaard</button>
     <span id="texts-msg" class="hint"></span></div>
   <div id="texts" class="texts"></div>
+</section>
+
+<section id="tab-sounds" class="tab">
+  <p class="hint">Speel een geluid af op de pc van de master, wat het spel ook aan het doen is. <b>▶</b> speelt een
+    willekeurig bestand van dat geluid, een bestandsnaam speelt precies dat bestand. Elke map in
+    <code>godot/data/sounds/</code> of in de map van <code>--sounds=MAP</code> is een geluid: zet er bv. een map
+    <code>gong/</code> bij en klik <b>Opnieuw inlezen</b>.</p>
+  <div class="row">
+    <label>Volume <input type="range" id="sound-volume" min="0" max="100" step="5" value="80"></label>
+    <label><input type="checkbox" id="sound-own-volume"> eigen volume</label>
+    <span id="sound-volume-label" class="hint">volume uit Instellingen › Geluid</span>
+    <button id="sound-stop" class="danger">■ Alles stoppen</button>
+    <button id="sound-reload">Opnieuw inlezen</button>
+  </div>
+  <div id="sounds" class="sounds"></div>
+  <h2>Vanuit een ander systeem</h2>
+  <div id="sound-api" class="hint"></div>
 </section>
 
 <section id="tab-website" class="tab">

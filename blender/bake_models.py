@@ -13,6 +13,8 @@ Output: ../godot/models/environment_baked.glb (+ the atlases as PNG next to it)
 Kept as separate objects (the Godot scripts drive them):
     Console_Lamp_*, Ceiling_Ring, Door_Light, Spoke_Light_*   emissive, colour set at runtime
     Door_Frame, Door_L, Door_R, Door_L_Stripe, Door_R_Stripe  the sliding door (baked too)
+    Tile_Ducts_NN (spoke + cable + label), Ring_NN (the duct to the next tile)
+        per floor place (baked too): hidden when that place is not installed
 """
 
 import math
@@ -29,6 +31,7 @@ import build_models as bm  # noqa: E402  (constants: ARENA_R, TILE_COUNT, GODOT_
 
 DYNAMIC = ("Console_Lamp_", "Ceiling_Ring", "Door_Light", "Spoke_Light_")
 MOVING = ("Door_Frame", "Door_L", "Door_R")              # prefixes: also the stripes
+PER_TILE = ("Spoke_", "Cable_", "Label_", "Ring_")       # a floor place's ducts (Spoke_Light_*: dynamic)
 SHELL_AREA = 2.0       # m2: bigger surfaces go to the shell atlas, the rest to details
 
 
@@ -47,9 +50,25 @@ def append_objects(blend):
     return objs
 
 
-def add_casters():
-    """Robot and 13 tiles: they cast shadows on the floor, but are not exported."""
+def no_trace(o):
+    """o is baked itself but leaves nothing on the floor: invisible to every
+    light ray (shadows, the light bouncing around), not to the camera. For what
+    the game can hide (a place that is not installed)."""
+    o.visible_shadow = False
+    o.visible_diffuse = False
+    o.visible_glossy = False
+    o.visible_transmission = False
+    o.visible_volume_scatter = False
+
+
+def add_casters(with_tiles=False):
+    """The robot (and with_tiles: the 13 tiles) casting shadows on the floor, not
+    exported. Without the tiles: the floor under a tile is baked as lit, so a
+    place that is not installed (the game hides its tile) leaves no dark spot;
+    each tile brings its own soft contact shadow in Godot (tile.gd)."""
     casters = append_objects(os.path.join(HERE, "robot.blend"))
+    if not with_tiles:
+        return casters
     step = 2 * math.pi / bm.TILE_COUNT
     tile_objs = append_objects(os.path.join(HERE, "tile.blend"))
     roots = [o for o in tile_objs if o.parent is None]
@@ -204,8 +223,12 @@ def use_baked(objs, mat):
 
 def merge(objs, name):
     """Join objects into one mesh in world space (single-user data, no parents)."""
+    names = {uv.name for o in objs for uv in o.data.uv_layers}
     for o in objs:
         o.data = o.data.copy()
+        for nm in names:                                  # the same UV maps on all (e.g. "Tex"), so the join keeps them
+            if nm not in o.data.uv_layers:
+                o.data.uv_layers.new(name=nm)
         mw = o.matrix_world.copy()
         o.parent = None
         o.matrix_world = mw
@@ -229,7 +252,10 @@ def bake_environment(samples, size):
     flatten_metals()
     dynamic = [o for o in env if o.name.startswith(DYNAMIC)]
     moving = [o for o in env if o.name.startswith(MOVING)]
-    static = [o for o in env if o not in dynamic and o not in moving]
+    per_tile = [o for o in env if o.name.startswith(PER_TILE) and o not in dynamic]
+    for o in per_tile + [o for o in dynamic if o.name.startswith("Spoke_Light_")]:
+        no_trace(o)                                  # (the light strips on the ducts too: their thin shadow)
+    static = [o for o in env if o not in dynamic and o not in moving and o not in per_tile]
     for o in moving + dynamic:                       # keep these as they are, in world space
         o.data = o.data.copy()
         mw = o.matrix_world.copy()
@@ -245,6 +271,14 @@ def bake_environment(samples, size):
     t = time.time()
     shell_obj = merge(shell, "Env_Shell")
     detail_obj = merge(detail, "Env_Detail")
+    groups = {}                                      # per floor place, so the game can hide it
+    for o in per_tile:                               # (all names first: a join removes objects)
+        base = o.name.split(".")[0]
+        kind, num = base.rsplit("_", 1)
+        groups.setdefault(f"Ring_{num}" if kind == "Ring" else f"Tile_Ducts_{num}", []).append(o)
+    places = [merge(objs, name) for name, objs in sorted(groups.items())]
+    for o in places:                                 # (hiding a place leaves no trace on the floor)
+        no_trace(o)
     caster_meshes = [o for o in casters if o.type == "MESH"]
     caster_other = [o for o in casters if o.type != "MESH"]   # (joined objects are gone after the merge)
     merge(caster_meshes, "Casters")
@@ -253,9 +287,9 @@ def bake_environment(samples, size):
     print(f"bake: merged in {time.time() - t:.0f} s", flush=True)
 
     shell_img = bake_atlas([shell_obj], "Env_Shell_Baked", size)
-    detail_img = bake_atlas([detail_obj] + moving, "Env_Detail_Baked", size)
+    detail_img = bake_atlas([detail_obj] + moving + places, "Env_Detail_Baked", size)
     use_baked([shell_obj], baked_material("Baked_Env_Shell", shell_img))
-    use_baked([detail_obj] + moving, baked_material("Baked_Env_Detail", detail_img))
+    use_baked([detail_obj] + moving + places, baked_material("Baked_Env_Detail", detail_img))
 
     bpy.data.objects.remove(bpy.data.objects["Casters"], do_unlink=True)   # not exported
     for o in [o for o in bpy.context.scene.objects if o.type == "LIGHT"]:

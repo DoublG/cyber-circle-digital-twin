@@ -3,22 +3,24 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://baglavsrcb5rr"
-path="res://.godot/imported/environment_baked_Env_Shell_Baked.png-f0f2da353861d1ebf758dc81b4797fee.ctex"
+path.s3tc="res://.godot/imported/environment_baked_Env_Shell_Baked.png-f0f2da353861d1ebf758dc81b4797fee.s3tc.ctex"
+path.etc2="res://.godot/imported/environment_baked_Env_Shell_Baked.png-f0f2da353861d1ebf758dc81b4797fee.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
-"md5": "06b243e117e60afc20bcb88aee7e5686"
+"md5": "a87fbb2f45eba3e652822fab2ccde140"
 }
 
 [deps]
 
 source_file="res://models/environment_baked_Env_Shell_Baked.png"
-dest_files=["res://.godot/imported/environment_baked_Env_Shell_Baked.png-f0f2da353861d1ebf758dc81b4797fee.ctex"]
+dest_files=["res://.godot/imported/environment_baked_Env_Shell_Baked.png-f0f2da353861d1ebf758dc81b4797fee.s3tc.ctex", "res://.godot/imported/environment_baked_Env_Shell_Baked.png-f0f2da353861d1ebf758dc81b4797fee.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +42,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0
