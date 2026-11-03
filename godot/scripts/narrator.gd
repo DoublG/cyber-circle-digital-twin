@@ -14,9 +14,14 @@ extends Node
 ## Personal lines (say_to): for one player only ("tile"), e.g. "Je koos
 ## Driehoek." - for the accessible page of a blind or partially sighted player
 ## (control server /a11y/<token>); without a file they are only sent out.
-## Output (web interface, group "Voorlezen"): off / stereo (mixed with the
-## sound effects) / the CENTRE channel of a 5.1 or 7.1 sound card (its own
-## jack: a separate speaker or headphones). Its own audio bus, "Voice".
+## Settings (web interface, group "Voorlezen"): on / off (enabled), the output:
+## stereo (mixed with the sound effects) / the CENTRE channel of a 5.1 or 7.1
+## sound card (its own jack: a separate speaker or headphones), the volume.
+## Its own audio bus, "Voice". Off: nothing is played anywhere - the lines
+## still go out on MQTT (the accessible companion pages show their text).
+## With display nodes (Replica) a line plays on the Pi(s) showing its screens
+## (a question on every Pi, an invite only where that tile is), where the
+## sound plays (SoundBoard.where_to).
 ## Every line is linked to the screens that show its text ("screens": the
 ## screen numbers, as --screens counts them: all of them for a question or a
 ## round's intro, the one with the player's tile for an invite) and goes out
@@ -30,7 +35,8 @@ const EXTENSIONS := ["ogg", "wav", "mp3"]
 const BUS := "Voice"
 const ICON_NAMES := ["Vierkant", "Driehoek", "Kruis", "Cirkel"]   # QuizRound.ANSWER_BUTTONS order
 
-var output := 0                        # 0 off, 1 stereo, 2 the centre channel (5.1 / 7.1)
+var enabled := 0                       # 1: read aloud (0: off - the lines still go out on MQTT)
+var output := 1                        # 1 stereo, 2 the centre channel (5.1 / 7.1); (0: off, as before)
 var volume := 100                      # %
 var extra_dir := ""                    # --voice=DIR
 
@@ -56,7 +62,8 @@ func _ready() -> void:
 ## The settings for the web interface (as GameRound.tunables).
 func tunables() -> Array:
 	return [
-		GameRound.setting("output", "Voorlezen: 0 uit, 1 stereo, 2 middenkanaal (5.1/7.1)", 0, 2, 1),
+		GameRound.setting("enabled", "Voorlezen aan (1) of uit (0)", 0, 1, 1),
+		GameRound.setting("output", "Voorlezen: 1 stereo, 2 middenkanaal (5.1/7.1)", 1, 2, 1),
 		GameRound.setting("volume", "Voorlezen: volume (%)", 0, 100, 5),
 	]
 
@@ -76,7 +83,24 @@ func say(name: String, text: String, kind: String, data := {}, interrupt := fals
 			_missing[name] = true
 			print("voice: no file for %s (\"%s\")" % [name, text.left(60)])
 		return
-	if output == 0 or volume <= 0:
+	if not is_on():
+		return
+	var sound: SoundBoard = get_parent().get("sound") if get_parent() else null
+	if sound == null or SoundBoard.plays_on_displays(sound.where_to):
+		Replica.relay_to_screens(line.get("screens", []), "narrator", &"play_line", [name, interrupt])
+	if sound and not sound.plays_here():
+		return
+	play_line(name, interrupt)
+
+
+func is_on() -> bool:
+	return enabled == 1 and output > 0 and volume > 0
+
+
+## Play one line's file (here; a display node: as the master sends it).
+func play_line(name: String, interrupt := false) -> void:
+	var stream := _stream(name)
+	if stream == null or not is_on():
 		return
 	if interrupt:
 		_queue.clear()

@@ -1,0 +1,14 @@
+# Who may do what on the Cyber Circle broker (install_server.sh: /etc/mosquitto/cybercircle.acl).
+# @PREFIX@ is the topic prefix (MQTT_PREFIX, default cybercircle).
+
+# the installation (the game master, the control server, the tiles, the gamemaster app): everything,
+# and the broker's own counters (the web interface's Prestaties tab)
+user @MQTT_USER@
+topic readwrite #
+topic read $SYS/#
+
+# a display node (a Raspberry Pi with 2 split screens): only reads its own tiles - their
+# commands and presses (its controllers); everything else comes from the master (Godot multiplayer)
+user @MQTT_DISPLAY_USER@
+topic read @PREFIX@/tile/+/cmd
+topic read @PREFIX@/tile/+/event

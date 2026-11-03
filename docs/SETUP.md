@@ -20,6 +20,9 @@ digital_twin/
 
 ## 1. How it fits together
 
+Diagrams (architecture, network, tile wiring, screens / sound / DMX, floor
+plan, sequences): [WIRING.md](WIRING.md).
+
 ```
  operator (browser) ─▶ CONTROL SERVER (overview PC, Python) ── owns ──▶ MySQL database
  Android app ──HTTP─▶   web interface + HTTP API                          (players, questions,
@@ -35,7 +38,10 @@ digital_twin/
   **HTTP API** for the game and the app, and follows / steers the game over
   MQTT. See §10.
 * **The game master** (Godot) runs the rounds, the robot, the screens and the
-  digital twin of the room. It talks MQTT over WebSocket (tiles, app,
+  digital twin of the room. In the final setup the split screens are rendered
+  by **display nodes** (a Raspberry Pi per 2 screens) that follow the
+  master's game state over Godot's multiplayer (ENet) and render it
+  themselves (§4 *Display nodes*; diagrams: [WIRING.md](WIRING.md)). It talks MQTT over WebSocket (tiles, app,
   control server) and gets questions / players / ranking from the control
   server and stores scores there (`--control=URL`). Without a control server
   it can open a SQLite file itself (`--db=PATH`, for testing).
@@ -145,30 +151,32 @@ sudo systemctl restart mosquitto
 (`godot/tests/mqtt_test_broker.py` is a tiny broker for the automatic tests
 only – not for the installation.)
 
-### Raspberry Pi per screen – status
+### Display nodes: a Raspberry Pi per 2 screens
 
-**Not ready yet.** A Pi per screen is feasible, but two things have to be done
-first (see §8):
+The final setup (docs/WIRING.md): **one server box** runs the control server,
+the broker, the database and the game **master** (the game logic, the
+overview screen, the sound); the **split screens** are rendered by Raspberry
+Pi 5s, **2 screens each** (the Pi's two micro-HDMI outputs): Pi 1–3 inside the
+robot (screens 1–5), Pi 4 at the mobile station (Mobile A + B). A display node
+runs no game logic: it follows the master's game state over the LAN (Godot
+multiplayer, *Display nodes* in §4), renders its screens itself and plays the
+sound on its own HDMI / audio jack.
 
-1. a lighter 3D scene: baked lighting (in progress – §9), merged meshes and
-   instanced LEDs, rendered with the *Compatibility* renderer;
-2. a *display mode*: one game server (logic, database, MQTT) and a Pi per
-   screen that only renders its screen, following the server's events.
-
-What each Pi will need once that is in place:
-
-| | |
+| | per display node |
 |---|---|
-| Board | Raspberry Pi 5, 4 GB (8 GB not needed), with the active cooler |
+| Board | Raspberry Pi 5, 4 GB, with the active cooler |
 | Power | official 27 W USB-C supply |
-| Storage | 32 GB+ A2 microSD, or an NVMe/USB SSD (more reliable for 24/7) |
-| Video | micro-HDMI → HDMI cable to the screen (1920×1080) |
-| Network | wired Ethernet (same network as the broker and server) |
-| OS | Raspberry Pi OS (64-bit, desktop), up to date (`sudo apt full-upgrade`) – its Mesa driver gives OpenGL ES 3.1 / Vulkan |
-| Godot | the official Linux **arm64** build of the same 4.7.x version, or an arm64 export of the project |
-| Settings | screen blanking off (`raspi-config` → Display → Screen Blanking), auto-login, the game started at login (see §4) |
+| Storage | an NVMe/USB SSD (24/7), or a 32 GB+ A2 microSD |
+| Video | 2 × micro-HDMI → HDMI (1920×1080) |
+| Network | wired Ethernet (same network as the server) |
+| OS | Raspberry Pi OS (64-bit, desktop), up to date; with 2 screens the desktop on X11 (`install_game.sh` sets it) |
+| Godot | the official Linux **arm64** build of the same 4.7.x version, or an arm64 export; the Compatibility renderer (OpenGL ES 3) |
+| Settings | `sudo install_game.sh --display 1,2` (§13): auto-login, no blanking, the display started at login |
 
-The game server can then be a small PC or one more Pi 5 (it renders nothing).
+The server box: a mini PC (x86-64, 6+ cores, 16 GB) with a GPU that renders
+the overview at 1080p (an NVIDIA one for the companion videos' NVENC, §14).
+One game PC with GPUs instead (every screen rendered by the master, as
+before) still works: `GAME_REMOTE_SCREENS=` empty.
 
 ## 3. Install
 
@@ -234,6 +242,9 @@ Options (everything after `--`):
 | `--mobile-screens=14,15/16,17,18` | the mobile players' screens (drones), the same way (this is the default) |
 | `--monitors=0,1,2,3,4,5,6,7` | with `--windows`: the monitor (OS numbering) for screen 1, 2, … (floor screens, then mobile screens) and then the overview. Default: screen *k* on monitor *k*−1, the overview after the last screen |
 | `--no-overview` | no overview screen for visitors |
+| `--serve-replicas[=7350]` | **display nodes** (a Raspberry Pi per 2 screens) connect on this UDP port (Godot multiplayer, ENet) and follow the game (see *Display nodes* below); a beacon on UDP 7351 tells them where the master is |
+| `--advertise=IP` | the address announced on MQTT (`<prefix>/node/<id>`; default a LAN address of this machine – set it when the machine has several, e.g. Docker bridges; `start_game.sh`: `SERVER_IP`) |
+| `--remote-screens=all` | with `--serve-replicas`: these screens (`1,2,5-7`, `all`) are rendered by display nodes, not here – built and driven as always, never drawn here (no window, no GPU cost) |
 | `--mqtt=URL` | broker WebSocket URL. Not given: no MQTT, the tiles are simulated in the twin |
 | `--mqtt-user=…` `--mqtt-password=…` | broker login |
 | `--sim-tiles` | with MQTT, still simulate the tile logic (no real tiles) |
@@ -284,7 +295,10 @@ is open, every 20–60 s). The current files are synthesised placeholders
 (`python3 tools/make_sounds.py`); drop real recordings (e.g. a robot voice) in
 those folders – or in a folder outside the project with `--sounds=DIR`, no
 re-export needed. Volume and the random interval are in *Instellingen*. Sound
-comes from the computer running the master.
+comes from where *Instellingen › Geluid › Geluid op* says: 0 automatic (on
+the display nodes when any are connected – every Pi plays every sound, the
+master picks the file so all play the same one – else on the master), 1 the
+master, 2 the displays, 3 both.
 
 **Read aloud (a separate voice track).** For players who find reading hard,
 the game can read out what the screens show: the question, its answers
@@ -301,16 +315,66 @@ godot-4 --headless --path godot -- --control=http://localhost:8080 --voice-expor
 (CSV: `file;text;kind`, the questions as they are in the database now. A
 question's name comes from its text – `question_wat-betekent-cpu_c80166` – so
 an edited question gets a new name and an old recording never plays with it.)
-The voice has its own audio bus, `Voice`. *Instellingen › Voorlezen*: output
-0 = off, 1 = stereo (mixed with the sound effects), 2 = the **centre channel**
-of a 5.1 / 7.1 sound card (its own jack: a separate speaker or headphones);
-volume. Every line is linked to the screens that show its text and goes out on
+The voice has its own audio bus, `Voice`. *Instellingen › Voorlezen*:
+**Voorlezen aan** (1) or uit (0, the default) – off, nothing is read out
+anywhere, but the lines still go out on MQTT (the accessible companion pages
+show them); output 1 = stereo (mixed with the sound effects), 2 = the
+**centre channel** of a 5.1 / 7.1 sound card (its own jack: a separate speaker
+or headphones); volume. With display nodes a line plays on the Pi(s) showing
+its screens (a question on all of them, an invite only where that tile is). Every line is linked to the screens that show its text and goes out on
 MQTT, also when there is no file: `cybercircle/voice` `{"name":
 "question_wat-betekent-cpu_c80166", "text": "Wat betekent CPU?", "kind":
 "question", "screens": [1, 2, 3, 4, 5], "file": "…"}` (an invite: the screen
 with that tile, and `"tile"`) – so a speaker, headphones or a Pi per screen can
 play its own screen's lines. A line without a file is logged once
 (`voice: no file for …`).
+
+**Generating the voice (Babbeldoos, Flemish).** `tools/make_voice.py` makes
+every line with [Babbeldoos](https://huggingface.co/Howest-AI-Lab/babbeldoos-flemish-tts)
+(Howest AI Lab): two LoRA adapters that turn Chatterbox Multilingual's Dutch
+into Flemish. It runs on the server box (any NVIDIA GPU; CPU works, but
+slowly), once, not during the game: the game only plays the files.
+
+```bash
+tools/voice/setup.sh          # once: venv (Python 3.10/3.11), torch, Chatterbox, the adapters (~180 MB);
+                              # the Chatterbox base (~2 GB) comes from Hugging Face on the first run
+# the voice: 5–15 s of clean speech, one speaker, no music or echo (someone who agreed to it)
+ffmpeg -f pulse -i default -t 12 -ac 1 -ar 24000 tools/voice/reference.wav
+# or no recording: a Flemish Piper voice (CC0 recordings) reads a reference clip
+tools/voice/.venv/bin/python tools/voice/make_reference.py --voice rdh     # -> tools/voice/reference_rdh.wav (or nathalie)
+#   (--reference builtin: Chatterbox's own default voice; --backend piper --piper-voice rdh: Piper reads every line itself)
+# the current lines (questions from the database) and the files
+godot-4 --headless --path godot -- --control=http://localhost:8080 --voice-export=$PWD/voice_lines.csv
+tools/voice/.venv/bin/python tools/make_voice.py --dry-run     # how each line will be spoken
+tools/voice/.venv/bin/python tools/make_voice.py               # -> godot/data/voice/<file>.ogg
+```
+
+- Only new or changed lines are made (`godot/data/voice/voice_manifest.json`
+  remembers each file's text, voice and settings); `--force` makes all again,
+  `--only 'invite_*'` / `--kinds question,answer` a part, `--prune` removes files
+  of questions that are gone. `--out DIR` writes to the folder of
+  `GAME_VOICE_DIR` instead (no Godot import needed there).
+- `--model narration` (default: read aloud, polite Belgian Dutch) or
+  `conversational`; `--strength 0–1` (0 = the base model's Netherlandic Dutch);
+  `--seed N` another take of the same text (re-run the bad lines with
+  `--only NAME --seed 8 --force`).
+- What the model says: digits become Dutch words (13 → *dertien*; long
+  codes and binary numbers digit by digit), acronyms and English names follow
+  `tools/voice/pronunciation.csv` (CPU → *cee pee uu*), unknown 2–3 letter
+  capitals are spelled. A line no rule gets right: its exact text in
+  `tools/voice/spoken.csv` (the password *Kat!Fiets7#Maan*).
+- Each file is trimmed, levelled to the same loudness (−18 LUFS) and written as
+  Ogg Vorbis, 24 kHz mono. Listen to them all once: the model can skip or
+  repeat a word.
+- Check a folder: `VOICE_DIR=$PWD/godot/data/voice LINES=$PWD/voice_lines.csv
+  godot-4 --headless --path godot --script res://tests/check_voice.gd`
+  (a playable file for every line). The pipeline without the model:
+  `python3 tools/make_voice.py --backend test --out godot/tests/_voice` (beeps).
+- Licence: the adapters are **CC BY-NC 4.0** (non-commercial use; Chatterbox
+  itself is MIT). Chatterbox puts an inaudible watermark (Perth) in its output.
+  Do not use someone's voice as reference without their consent. New files in
+  `godot/data/voice/` need a Godot import (open the editor once, or
+  `godot-4 --headless --path godot --import`) before an exported build has them.
 
 **Sounds from outside** (a show controller, a button, the operator): the
 web interface's **Geluid** tab has a button per sound and per file, and
@@ -332,6 +396,88 @@ Name=Cyber Circle
 Exec=sh -c 'cd /srv/cybercircle/digital_twin && godot-4 --path godot -- --windows --mqtt=ws://localhost:9001 --mqtt-user=cybercircle --mqtt-password=SECRET --control=http://localhost:8080'
 X-GNOME-Autostart-enabled=true
 ```
+
+### Display nodes (a Raspberry Pi per 2 screens)
+
+The master (`--serve-replicas --remote-screens=all`, on the server box) runs
+the game: the logic, the database, MQTT, the control server's API, the
+overview. A **display node** (a Raspberry Pi 5) runs the very same scene with
+`--replica`: the same 3D world, the same screens and views – but no game
+logic. It follows the master over **Godot's high-level multiplayer**
+(`ENetMultiplayerPeer` + RPCs, UDP 7350; `godot/scripts/net/replica.gd`):
+
+* **game state** – what the screens read (players, invites, lives, the game's
+  state, the round and its fields, what the screens show) as data: a
+  **snapshot** when it (re)connects, then **deltas** on change (reliable);
+* **events** – what happens: a popup, a tile's hit or explosion, a packet down
+  a cable, a sound, a light cue, a tile program (reliable, in order – every
+  event after the state it depends on);
+* **live** – what changes every frame (the clocks, a countdown, the quiz
+  screen): unreliable, the latest wins, 15 times a second.
+
+So it **renders on its own**: animations, the robot, the countdowns run on
+there between the master's messages, and a network hiccup only delays the
+next change – the picture never freezes. The **robot is an NPC**: nobody
+steers it over the network – on every node it acts by itself on the game's
+events (a press reaching it, an attack, an extermination, the phase of the
+game; `godot/scripts/robot_npc.gd`); the master's head angle only pulls a
+drifted idle spin back. Each Pi **plays the sound** (every sound effect: the
+master picks the file, all play the same) and the **read-aloud lines of its
+own screens** on its HDMI / audio jack (*Instellingen › Geluid*: where the
+sound plays – automatic = on the displays when any are connected).
+
+Only the master talks to the control server and MQTT. A display node may
+**read its own tiles** on MQTT (read-only user `display`,
+`deploy/install/mosquitto-cybercircle.acl`): `tile/<n>/cmd` and
+`tile/<n>/event` of the tiles on its screens. The tiles are its controllers,
+as on a split-screen console: a press shows at once on that player's screen
+(the robot looks, the tile's own logic reacts) – the master still decides the
+score – and its tiles keep working while the link to the master is down.
+
+```bash
+# the master (start_game.sh with GAME_ROLE=master and GAME_REMOTE_SCREENS=all does this)
+godot-4 --path . -- --windows --serve-replicas --remote-screens=all --mqtt=… --control=…
+# a display node (start_game.sh with GAME_ROLE=display)
+godot-4 --rendering-method gl_compatibility --path . -- --replica --show=1,2 --master=192.168.1.10:7350 \
+    --mqtt=ws://192.168.1.10:9001/mqtt --mqtt-user=display --mqtt-password=…
+```
+
+| display option | |
+|---|---|
+| `--replica` | this is a display node |
+| `--show=1,2` | the screens it shows: the floor screens 1–5, then the mobile screens 6, 7 (Pi 4 at the station: `--show=6,7`) |
+| `--monitors=0,1` | the monitor of each (OS numbering) |
+| `--master=HOST[:PORT]` | the master; not given: the master's beacon (UDP 7351, every second – also after the web interface's *Maak master*) |
+| `--mqtt=…` `--mqtt-user=display` `--mqtt-password=…` | its own tiles only, read-only (above); without it they come through the master |
+| `--node=NAME` | its name (default `display-<ip>`): its metrics go to the master, which publishes them (`<prefix>/metrics/<id>`, `<prefix>/node/<id>`: *Processen*, *Prestaties*) |
+| `--view-scale=0.75` | 3D resolution of the split views (1 = full; Pi 5: 0.6–0.8 – see §8) |
+| `--msaa=2` | antialiasing of the 3D views (0 / 2 / 4) – without it the thin light strips flicker and lose their glow |
+| `--detail=3` `--detail-size=0.2` | small parts (screws, LEDs, hearts: under 20 cm) are not drawn further away than 3 m (0 = always) – ~40 % fewer draw calls |
+| `--lod=4` | coarser models further away (Godot's mesh LODs; 1 = as on the master) |
+| `--windowed` | testing: windows on one monitor |
+
+* **Startup / loss**: a display shows *WACHTEN OP DE MASTER* until the first
+  snapshot. When the link goes, it plays on; after 3 s a small *VERBINDING
+  HERSTELLEN …* at the bottom, after 30 s a clear notice. It reconnects every
+  1–5 s (ENet notices a dead link in ~3–6 s, both sides) and gets a fresh
+  snapshot: back in step at once. Sounds of the dark seconds are not replayed.
+* **Cost**: on the master next to nothing (the fields are compared 10 times a
+  second, only while displays are connected); network: a snapshot of a few
+  KB, then a few KB/s per display. The Pi renders its 2 screens (§8).
+* **Same files**: videos (the death clip, quiz videos), pictures, sounds and
+  voice files are played from the display's own copy – the deploy copies the
+  project; a folder outside it (`--sounds`, `--voice`, a quiz video) must be on
+  the Pi at the same path too.
+* **The ENet link** in the web interface's *Prestaties*: round trip, jitter,
+  packet loss per display (ENet's own statistics), events / snapshots, whether
+  its own tiles come over MQTT.
+* Tests (two processes on one PC): `godot/tests/run_replica_test.sh` – at each
+  moment (lobby, intro, quiz, attack, extermination, scoreboard, rhythm round)
+  the display compares its state with the master's (`mark … state EQUAL`) and
+  both save their screens, compared by `tests/compare_shots.gd`. A bad
+  network: `PROXY="--loss 10 --jitter 50 --blackout 18:9" REPLICA_TAIL=10
+  tests/run_replica_test.sh` (`tests/udp_proxy.py`: 10 % loss, jitter, 9 s
+  dark – the moments in the dark are missing, the state is equal again after).
 
 ### How a session runs
 
@@ -455,7 +601,7 @@ Prefix `cybercircle` (setting `topic_prefix` on the *Mqtt* node). Payloads are J
 | `cybercircle/registered` | game → app | `{"tile": 3, "player": "Erik", "color": "#ff8800"}` |
 | `cybercircle/activated` | game → app | `{"tile": 3, "player": "Erik"}` |
 | `cybercircle/status` | game → all | `online` / `offline` (retained) |
-| `cybercircle/node/<id>` | game → all | retained announcement: role, address, screens, fps (every 10 s) |
+| `cybercircle/node/<id>` | game → all | retained announcement: role (`master` / `display`), address, port (the master: the display port), screens, fps, displays connected (every 10 s) |
 | (HTTP) `GET` / `PUT /api/checkpoint` | game ↔ control | the game state after a crash: the control server keeps the newest checkpoint (`{db, checkpoint}`) |
 | `cybercircle/db` | control → game | `{"changed": "players" \| "questions" \| "ranking"}`: the database changed (web interface, website sync, a result) – the game fetches it again at once |
 | `cybercircle/state` | game → all | retained game state for the web interface (players, plan, mode, …) |
@@ -539,7 +685,8 @@ module with **wired Ethernet**, socketed on the tile's carrier board: an RMII
 PHY (LAN8720; the defaults are a WT32-ETH01's pins, the Olimex ESP32-POE's are
 noted next to them – set the module's in `include/config.h`, `TILE_ETH_*`; RMII
 takes GPIO 0/17, 18, 19, 21, 22, 23, 25, 26, 27: the LEDs and sensors stay off
-those). The broker (plain MQTT, port 1883), the LED chain (ring 48, hearts 5,
+those; LED data IO5, sensors IO32 / 33 / 39 / 35 – wiring:
+[WIRING.md](WIRING.md) §3). The broker (plain MQTT, port 1883), the LED chain (ring 48, hearts 5,
 icon LEDs 4, status LED) and the sensor thresholds are in `include/config.h`
 too. It gets its address from the network's DHCP and announces itself with its
 MAC address (`device/<mac>/hello`, every 10 s: also its IP and the link, e.g.
@@ -649,6 +796,8 @@ godot-4 --path . --disable-vsync res://tests/test_stream_capture.tscn -- --out=$
 godot-4 --path . --disable-vsync res://tests/test_installed_shot.tscn      # a partial installation: hidden places, screens (shots/86_*)
 godot-4 --path . --disable-vsync res://tests/test_invite_shot.tscn         # the invite: tile drawn, pressed icons greyed (shots/85_*)
 godot-4 --path . --disable-vsync res://tests/test_explosion_shot.tscn       # hit, explosion, shield, drone, room lights (shots/80-84_*)
+tests/run_replica_test.sh       # display nodes: a master + a display node, state and screens compared (tests/shots/replica/)
+tests/run_display_perf.sh       # what a display node (a Pi) renders: fps, draw calls, triangles, with 2 full screens
 python3 tests/mqtt_test_broker.py 9011 &                                 # then:
 godot-4 --headless --path . res://tests/test_mqtt.tscn                   # MQTT end to end
 ```
@@ -685,19 +834,37 @@ godot-4 --path . --resolution 1920x1080 --fixed-fps 30 --disable-vsync \
 ffmpeg -i movie/observer_demo.avi -c:v libx264 -crf 20 -pix_fmt yuv420p ../movies/observer_demo.mp4
 ```
 
-## 8. Performance (one screen = one Pi)
+## 8. Performance (a Raspberry Pi per 2 screens)
 
-Measured with `tests/perf_probe.tscn` (one screen, 3 player views):
+What a display node renders, measured with `tests/run_display_perf.sh`
+(every place taken, the display showing screens 1 and 2 = **6 player views**,
+the Compatibility renderer = OpenGL ES 3 as on a Pi, the Pi settings
+`--view-scale=0.75 --msaa=2 --detail=3 --detail-size=0.2 --lod=4`; the
+numbers are what the display reports to the master, as in *Prestaties*):
 
-| | now (RTX 4070) | target for a Pi 5 @ 30 fps |
+| per frame, 2 screens | draw calls | triangles |
 |---|---|---|
-| draw calls / frame | ~18 000 | 300 – 1 000 |
-| triangles / frame | ~1.4 M | 150 – 300 k |
+| lobby (6 views on the robot and the room) | ~1 370 | ~1.2 M |
+| a round on the tile (the views tilted down) | ~720 | ~1.2 M |
+| one screen of 3 views | about half | about half |
 
-To get there: baked lighting and no real-time lights/shadows (§9), merged
-static meshes, all LEDs as one instanced mesh, fewer triangles on the
-hemispheres and wall lights, 3D views at ~70 % resolution, no MSAA, and the
-Compatibility renderer (`--rendering-method gl_compatibility`).
+The room is one merged, baked mesh (~150 k triangles, all of it in most
+views); the tiles are ~90 small parts each (what `--detail` thins out far
+away). A display node runs the game's scene without its logic: ~400 MB of
+memory. **On a Pi 5 the frame rate still has to be measured on the hardware**
+(the numbers above are from a PC): plan 30 fps; if a Pi with 2 full screens
+stays below that, in this order: `GAME_VIEW_SCALE=0.6`, `GAME_DETAIL=2.5`,
+`GAME_DETAIL_SIZE=0.3`, and as the last step one screen per Pi (a fifth Pi).
+The fps, frame times, CPU, temperature and link of every display are in the
+web interface's *Prestaties*.
+
+The master (server box): the display nodes cost it next to nothing (it
+compares the fields 10 times a second); the network a few KB/s per display.
+The companion videos (§14) are rendered on the master off-screen: one
+screen's views at a time.
+
+Earlier, one screen with 3 views on the RTX 4070 (`tests/perf_probe.tscn`,
+Forward+ / Compatibility): ~1 550 / 2 100 draw calls, ~780 k triangles.
 
 ## 9. Rebuilding the models / baking the light
 
@@ -1066,7 +1233,7 @@ they pick the right builds themselves. One settings file for all of it:
 |---|---|---|
 | `build.sh [--test] [--apk] [--no-export]` | development PC | Godot import, (tests), the gamemaster web app (and APK), the game exported for **x86_64 and arm64** (needs Godot's export templates; otherwise the machines run the project), `dist/cybercircle-<date>.tar.gz` |
 | `sudo install_server.sh [SERVER_IP]` | overview PC / server Pi | settings file (random passwords), Mosquitto (plain + WebSocket, a password), MariaDB (database + user), the control server (virtualenv, **systemd: `cybercircle-control`**), nightly backup (**`cybercircle-backup.timer`**), https certificate (`CONTROL_HTTPS=1`), firewall ports (ufw) – then checks the broker and the web interface |
-| `sudo install_game.sh` | game computer (can be the server) | the kiosk user logging in automatically (GDM, LightDM or `raspi-config` on a Pi), Godot for this CPU (official x86_64 / arm64 build, unless exported), screen never blanks / locks / sleeps, the game as a **user service `cybercircle-game`** started with the desktop session (also via `/etc/xdg/autostart` for desktops without `graphical-session.target`, e.g. Raspberry Pi OS); ARM: the Compatibility renderer (OpenGL ES 3) |
+| `sudo install_game.sh [--display 1,2]` | the server box (the **master**), each Pi (`--display` + its screens: a **display node**) | the role in this machine's settings (`GAME_ROLE`, `GAME_SHOW`, `GAME_NODE`), the kiosk user logging in automatically (GDM, LightDM or `raspi-config` on a Pi), Godot for this CPU (official x86_64 / arm64 build, unless exported), screen never blanks / locks / sleeps, the game as a **user service `cybercircle-game`** started with the desktop session (also via `/etc/xdg/autostart` for desktops without `graphical-session.target`, e.g. Raspberry Pi OS); ARM: the Compatibility renderer (OpenGL ES 3, `GAME_ENGINE_ARGS`); master: the display port (7350) in the firewall; a Pi with 2 screens: the desktop on X11 |
 | `sudo update.sh [release.tar.gz]` | each machine | a new version in place (settings, database, certificates kept), dependencies, restart |
 | `flash_tiles.sh [esp32dev-wifi]` | any PC / Pi with PlatformIO | the tile firmware with this installation's broker and login (no editing of `config.h`) |
 | `backup.sh` | (the timer) | `mysqldump` → `/var/backups/cybercircle/cybercircle-<date>.sql.gz`, kept 30 days |
@@ -1074,8 +1241,13 @@ they pick the right builds themselves. One settings file for all of it:
 ```bash
 # the server (once; prints the web interface's address)
 sudo deploy/install/install_server.sh 192.168.1.10
-# the game computer: copy /etc/cybercircle/cybercircle.env from the server, then
+# the game master on the server box (overview, sound; the split screens go to the Pis)
 sudo deploy/install/install_game.sh && sudo reboot
+# each Pi: copy /etc/cybercircle/cybercircle.env from the server, then its screens
+sudo deploy/install/install_game.sh --display 1,2 && sudo reboot     # Pi 1 (in the robot)
+sudo deploy/install/install_game.sh --display 3,4 && sudo reboot     # Pi 2 (in the robot)
+sudo deploy/install/install_game.sh --display 5 && sudo reboot       # Pi 3 (in the robot)
+sudo deploy/install/install_game.sh --display 6,7 && sudo reboot     # Pi 4 (the mobile station)
 # every tile (USB), one after the other
 deploy/install/flash_tiles.sh
 ```
@@ -1089,9 +1261,9 @@ broker, control server, voice folder, extra options).
 **Raspberry Pi.** Tested: `install_server.sh` on Debian arm64 (MariaDB, the
 control server's Python packages as arm64 wheels, the broker) – a Pi 4/5 runs
 the server well. The game installs on a Pi (Godot arm64, OpenGL ES 3, ETC2/ASTC
-textures: `import_etc2_astc` is on in the project) – what it can render is in
-§8: today the full 5 + 1 screens need a PC; on a Pi plan one or two screens,
-and the *display mode* (a Pi per screen following one master) is the next step.
+textures: `import_etc2_astc` is on in the project) – as a **display node**
+(`install_game.sh --display 1,2`): 2 screens per Pi 5, see §8 for what one
+renders.
 The `godot-sqlite` add-on has no arm64 binaries in the project: not needed with
 the control server (`--control`), only for the standalone `--db=FILE`.
 
@@ -1170,6 +1342,10 @@ NVDA).
 | a test or the game hangs after adding scripts, "Could not find type …" | run `godot-4 --headless --path godot --import` once |
 | rendering / screenshots / movies are extremely slow | `--disable-vsync` (see §7) |
 | `godot-4` can't read files in `/tmp` | it's a snap: keep files inside your home folder |
+| a Pi shows *WACHTEN OP DE MASTER* | the master runs with `--serve-replicas` (`GAME_REMOTE_SCREENS` set), UDP 7350 open on the master (`sudo ufw allow 7350/udp`; the beacon: 7351/udp on the Pi), `SERVER_IP` right in the Pi's settings; the Pi's log: `journalctl --user-unit cybercircle-game -f` |
+| a Pi's screen stays black / shows the wrong screen | `GAME_SHOW` (its screen numbers: floor 1–5, mobile 6, 7) and `GAME_DISPLAY_MONITORS`; with 2 monitors the Pi desktop on X11 (`sudo raspi-config nonint do_wayland W1`) |
+| a Pi is slow (fps in *Processen*) | lower `GAME_VIEW_SCALE` (0.6), `GAME_DETAIL=3`, or one screen per Pi; see §8 |
+| a split screen on the master's monitor shows nothing | it is a remote screen: rendered by a Pi (`GAME_REMOTE_SCREENS`); empty = the master renders it |
 | "database: godot-sqlite extension not found" | the add-on binaries for this OS/CPU are missing in `godot/addons/godot-sqlite/bin` |
 | players can't be assigned | check the player id exists in `players`, and that the game uses the same `--db` file as the app |
 | no MQTT connection | the URL must be the WebSocket listener (`ws://host:9001`); check user/password; the game retries every 3 s |

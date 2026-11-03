@@ -151,10 +151,7 @@ func _animate(id: int, outcome: String, color: Color) -> void:
 	match outcome:
 		"hit", "nogo_ok":
 			var c := color if outcome == "hit" else Retro.SHIELD
-			arena.send_packet(id, c, func():
-				arena.robot.set_side_glow(arena.robot_side(id), c, 2.0)
-				await arena.get_tree().create_timer(0.2).timeout
-				arena.robot.set_side_glow(arena.robot_side(id), Color.BLACK))
+			arena.npc.feedback(id, c, 0.2)
 		"wrong", "nogo_fail":
 			arena.send_packet(id, Color.RED, Callable(), false)
 
@@ -167,6 +164,10 @@ func finish() -> void:
 ## Places: the longest run of successes in a row.
 func progress(id: int) -> int:
 	return stats[id].best_streak
+
+
+func replica_keys() -> Array:              # (what its overlay reads: Replica)
+	return ["stats"]
 
 
 func make_player_overlay(id: int) -> Control:

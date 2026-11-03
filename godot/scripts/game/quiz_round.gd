@@ -53,6 +53,9 @@ var timeup_time := 1.2             # s: "TIJD OM!" between answering and the ans
 var _questions: Array = []
 var _index := -1
 var _phase := "question"           # "video", "question" or "reveal"
+var _video_file := ""              # (a display node plays the question's video / shows its picture itself)
+var _video_loop := false
+var _image_file := ""
 var _phase_left := 0.0
 var _question_time := 15.0         # time for the current question
 var _video: VideoStreamPlayer      # one decoder; every screen shows its texture
@@ -163,7 +166,8 @@ func _next_question() -> void:
 	var own_time := float(q.get("time", 0))                   # the question's own time (0: the setting)
 	_question_time = own_time / game.tempo if own_time > 0.0 else question_time
 	_stop_video()
-	_image = _load_image(str(q.get("image", ""))) if q.has("image") else null
+	_image_file = str(q.get("image", ""))
+	_image = _load_image(_image_file) if q.has("image") else null
 	if q.has("video"):
 		var during: bool = q.get("video_when", "before") == "during"
 		_play_video(q.video, during)
@@ -171,7 +175,7 @@ func _next_question() -> void:
 			_phase = "video"
 			for id in players:
 				for b in CyberTile.BUTTONS:
-					tile(id).set_button_led(b, Color.BLACK)
+					game.arena.rt(tile(id)).set_button_led(b, Color.BLACK)
 			return
 	_read()
 
@@ -199,7 +203,7 @@ func _read() -> void:
 	game.arena.narrator.say(Narrator.question_name(q), str(q.question), "question", {}, true)
 	for id in players:
 		for b in CyberTile.BUTTONS:
-			tile(id).set_button_led(b, Color.BLACK)
+			game.arena.rt(tile(id)).set_button_led(b, Color.BLACK)
 
 
 func _start_answering() -> void:
@@ -211,7 +215,7 @@ func _start_answering() -> void:
 		game.arena.narrator.say("%s_answer_%d" % [qn, n + 1], Narrator.answer_line(q, n), "answer", {"answer": n + 1})
 	for id in players:
 		for b in CyberTile.BUTTONS:
-			tile(id).set_button_led(b, CyberTile.BUTTON_COLORS[b])
+			game.arena.rt(tile(id)).set_button_led(b, CyberTile.BUTTON_COLORS[b])
 
 
 func _play_video(file: String, loop: bool) -> void:
@@ -230,12 +234,17 @@ func _play_video(file: String, loop: bool) -> void:
 	_video = VideoStreamPlayer.new()
 	_video.stream = stream
 	_video.loop = loop
+	_video_file = file
+	_video_loop = loop
+	if not game.arena.sound.plays_here():
+		_video.volume_db = -80.0       # (its sound: on the display nodes)
 	_video.visible = false         # decoded once; the screens draw its texture
 	game.add_child(_video)
 	_video.play()
 
 
 func _stop_video() -> void:
+	_video_file = ""
 	if _video:
 		_video.stop()
 		_video.queue_free()
@@ -294,6 +303,35 @@ func _update(delta: float) -> void:
 	}
 	for view in game.screen_wall.shared_views:
 		view.show_question(state)
+	var out := state.duplicate()                  # (to the display nodes: files, not textures)
+	out.erase("video")
+	out.erase("media")
+	out["video_file"] = _video_file
+	out["video_loop"] = _video_loop
+	out["image_file"] = _image_file if _image else ""
+	Replica.relay_live("round", &"replica_show", [out])
+
+
+## A display node: the master's quiz screen; the video and the picture are its own.
+func replica_show(st: Dictionary) -> void:
+	var vf := str(st.get("video_file", ""))
+	if vf != _video_file:
+		_stop_video()
+		if vf != "":
+			_play_video(vf, bool(st.get("video_loop", false)))
+	var img := str(st.get("image_file", ""))
+	if img != _image_file:
+		_image_file = img
+		_image = _load_image(img) if img != "" else null
+	st["video"] = _video.get_video_texture() if _video else null
+	st["media"] = _video.get_video_texture() if _video else _image
+	for view in game.screen_wall.shared_views:
+		if is_instance_valid(view) and view.has_method("show_question"):   # (a late one: the view moved on)
+			view.show_question(st)
+
+
+func replica_end() -> void:
+	_stop_video()
 
 
 ## Players can change their answer until the time is up: the last one counts.
@@ -307,7 +345,7 @@ func button(id: int, b: StringName) -> void:
 	if was != _answers[id].answer:                         # (for the player's accessible page)
 		game.arena.narrator.say_to(id, "answer", "Je koos %s." % Narrator.ICON_NAMES[_answers[id].answer])
 	for other in CyberTile.BUTTONS:  # only the chosen icon stays lit
-		tile(id).set_button_led(other, CyberTile.BUTTON_COLORS[other] if other == b else Color.BLACK)
+		game.arena.rt(tile(id)).set_button_led(other, CyberTile.BUTTON_COLORS[other] if other == b else Color.BLACK)
 
 
 func _reveal() -> void:

@@ -74,6 +74,13 @@ extends Node3D
 ## (programs for rounds the tile runs itself). simulate_firmware = true runs
 ## that tile logic in the twin; with the real tiles connected (MqttBridge)
 ## set it to false.
+##
+## Display nodes (Replica, docs/SETUP.md §4): the master serves them
+## (--serve-replicas); a display node runs this same scene with --replica: no
+## game logic, it follows the master's state (replica_fields / apply_replica)
+## and plays its events (the tiles through rt(), sounds, lights, popups) on
+## its own screens (--show). The robot is an NPC (RobotNpc): never steered over
+## the network - on every node it acts by itself on the game's events.
 
 @export var packet_speed := 1.6        # cable lengths per second (tile -> robot)
 @export var cable_color := Color(0.15, 0.5, 1.0)
@@ -119,9 +126,21 @@ var _disabled := {}                           # tile_id -> true: out of service 
 var _not_installed := {}                      # tile_id -> true: not part of this installation (hidden, see set_installed)
 var _voice_export := ""                        # --voice-export=FILE
 var _streams := {}                             # tile_id -> CompanionStream (only while one is asked for)
+var replica: Replica                           # --serve-replicas (master) / --replica (a display node)
+var npc: RobotNpc                              # the robot's behaviour: the same on every node, from the game's events
+var _trelays := {}                             # tile -> TileRelay (rt)
+var replica_screens: Array = []                # a display node: the screens it shows (--show)
+var replica_view := {}                         # a display node: its render settings (--view-scale, ...)
+var own_tiles_live := false                    # a display node: its own tiles' commands come over MQTT
+var replica_shots := ""                        # tests: a display node saves its screens at the master's marks
 
 
 func _ready() -> void:
+	npc = RobotNpc.new()
+	npc.name = "RobotNpc"
+	npc.arena = self
+	npc.robot = robot
+	add_child(npc)
 	robot.hit.connect(_on_robot_hit)
 	var floor_tiles: int = $Tiles.get_children().filter(func(c): return c is CyberTile).size()
 	for k in DRONES:                          # the mobile players' drones: ids after the floor tiles
@@ -143,7 +162,7 @@ func _ready() -> void:
 		var fw := TileFirmware.new()
 		fw.name = "Firmware"
 		fw.tile = tile
-		fw.report = apply_command
+		fw.report = _firmware_report
 		tile.add_child(fw)
 	var floor_model: Node = $Room if $Room.baked else $Floor   # baked: the floor is part of the room
 	if $Room.baked:
@@ -176,12 +195,213 @@ func _ready() -> void:
 	observer.name = "Observer"
 	add_child(observer)
 	observer.setup(self)
+	if Replica.client:
+		_replica_render_settings()
 	screen_wall.setup(self)
-	game.setup(self)
+	if Replica.client and ($Mqtt as MqttBridge).node_id == "":
+		($Mqtt as MqttBridge).node_id = "display-" + MqttBridge.lan_address().replace(".", "-")
+	if replica:
+		replica.arena = self
+		replica.name = "Replica"
+		replica.node_id = ($Mqtt as MqttBridge).node_id
+		_start_replica.call_deferred()
+	if Replica.client:
+		game.setup_replica(self)
+	else:
+		game.setup(self)
 	lights.setup(self)
 	if _voice_export != "":
 		_export_voice.call_deferred()
 	($Mqtt as MqttBridge).setup(self)   # no-op while its url is empty
+
+
+## The replication node lives at /root/Replica on every node (RPCs need the
+## same path on both ends; a test may put the arena elsewhere).
+func _start_replica() -> void:
+	get_tree().root.add_child(replica)
+	tree_exiting.connect(func(): if is_instance_valid(replica): replica.queue_free())
+	if Replica.client:
+		replica.screens = replica_screens
+		replica.online_changed.connect(func(on): screen_wall.set_link(on))
+		replica.join()
+	elif not replica.serve():
+		replica.queue_free()
+		replica = null
+
+
+## A tile's visual actions as the game calls them: here and on the display nodes.
+func rt(tile: CyberTile) -> TileRelay:
+	if not _trelays.has(tile):
+		_trelays[tile] = TileRelay.new(tile)
+	return _trelays[tile]
+
+
+func _firmware_report(cmd: Dictionary) -> void:
+	if Replica.client:
+		return                                   # (a display's tile logic only shows: the master scores)
+	apply_command(cmd)
+
+
+# ---------------------------------------------------------------- display nodes (Replica)
+
+## What the screens of a display node read, as data (sent as deltas on change).
+func replica_fields() -> Dictionary:
+	var pending := {}
+	for id in _pending:
+		var p: Dictionary = _pending[id].duplicate()
+		p.erase("time_left")                     # (counts down every frame; the master decides)
+		pending[id] = p
+	var t := []
+	for tile in tiles:
+		t.append(tile.replica_state())
+	var f := {"players": _players, "pending": pending, "disabled": _disabled, "not_installed": _not_installed,
+		"dying": dying.keys(), "clip_waiting": clip_waiting, "clip_started": clip_started, "tiles": t,
+		"texts": Texts.values,
+		"sound": {"volume": sound.volume, "enabled": sound.enabled},
+		"voice": {"enabled": narrator.enabled, "output": narrator.output, "volume": narrator.volume},
+		"lights": {"brightness": lights.brightness, "flashes": lights.flashes}}
+	f.merge(game.replica_fields(), true)
+	return f
+
+
+## A display node: the master's fields (full: a snapshot, the screens are rebuilt).
+func apply_replica(f: Dictionary, full: bool) -> void:
+	if f.has("not_installed"):
+		_not_installed = f.not_installed
+		for tile in tiles:
+			tile.installed = is_installed(tile.tile_id)
+			tile.visible = tile.installed
+		_show_installed()
+	if f.has("players"):
+		_players = f.players
+	if f.has("pending"):
+		_pending = f.pending
+	if f.has("disabled"):
+		_disabled = f.disabled
+	if f.has("clip_waiting"):
+		clip_waiting = f.clip_waiting
+	if f.has("clip_started"):
+		clip_started = f.clip_started
+	if f.has("dying"):
+		dying = {}
+		for id in f.dying:
+			dying[int(id)] = 1
+	if f.has("tiles"):
+		for i in mini(tiles.size(), f.tiles.size()):
+			tiles[i].apply_replica_state(f.tiles[i])
+	if f.has("texts"):
+		Texts.apply(f.texts)
+	if f.has("sound"):
+		sound.volume = int(f.sound.volume)
+	if f.has("voice"):
+		narrator.enabled = int(f.voice.enabled)
+		narrator.output = int(f.voice.output)
+		narrator.volume = int(f.voice.volume)
+	if f.has("lights"):
+		lights.brightness = int(f.lights.brightness)
+		lights.flashes = int(f.lights.flashes)
+		lights.refresh()
+	game.apply_replica(f, full)
+	if full:
+		screen_wall.refresh()
+
+
+## What changes every frame (sent LIVE_HZ, unreliable): the round's clocks, the robot's head.
+func replica_fast() -> Dictionary:
+	return {"round": game.current.replica_live() if game.current else {}, "robot": robot.replica_pose()}
+
+
+func apply_replica_fast(d: Dictionary) -> void:
+	if game.current and d.has("round"):
+		game.current.apply_replica_live(d.round)
+	if d.has("robot"):
+		robot.apply_replica_pose(d.robot)
+
+
+## The object a relayed event is for (Replica.relay targets).
+func replica_target(target: String) -> Object:
+	if target.begins_with("tile:"):
+		var id := int(target.substr(5))
+		return tiles[id - 1] if id >= 1 and id <= tiles.size() else null
+	match target:
+		"arena": return self
+		"npc": return npc
+		"wall": return screen_wall
+		"game": return game
+		"round": return game.current
+		"sound": return sound
+		"narrator": return narrator
+		"lights": return lights
+	return null
+
+
+## A display node: a relayed event it takes from MQTT itself (its own tiles).
+func replica_skip(target: String, method: StringName, args: Array) -> bool:
+	if not own_tiles_live:
+		return false
+	if target.begins_with("tile:") and method == &"press_button":
+		return is_own_tile(int(target.substr(5)))
+	if target == "npc" and method == &"press":
+		return is_own_tile(int(args[0]))
+	if target == "arena" and method == &"replica_tile_msg":
+		return is_own_tile(int(args[0]))
+	return false
+
+
+## A display node: a tile on one of its screens.
+func is_own_tile(tile_id: int) -> bool:
+	var groups: Array = screen_wall.groups()
+	for k in replica_screens:
+		if int(k) >= 1 and int(k) <= groups.size() and tile_id in groups[int(k) - 1]:
+			return true
+	return false
+
+
+## A display node: a message for a tile's own logic (from the master, or MQTT for its own tiles).
+func replica_tile_msg(tile_id: int, msg: Dictionary) -> void:
+	if tile_id >= 1 and tile_id <= tiles.size():
+		(tiles[tile_id - 1].get_node("Firmware") as TileFirmware).receive(msg)
+
+
+## Tests: a moment both sides note - the master sends its fields' digests,
+## a display node compares its own with them and saves its screens (--shots=DIR).
+func replica_mark(name: String, digests := {}) -> void:
+	if Replica.server:
+		Replica.relay("arena", &"replica_mark", [name, Replica.digests(replica_fields())])
+		return
+	var mine := Replica.digests(replica_fields())
+	var diff := digests.keys().filter(func(k): return mine.get(k) != digests[k])
+	print("replica: mark %s state %s" % [name, "EQUAL" if diff.is_empty() else "DIFFERENT %s" % [diff]])
+	if replica_shots == "":
+		return
+	await RenderingServer.frame_post_draw
+	DirAccess.make_dir_recursive_absolute(replica_shots)
+	for k in replica_screens:
+		var vp := screen_wall.screen_viewport(int(k) - 1)
+		if vp:
+			vp.get_texture().get_image().save_png("%s/%s_screen%d.png" % [replica_shots, name, int(k)])
+	print("replica: shot %s" % name)
+	if name == "quit":
+		get_tree().quit()
+
+
+func replica_packet(tile_id: int, color: Color, to_robot: bool) -> void:
+	packet(tile_id, color, Callable(), to_robot)
+
+
+## A display node: its 3D views lighter (a Pi): resolution, MSAA, mesh detail,
+## small parts hidden further away.
+func _replica_render_settings() -> void:
+	var detail := float(replica_view.get("detail", 3.0))
+	var detail_size := float(replica_view.get("detail_size", 0.2))
+	if detail > 0.0:
+		for g in find_children("*", "GeometryInstance3D", true, false):
+			if (g as GeometryInstance3D).get_aabb().get_longest_axis_size() < detail_size:
+				(g as GeometryInstance3D).visibility_range_end = detail
+	screen_wall.view_scale = float(replica_view.get("view_scale", 0.75))
+	screen_wall.view_msaa = {0: Viewport.MSAA_DISABLED, 2: Viewport.MSAA_2X, 4: Viewport.MSAA_4X}.get(
+		int(replica_view.get("msaa", 2)), Viewport.MSAA_2X)
+	screen_wall.view_lod = float(replica_view.get("lod", 4.0))
 
 
 # ---------------------------------------------------------------- players
@@ -223,7 +443,7 @@ func set_installed(ids: Array) -> void:
 		_show_installed()
 		game.log_event("INSTALLATIE: %d PLAATSEN" % (tiles.size() - _not_installed.size()), Retro.DIM)
 		game.on_players_changed()
-		screen_wall.refresh()
+		screen_wall.refresh_all()
 
 
 ## Hide the floor parts of the places that are not installed: the duct to the
@@ -257,7 +477,7 @@ func set_tile_enabled(tile_id: int, on: bool) -> void:
 	tiles[tile_id - 1].out_of_service = not on
 	set_cable_flow(tile_id, cable_color, 0.15 if on else 0.0)
 	game.log_event("%s %s" % [Retro.tile_label(tile_id), "WEER IN GEBRUIK" if on else "BUITEN GEBRUIK"], Retro.DIM)
-	screen_wall.refresh()
+	screen_wall.refresh_all()
 
 
 func is_playing(tile_id: int) -> bool:
@@ -349,7 +569,7 @@ func register(tile_id: int, player: String, color := Color(1.0, 0.8, 0.1), age :
 	var tile := tiles[tile_id - 1]
 	_pending[tile_id] = {"name": player, "color": color, "age": age, "player_id": player_id,
 		"time_left": activation_timeout}
-	tile.start_activation(color)
+	rt(tile).start_activation(color)
 	set_cable_flow(tile_id, color, 0.5)
 	registered.emit(tile_id, player, color)
 	game.log_event("%s SCHRIJFT IN OP %s" % [player.to_upper(), Retro.tile_label(tile_id)], color)
@@ -391,12 +611,7 @@ func _activate(tile_id: int) -> void:
 	join(tile_id, who, age, player_id)
 	activated.emit(tile_id, who)
 	game.log_event("%s DOET MEE (%s)" % [who.to_upper(), Retro.tile_label(tile_id)], Retro.TEAL)
-	var tile := tiles[tile_id - 1]
-	tile.fill_ring(color)
-	get_tree().create_timer(0.6).timeout.connect(func():
-		if is_instance_valid(tile) and not tile.idle and not tile.is_dead:   # (the arena may be gone: tests)
-			tile.clear_ring())
-	send_packet(tile_id, color, func(): robot.look_at_side(robot_side(tile_id)))
+	npc.greet(tile_id, color)
 
 
 ## Make a player active on a tile (normally via register + 4 presses).
@@ -410,7 +625,7 @@ func join(tile_id: int, player := "", age := 0, player_id := 0) -> void:
 	var tile := tiles[tile_id - 1]
 	_players[tile_id] = {"name": player if player != "" else "Speler %d" % tile_id, "age": age,
 		"player_id": player_id}
-	tile.revive(game.lives_for(tile_id))
+	rt(tile).revive(game.lives_for(tile_id))
 	tile.idle = false
 	set_cable_flow(tile_id, cable_color)
 	game.on_players_changed()
@@ -421,7 +636,7 @@ func join(tile_id: int, player := "", age := 0, player_id := 0) -> void:
 func restore_player(tile_id: int, player: String, age: int, player_id: int, lives: int, max_lives: int) -> void:
 	var tile := tiles[tile_id - 1]
 	_players[tile_id] = {"name": player, "age": age, "player_id": player_id}
-	tile.revive(max_lives)
+	rt(tile).revive(max_lives)
 	tile.health = clampi(lives, 0, CyberTile.HEART_COUNT)
 	tile.idle = false
 	set_cable_flow(tile_id, cable_color)
@@ -432,7 +647,7 @@ func restore_invite(tile_id: int, player: String, color: Color, age: int, player
 	var tile := tiles[tile_id - 1]
 	_pending[tile_id] = {"name": player, "color": color, "age": age, "player_id": player_id,
 		"time_left": activation_timeout}
-	tile.start_activation(color)
+	rt(tile).start_activation(color)
 	set_cable_flow(tile_id, color, 0.5)
 
 
@@ -465,25 +680,11 @@ func leave(tile_id: int) -> void:
 func players_attack(tile_ids: Array, everyone := false, color := Color(0.2, 1.0, 0.3)) -> void:
 	if tile_ids.is_empty():
 		return
-	for id in tile_ids:
-		tiles[id - 1].play_attack(color)
 	if everyone:
 		game.log_event("IEDEREEN JUIST - OVERLOAD!", Retro.GOOD)
 	elif tile_ids.size() > 1:
 		game.log_event("%d SPELERS RAKEN DE ROBOT" % tile_ids.size(), Retro.GOOD)
-	await get_tree().create_timer(0.35).timeout  # the sweeps reach the robot side
-	var sides := tile_ids.map(func(id): return robot_side(id))
-	var arrived := [0]
-	var on_arrive := func():
-		arrived[0] += 1
-		if arrived[0] < tile_ids.size():
-			return
-		if everyone:  # last packet in: one combined hit
-			robot.play_overload(color, sides)
-		else:
-			robot.take_hit(sides, color)
-	for id in tile_ids:
-		send_packet(id, color, on_arrive)
+	npc.players_attack(tile_ids, everyone, color)
 
 
 ## The other way around (e.g. wrong answers), also combined: the robot charges
@@ -501,36 +702,26 @@ func robot_attack(tile_ids: Array, color := Color(1.0, 0.1, 0.05), shielded: Arr
 	var costs_life := tile_ids.filter(func(id): return game.take_life(id)) if damage else []
 	for id in costs_life:
 		_hits_on_way[id] = _hits_on_way.get(id, 0) + 1
-	if targets.size() == 1:                          # (look_at_point: also tilts the eye gun, e.g. up at a drone)
-		robot.look_at_point(tiles[targets[0] - 1].global_position)
-		while not robot.is_facing_target():
-			await get_tree().process_frame
 	_attacks += 1
-	cue(&"charge", 0, {"tiles": targets.duplicate()})
-	await robot.charge_attack(targets.map(func(id): return robot_side(id)), color)
-	cue(&"attack", 0, {"tiles": targets.duplicate()})   # the bolts leave the robot
-	get_tree().create_timer(3.0).timeout.connect(func(): _attacks -= 1)   # (the shots land in ~1-2 s)
-	if not tile_ids.is_empty():
-		game.log_event("ROBOT RAAKT " + ", ".join(tile_ids.map(func(id): return player_name(id).to_upper())), Retro.BAD)
-	for id in shielded:
-		game.log_event("SCHILD BESCHERMT %s" % player_name(id).to_upper(), Retro.SHIELD)
-	for id in targets:
-		var tile := tiles[id - 1]
-		var blocked: bool = id in shielded
-		var on_arrive := func():
+	await npc.attack(targets, color, shielded,
+		func(): cue(&"charge", 0, {"tiles": targets.duplicate()}),
+		func():
+			cue(&"attack", 0, {"tiles": targets.duplicate()})   # the bolts leave the robot
+			get_tree().create_timer(3.0).timeout.connect(func(): _attacks -= 1)   # (the shots land in ~1-2 s)
+			if not tile_ids.is_empty():
+				game.log_event("ROBOT RAAKT " + ", ".join(tile_ids.map(func(id): return player_name(id).to_upper())), Retro.BAD)
+			for id in shielded:
+				game.log_event("SCHILD BESCHERMT %s" % player_name(id).to_upper(), Retro.SHIELD),
+		func(id: int, blocked: bool):                  # the shot landed (the tile's hit / block: the npc)
 			if blocked:
 				cue(&"shield", id)
-				tile.play_block(color)
-				send_packet(id, CyberTile.SHIELD_COLOR)   # bounced back to the robot
 			else:
 				cue(&"hit", id)
-				tile.play_hit(color)
 				if id in costs_life:
 					_hits_on_way[id] = maxi(_hits_on_way.get(id, 0) - 1, 0)
-					tile.health -= 1
+					tiles[id - 1].health -= 1
 				elif damage:                    # max 1 life per round: this hit is free
-					screen_wall.popup(id, "♥ VEILIG", CyberTile.SHIELD_COLOR)
-		send_packet(id, color, on_arrive, false)
+					screen_wall.popup(id, "♥ VEILIG", CyberTile.SHIELD_COLOR))
 
 
 ## Length of the death clip in s (to time the free tile; 4 without a clip).
@@ -579,7 +770,7 @@ func death_clip_pending(tile_id: int) -> bool:
 ## on the scoreboard). The robot already turns to the first one and waits.
 func aim_at_doomed(tile_ids: Array) -> void:
 	if not tile_ids.is_empty():
-		robot.lock_on(robot_side(int(tile_ids[0])))
+		npc.aim(int(tile_ids[0]))
 
 
 ## The exterminations of a round, all at once (the scoreboard shows them):
@@ -594,7 +785,7 @@ func exterminate(tile_ids: Array) -> void:
 			tiles[id - 1].health = 0          # -> died -> _on_tile_died (queued on the robot)
 			any = true
 	if not any and not tile_ids.is_empty():
-		robot.release_head()                  # (aimed, but they left in the meantime)
+		npc.release()                         # (aimed, but they left in the meantime)
 
 
 ## An attack under way or a shot on its way (the scoreboard waits for it).
@@ -617,16 +808,17 @@ func give_life(tile_id: int) -> void:
 	tile.health += 1
 	tile.fx.emit(tile_id, "life", Color(0.1, 1.0, 0.3))
 	cue(&"life", tile_id)
-	tile.fill_ring(Color(0.1, 1.0, 0.3))
+	rt(tile).fill_ring(Color(0.1, 1.0, 0.3))
 	get_tree().create_timer(0.5).timeout.connect(func():
 		if not tile.idle and not tile.is_dead:
-			tile.clear_ring())
+			rt(tile).clear_ring())
 	get_tree().create_timer(1.2).timeout.connect(func():   # after the place popup
 		screen_wall.popup(tile_id, "+1 ♥", Retro.GOOD))
 
 
 ## Send a message to a tile's own controller (programs, start, stop).
 func send_to_tile(tile_id: int, msg: Dictionary) -> void:
+	Replica.relay("arena", &"replica_tile_msg", [tile_id, msg])   # (the display nodes run the tile logic too: it shows)
 	tile_message.emit(tile_id, msg)
 	if simulate_firmware:
 		(tiles[tile_id - 1].get_node("Firmware") as TileFirmware).receive(msg)
@@ -648,6 +840,12 @@ func robot_side(tile_id: int) -> int:
 ## to_robot = false: from the robot to the tile. A drone has no cable: a bolt
 ## flies through the air.
 func send_packet(tile_id: int, color: Color, on_arrive := Callable(), to_robot := true) -> void:
+	Replica.relay("arena", &"replica_packet", [tile_id, color, to_robot])
+	packet(tile_id, color, on_arrive, to_robot)
+
+
+## The same, here only (RobotNpc: its choreography runs on every node).
+func packet(tile_id: int, color: Color, on_arrive := Callable(), to_robot := true) -> void:
 	if tiles[tile_id - 1] is DroneTile:
 		(tiles[tile_id - 1] as DroneTile).send_bolt(color, to_robot, on_arrive)
 		return
@@ -659,6 +857,7 @@ func send_packet(tile_id: int, color: Color, on_arrive := Callable(), to_robot :
 func set_cable_flow(tile_id: int, color: Color, strength := 0.5) -> void:
 	if tile_id > _cable_mats.size():           # (a drone: no cable)
 		return
+	Replica.relay("arena", &"set_cable_flow", [tile_id, color, strength])
 	var mat := _cable_mats[tile_id - 1]
 	mat.set_shader_parameter("flow_color", color)
 	mat.set_shader_parameter("idle_strength", strength)
@@ -714,8 +913,14 @@ func _update_packets(delta: float) -> void:
 ##   --sounds=DIR         extra sound files: DIR/<event>/*.ogg (see SoundBoard)
 ##   --settings=FILE      game settings (JSON, as the web interface's "Instellingen"):
 ##                        {"game": {"tempo": 1.2}, "quiz": {"question_time": 20}, ...}
+##   --serve-replicas[=7350]  the master: display nodes (Pis) follow this game (Replica, UDP)
+##   --remote-screens=1-7|all the screens the display nodes show: not rendered here
+##   a display node (a Pi): --replica --show=1,2 [--master=HOST[:7350]] [--monitors=0,1]
+##                        [--mqtt=... (only its own tiles, read-only)] [--windowed]
+##                        [--view-scale=0.75 --msaa=2 --detail=3 --detail-size=0.2 --lod=4]
 func _apply_command_line() -> void:
 	var mqtt: MqttBridge = $Mqtt
+	var remote := ""
 	for a in OS.get_cmdline_user_args():
 		var key := a.get_slice("=", 0)
 		var value := a.substr(key.length() + 1) if "=" in a else ""
@@ -739,6 +944,33 @@ func _apply_command_line() -> void:
 				screen_wall.mobile_groups = _parse_screens(value, true)
 			"--monitors":
 				screen_wall.monitors = Array(value.split(",", false)).map(func(v): return int(v))
+			"--serve-replicas", "--serve-displays":        # the display nodes follow this game (Replica)
+				if replica == null:
+					replica = Replica.new()
+				if value != "":
+					replica.port = int(value)
+				mqtt.display_port = replica.port
+			"--remote-screens":                            # rendered by display nodes, not here: 1,2,5-7 / all
+				remote = value
+			"--replica", "--display":                      # this is a display node: no game, it follows the master
+				if replica == null:
+					replica = Replica.new()
+				Replica.client = true
+				mqtt.role = "display"
+			"--show":                                      # a display node: the screens it shows, e.g. 1,2
+				replica_screens = _parse_list(value, 99)
+			"--master":                                    # a display node: the master (default: its beacon)
+				if replica == null:
+					replica = Replica.new()
+				replica.master_host = value.get_slice(":", 0)
+				if ":" in value:
+					replica.port = int(value.get_slice(":", 1))
+			"--view-scale", "--msaa", "--detail", "--detail-size", "--lod":   # a display node's 3D views
+				replica_view[key.trim_prefix("--").replace("-", "_")] = float(value)
+			"--windowed":                                  # a display node: windows instead of full screen
+				screen_wall.windowed = true
+			"--shots":                                     # tests: a display node saves its screens at each mark
+				replica_shots = value
 			"--mqtt":
 				mqtt.url = value
 			"--mqtt-user":
@@ -749,6 +981,8 @@ func _apply_command_line() -> void:
 				mqtt.real_tiles = false
 			"--node":
 				mqtt.node_id = value
+			"--advertise":                                 # the address the displays connect to
+				mqtt.advertise = value
 			"--rounds":
 				var types := []
 				for n in value.split(",", false):
@@ -801,6 +1035,44 @@ func _apply_command_line() -> void:
 					push_warning("--settings: cannot read %s" % value)
 			_:
 				push_warning("unknown option %s" % a)
+	var count := screen_wall.screen_groups.size() + screen_wall.mobile_groups.size()
+	if remote != "":                                       # (after --screens / --mobile-screens)
+		screen_wall.remote_screens = _parse_list(remote, count)
+	if Replica.client:                                     # a display node: only its own screens, no overview
+		if replica_screens.is_empty():
+			replica_screens = [1]
+		screen_wall.remote_screens = range(1, count + 1).filter(func(k): return k not in replica_screens)
+		screen_wall.observer_page = false
+		screen_wall.multi_window = true
+		screen_wall.monitors = _replica_monitors(screen_wall.monitors, count)
+		game.restore = false
+		game.db_path = ""
+
+
+## A display node's --monitors lists the monitor of each screen it shows (in
+## order); ScreenWall counts per screen number: spread them out.
+func _replica_monitors(given: Array, count: int) -> Array:
+	var out := []
+	out.resize(count + 1)
+	out.fill(0)
+	for i in replica_screens.size():
+		var k: int = int(replica_screens[i])
+		if k >= 1 and k <= count:
+			out[k - 1] = int(given[i]) if i < given.size() else i
+	return out
+
+
+## "1,2,5-7" -> [1, 2, 5, 6, 7]; "all" -> 1 .. count.
+static func _parse_list(text: String, count: int) -> Array:
+	if text.strip_edges() == "all":
+		return range(1, count + 1)
+	var out := []
+	for part in text.split(",", false):
+		var ab := part.split("-")
+		for v in range(int(ab[0]), int(ab[-1]) + 1):
+			if v not in out:
+				out.append(v)
+	return out
 
 
 ## "1,2,3/4,5,6/..." -> [[1, 2, 3], [4, 5, 6], ...]; warns about tiles that are
@@ -829,6 +1101,8 @@ func _parse_screens(text: String, mobile: bool) -> Array:
 func _process(delta: float) -> void:
 	clock += delta
 	_update_packets(delta)
+	if Replica.client:
+		return                                   # (the master decides when an invite runs out)
 	for id in _pending.keys():  # registrations that were never activated
 		_pending[id].time_left -= delta
 		if _pending[id].time_left <= 0.0:
@@ -837,6 +1111,12 @@ func _process(delta: float) -> void:
 
 func _on_button_pressed(tile_id: int, button: StringName) -> void:
 	var tile := tiles[tile_id - 1]
+	if Replica.client:                           # a display: show the press at once (the master decides)
+		if is_pending(tile_id):
+			tile.activation_press(button)
+		elif own_tiles_live and is_own_tile(tile_id) and not tile.idle:
+			npc.press(tile_id, CyberTile.BUTTON_COLORS[button])   # (its own tiles: from MQTT, at once)
+		return
 	if is_pending(tile_id):  # activation: press all 4 icons
 		if tile.activation_press(button):
 			_activate(tile_id)
@@ -845,7 +1125,7 @@ func _on_button_pressed(tile_id: int, button: StringName) -> void:
 		return
 	var color: Color = CyberTile.BUTTON_COLORS[button]
 	# the press travels down the cable; the robot looks at the player when it arrives
-	send_packet(tile_id, color, func(): robot.look_at_side(robot_side(tile_id)))
+	npc.press(tile_id, color)
 	game.on_button(tile_id, button)
 
 
@@ -855,6 +1135,8 @@ func _on_button_pressed(tile_id: int, button: StringName) -> void:
 ## it and fired; then the death animation plays on the tile and the death clip
 ## in the player's view, after which the player leaves and the tile is free.
 func _on_tile_died(tile_id: int) -> void:
+	if Replica.client:
+		return                                   # (the master runs the extermination; it comes as events)
 	var tile := tiles[tile_id - 1]
 	var who := player_name(tile_id)
 	game.log_event("%s IS GEËXTERMINEERD!" % who.to_upper(), Retro.BAD)
@@ -864,24 +1146,24 @@ func _on_tile_died(tile_id: int) -> void:
 		observer.focus(tile.global_position, 9.0)
 	else:                                        # several: a wide view on the robot
 		observer.focus(Vector3.ZERO, 9.0 + dying.size() * 1.5)
-	tile.blink_doomed()
-	robot.queue_death(robot_side(tile_id), tile.global_position + Vector3(0, 0.05, 0), func():
-		set_cable_flow(tile_id, Color(0.6, 0.0, 0.0), 0.25)
-		_death_sounds(tile_id)
-		dying[tile_id] = Time.get_ticks_msec()
-		exterminated.emit(tile_id, who)
-		clip_waiting[tile_id] = clock
-		screen_wall.play_death_clips()             # their movie, from the start, once their split view shows
-		await tile.play_death()
-		await get_tree().create_timer(free_delay).timeout
-		dying.erase(tile_id)
-		while death_clip_pending(tile_id):         # the tile stays theirs until they have seen it
-			await get_tree().process_frame
-		clip_waiting.erase(tile_id)
-		clip_started.erase(tile_id)
-		if player_name(tile_id) == who:            # still the same player
-			leave(tile_id)
-			game.log_event("%s IS WEER VRIJ" % Retro.tile_label(tile_id), Retro.DIM))
+	npc.doom(tile_id, func():                       # the shot landed
+			set_cable_flow(tile_id, Color(0.6, 0.0, 0.0), 0.25)
+			_death_sounds(tile_id)
+			dying[tile_id] = Time.get_ticks_msec()
+			exterminated.emit(tile_id, who)
+			clip_waiting[tile_id] = clock
+			screen_wall.play_death_clips()             # their movie, from the start, once their split view shows
+			Replica.relay("wall", &"play_death_clips", []),
+		func():                                        # the tile's death animation is over
+			await get_tree().create_timer(free_delay).timeout
+			dying.erase(tile_id)
+			while death_clip_pending(tile_id):         # the tile stays theirs until they have seen it
+				await get_tree().process_frame
+			clip_waiting.erase(tile_id)
+			clip_started.erase(tile_id)
+			if player_name(tile_id) == who:            # still the same player
+				leave(tile_id)
+				game.log_event("%s IS WEER VRIJ" % Retro.tile_label(tile_id), Retro.DIM))
 
 
 ## The tile's death (CyberTile.play_death): 1 s electrocution, then the explosion.
@@ -946,12 +1228,15 @@ const PERSONAL := {
 ## real ones). tile_id > 0: at that tile (adds "tile" and "angle", in degrees
 ## clockwise from T01 seen from above).
 func cue(event: StringName, tile_id := 0, data := {}) -> void:
+	if Replica.client:
+		return                                   # (a display node: the master's sounds and light cues come to it)
 	sound.play(event)
 	var d := data.duplicate()
 	if tile_id > 0 and tile_id <= tiles.size():
 		d["tile"] = tile_id
 		d["angle"] = snappedf(LightDirector.angle_of(tiles[tile_id - 1].global_position), 0.1)
 	lights.on_cue(event, d)
+	Replica.relay("lights", &"on_cue", [event, d])
 	light_cue.emit(event, d)
 	if tile_id > 0 and PERSONAL.has(event):                # the player's own line (accessible page)
 		narrator.say_to(tile_id, String(event), PERSONAL[event])
@@ -963,8 +1248,7 @@ func cue(event: StringName, tile_id := 0, data := {}) -> void:
 ## F = fire the plunger at a random tile, K = kill 3 random players, O = door.
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F:
-		var tile := tiles[randi() % tiles.size()]
-		robot.fire_at(tile.global_position + Vector3(0, 0.05, 0))
+		npc.command({"robot": "fire", "tile": randi() % tiles.size() + 1})
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_R:
 		var free := tiles.filter(func(t): return t.idle and not is_pending(t.tile_id))
 		if not free.is_empty():
@@ -996,7 +1280,7 @@ func _on_robot_hit(target: Vector3) -> void:
 		if tile.is_dead or tile.idle:
 			continue
 		if Vector2(tile.global_position.x, tile.global_position.z).distance_to(Vector2(target.x, target.z)) < 0.4:
-			for i in 3:
+			for i in 3:                              # (the robot's own hit: on every node by itself)
 				tile.fill_ring(Color.RED)
 				await get_tree().create_timer(0.1).timeout
 				tile.clear_ring()
@@ -1051,21 +1335,21 @@ func apply_command(cmd: Dictionary) -> void:
 				game.add_score(int(cmd.tile), n)
 			screen_wall.popup(int(cmd.tile), "%+d" % n, Retro.GOOD if n > 0 else Retro.BAD)
 		if cmd.has("revive"):
-			tile.revive()
+			rt(tile).revive()
 			set_cable_flow(int(cmd.tile), cable_color)
 		if cmd.has("health"):
 			tile.health = int(cmd.health)
 		if cmd.has("ring"):
-			tile.set_ring(cmd.ring.map(func(c): return Color(c)))
+			rt(tile).set_ring(cmd.ring.map(func(c): return Color(c)))
 		if cmd.has("led"):
-			tile.set_ring_led(int(cmd.led), Color(cmd.color))
+			rt(tile).set_ring_led(int(cmd.led), Color(cmd.color))
 		if cmd.has("press"):
-			tile.press_button(StringName(cmd.press))
+			rt(tile).press_button(StringName(cmd.press))
 		if cmd.has("pressure"):
 			for b in cmd.pressure:
 				tile.set_pressure(StringName(b), float(cmd.pressure[b]))
 		if cmd.has("button_led"):
-			tile.set_button_led(StringName(cmd.button_led), Color(cmd.color))
+			rt(tile).set_button_led(StringName(cmd.button_led), Color(cmd.color))
 		if cmd.get("result") is Dictionary:
 			game.on_result(int(cmd.tile), cmd.result)
 	match cmd.get("game", ""):
@@ -1092,39 +1376,18 @@ func apply_command(cmd: Dictionary) -> void:
 		"light":
 			room.set_ring_color(Color(cmd.color))
 	match cmd.get("robot", ""):
-		"head":
-			robot.turn_head_to(float(cmd.angle))
-		"fire":
-			if cmd.has("tile"):
-				robot.fire_at(tiles[int(cmd.tile) - 1].global_position + Vector3(0, 0.05, 0))
-			else:
-				robot.fire()
+		"":
+			pass
 		"spin":
-			robot.idle_spin_deg = float(cmd.get("speed", 30.0))
-			robot.release_head()
+			npc.command({"robot": "spin", "speed": float(cmd.get("speed", 30.0))})
+			npc.release()
 		"death":  # {"tile": 3} or {"tiles": [1, 5, 9]}
 			var ids: Array = cmd.get("tiles", [cmd.get("tile", 1)])
 			for id in ids:
-				var t := tiles[int(id) - 1]
-				t.is_dead = true
 				var tid := int(id)
-				robot.queue_death(robot_side(tid), t.global_position + Vector3(0, 0.05, 0), func():
+				tiles[tid - 1].is_dead = true
+				npc.doom(tid, func():
 					_death_sounds(tid)
-					t.play_death()
 					set_cable_flow(tid, Color(0.6, 0.0, 0.0), 0.25))
-		"look_at_tile":
-			robot.look_at_side(robot_side(int(cmd.tile)))
-		"bulb_effect":
-			robot.set_bulb_effect(str(cmd.effect), float(cmd.get("speed", 1.0)))
-		"bulbs":
-			robot.set_bulb_effect("none")
-			if cmd.has("side"):
-				robot.set_side_bulbs(int(cmd.side), Color(cmd.color))
-			else:
-				robot.set_all_bulbs(Color(cmd.color))
-		"dome":
-			robot.set_dome_color(Color(cmd.color))
-		"party":
-			robot.set_party_lamp(bool(cmd.get("on", true)))
-			if cmd.has("speed"):
-				robot.set_party_spin_speed(float(cmd.speed))
+		_:                                       # the operator's commands: the npc obeys them (everywhere)
+			npc.command(cmd)

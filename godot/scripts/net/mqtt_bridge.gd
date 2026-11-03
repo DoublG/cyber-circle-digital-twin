@@ -15,6 +15,10 @@ extends MqttClient
 ##   <prefix>/activated        game -> app    {"tile": 3, "player": "Erik"}
 ##   <prefix>/status           game -> all    "online" / "offline" (retained)
 ##   <prefix>/node/<id>        game -> all    retained announcement {id, role, host, port, screens, version}
+##   <prefix>/metrics/<id>     game -> all    every 2 s: performance (NodeMetrics + the display links, the game);
+##                                            also for each display node (they send theirs to the master)
+## A display node (Replica) only reads its own tiles: tile/<n>/cmd and tile/<n>/event
+## of the tiles on its screens (they are its controllers) - it publishes nothing.
 ##   <prefix>/state            game -> all    retained game state (GameManager.status()) for the web interface
 ##   <prefix>/event            game -> all    {text, color}: the event feed
 ##   <prefix>/tiles            control -> game  retained {"enabled": {"3": false, ...}}: tiles out of service
@@ -35,7 +39,8 @@ extends MqttClient
 @export var real_tiles := true   # tiles run their own logic: switch the twin's simulation off
 @export var node_id := ""        # name in the web interface; "" = "godot-<ip>"
 @export var role := "master"
-@export var enet_port := 0       # (display connections: next step)
+@export var display_port := 0       # the display nodes connect here (--serve-displays, MirrorServer)
+@export var advertise := ""      # the address announced (--advertise; "" = a LAN address of this machine)
 
 var _state_json := ""
 var _state_timer := 0.0
@@ -44,10 +49,16 @@ var _tile_timer := 0.0
 var _announce_timer := 0.0
 
 var arena: Node3D
+var _display_announced := {}     # master: display node id -> msec its node/<id> went out
 
 
 func setup(arena_node: Node3D) -> void:
 	arena = arena_node
+	if Replica.client:
+		_setup_display()
+		return
+	if arena.replica:                                   # the display nodes' metrics, published for them
+		arena.replica.on_metrics = _publish_display
 	if url == "":
 		return
 	if real_tiles:
@@ -55,6 +66,14 @@ func setup(arena_node: Node3D) -> void:
 	message.connect(_on_message)
 	if node_id == "":
 		node_id = "godot-" + _lan_address().replace(".", "-")
+	var metrics := NodeMetrics.new()
+	metrics.name = "Metrics"
+	metrics.mqtt = self
+	metrics.node_id = node_id
+	metrics.role = role
+	metrics.topic = "%s/metrics/%s" % [topic_prefix, node_id]
+	metrics.extra = _metrics
+	add_child(metrics)
 	connected.connect(func():
 		print("mqtt: connected to ", url)
 		publish(topic_prefix + "/status", "online", true)
@@ -140,7 +159,7 @@ func _on_message(topic: String, payload: PackedByteArray) -> void:
 		return
 	if topic == topic_prefix + "/texts":                 # the operator's texts (Texts)
 		Texts.apply(data)
-		arena.screen_wall.refresh()                      # (free tiles: their line)
+		arena.screen_wall.refresh_all()                  # (free tiles: their line)
 		return
 	if topic == topic_prefix + "/tiles":                 # tiles in / out of service
 		if data.get("installed") is Array:               # the places of this installation
@@ -159,6 +178,8 @@ func _on_message(topic: String, payload: PackedByteArray) -> void:
 
 func _process(delta: float) -> void:
 	super(delta)
+	if Replica.client:
+		return
 	_tile_timer -= delta
 	if online and role == "master" and _tile_timer <= 0.0:   # the real tiles' displays, on every change
 		_tile_timer = 0.1
@@ -181,22 +202,113 @@ func _process(delta: float) -> void:
 			publish(topic_prefix + "/state", json, true)
 
 
+# ---------------------------------------------------------------- a display node
+
+## A display node: its metrics go to the master (Replica); MQTT (if given) only
+## for its own tiles, read-only - their commands and presses, so its tiles
+## work as its controllers even when the link to the master is down.
+func _setup_display() -> void:
+	var metrics := NodeMetrics.new()
+	metrics.name = "Metrics"
+	metrics.mqtt = self
+	metrics.node_id = node_id
+	metrics.role = "display"
+	metrics.sink = arena.replica.send_metrics
+	metrics.extra = func(_span):
+		return {"screens_shown": arena.replica_screens, "view_scale": arena.screen_wall.view_scale,
+			"replica": arena.replica.link(), "own_tiles_mqtt": arena.own_tiles_live}
+	add_child(metrics)
+	if url == "":
+		return
+	message.connect(_on_display_message)
+	connected.connect(func():
+		print("mqtt: connected to %s (own tiles only)" % url)
+		arena.own_tiles_live = true)
+	disconnected.connect(func(): arena.own_tiles_live = false)
+	for id in range(1, arena.tiles.size() + 1):
+		if arena.is_own_tile(id):
+			subscribe("%s/tile/%d/cmd" % [topic_prefix, id])
+			subscribe("%s/tile/%d/event" % [topic_prefix, id])
+	start()
+
+
+func _on_display_message(topic: String, payload: PackedByteArray) -> void:
+	var data = JSON.parse_string(payload.get_string_from_utf8())
+	var parts := topic.trim_prefix(topic_prefix + "/").split("/")
+	if not data is Dictionary or parts.size() != 3 or parts[0] != "tile":
+		return
+	var id := int(parts[1])
+	if id < 1 or id > arena.tiles.size() or not arena.is_own_tile(id):
+		return
+	if Replica.debug:
+		print("replica: own tile %d over MQTT: %s %s" % [id, parts[2], data])
+	if parts[2] == "cmd":
+		arena.replica_tile_msg(id, data)               # (its tile logic: the same program as the real tile)
+	elif parts[2] == "event" and data.has("press"):
+		arena.tiles[id - 1].press_button(StringName(data.press))   # (shows at once; the master scores it)
+
+
+## Master: a display node's metrics, on MQTT for it (it has none itself).
+func _publish_display(peer: Dictionary, m: Dictionary) -> void:
+	if not online:
+		return
+	var id := str(peer.get("node", "display"))
+	m["id"] = id
+	m["role"] = "display"
+	publish_json("%s/metrics/%s" % [topic_prefix, id], m)
+	var now := Time.get_ticks_msec()
+	if now - int(_display_announced.get(id, -100000)) > 10000:
+		_display_announced[id] = now
+		var link: Dictionary = m.get("link", {})
+		publish_json("%s/node/%s" % [topic_prefix, id], {"id": id, "role": "display", "host": link.get("host", ""),
+			"port": 0, "screens": peer.get("screens", []), "fps": m.get("fps", 0), "master": node_id,
+			"version": ProjectSettings.get_setting("application/config/version", "")}, true)
+
+
 func _announce() -> void:
 	_announce_timer = 10.0
 	publish_json(topic_prefix + "/node/" + node_id, {"id": node_id, "role": role, "host": _lan_address(),
-		"port": enet_port, "screens": range(1, arena.screen_wall.groups().size() + 1),
+		"port": display_port, "screens": range(1, arena.screen_wall.groups().size() + 1).filter(
+			func(k): return k not in arena.screen_wall.remote_screens),
+		"remote_screens": arena.screen_wall.remote_screens,
+		"displays": arena.replica.peers.size() if arena.replica else 0,
 		"version": ProjectSettings.get_setting("application/config/version", ""),
 		"fps": Engine.get_frames_per_second(),
 		"db_pending": arena.game.db.pending() if arena.game.db and arena.game.db.has_method("pending") else 0}, true)
 
 
-## This machine's address on the LAN (the first private IPv4 address).
+## The master's own part of its metrics: the mirror to the display nodes (per
+## display: throughput, backlog), the companion videos, the game.
+func _metrics(_span: float) -> Dictionary:
+	var out := {"screens_local": range(1, arena.screen_wall.groups().size() + 1).filter(
+		func(k): return k not in arena.screen_wall.remote_screens).size(),
+		"streams": arena._streams.size(), "players": arena.player_ids().size(),
+		"game_state": GameManager.State.keys()[arena.game.state],
+		"db_pending": arena.game.db.pending() if arena.game.db and arena.game.db.has_method("pending") else 0}
+	var r: Replica = arena.replica
+	if r:
+		out["replica"] = {"port": r.port, "displays": r.peer_list(), "events": r.stats.events,
+			"deltas": r.stats.deltas, "snapshots": r.stats.snapshots, "live": r.stats.live}
+	return out
+
+
+## This machine's address on the LAN: --advertise, else a private IPv4
+## address (192.168. / 10. first: 172.17-31 are often Docker's bridges).
 func _lan_address() -> String:
-	for a in IP.get_local_addresses():
-		if a.begins_with("192.168.") or a.begins_with("10.") or a.begins_with("172."):
-			return a
+	if advertise != "":
+		return advertise
+	return lan_address()
+
+
+static func lan_address() -> String:
+	var addrs := IP.get_local_addresses()
+	for prefix in ["192.168.", "10.", "172."]:
+		for a in addrs:
+			if a.begins_with(prefix):
+				return a
 	return "127.0.0.1"
 
 
 func _exit_tree() -> void:
-	publish(topic_prefix + "/status", "offline", true)
+	if not Replica.client:
+		publish(topic_prefix + "/status", "offline", true)

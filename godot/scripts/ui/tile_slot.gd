@@ -59,6 +59,7 @@ func _ready() -> void:
 	else:
 		box.add_child(_wrapped("VRIJ", 96, Color(Retro.DIM, 0.8)))
 		var cta := CallToAction.new(52)
+		cta.offset = tile_id
 		cta.custom_minimum_size.y = 200
 		box.add_child(cta)
 		box.add_child(_wrapped(Texts.join_text(), 32, Retro.CREAM))
@@ -72,8 +73,8 @@ func _wrapped(text: String, font_size: int, col: Color) -> Label:
 	return l
 
 
-func _process(delta: float) -> void:
-	_t += delta
+func _process(_delta: float) -> void:
+	_t = fmod(Time.get_unix_time_from_system(), 3600.0)   # (the wall clock: in step on every node)
 	queue_redraw()
 	if _diagram:
 		_diagram.t = _t

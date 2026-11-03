@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="926" viewBox="0 0 1400 926" font-family="Helvetica, Arial, sans-serif">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="24" y="38" font-size="24" text-anchor="start" font-weight="700" fill="#24292f">Sequence – a visitor joins and answers</text>
+<text x="24" y="62" font-size="13" text-anchor="start" font-weight="400" fill="#57606a">From the QR card to a press on the tile (MQTT topics with the prefix cybercircle/)</text>
+<rect x="25.0" y="85" width="190" height="50" rx="8" fill="#fff8c5" stroke="#24292f" stroke-width="1.5"/>
+<text x="120.0" y="106" font-size="13.5" text-anchor="middle" font-weight="700" fill="#24292f">Gamemaster app</text>
+<text x="120.0" y="124" font-size="10.5" text-anchor="middle" font-weight="400" fill="#57606a">phone</text>
+<line x1="120.0" y1="135" x2="120.0" y2="906" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 5"/>
+<rect x="257.0" y="85" width="190" height="50" rx="8" fill="#ddf4ff" stroke="#24292f" stroke-width="1.5"/>
+<text x="352.0" y="106" font-size="13.5" text-anchor="middle" font-weight="700" fill="#24292f">Control server</text>
+<text x="352.0" y="124" font-size="10.5" text-anchor="middle" font-weight="400" fill="#57606a">+ database</text>
+<line x1="352.0" y1="135" x2="352.0" y2="906" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 5"/>
+<rect x="489.0" y="85" width="190" height="50" rx="8" fill="#ddf4ff" stroke="#24292f" stroke-width="1.5"/>
+<text x="584.0" y="106" font-size="13.5" text-anchor="middle" font-weight="700" fill="#24292f">Broker</text>
+<text x="584.0" y="124" font-size="10.5" text-anchor="middle" font-weight="400" fill="#57606a">Mosquitto</text>
+<line x1="584.0" y1="135" x2="584.0" y2="906" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 5"/>
+<rect x="721.0" y="85" width="190" height="50" rx="8" fill="#fbefff" stroke="#24292f" stroke-width="1.5"/>
+<text x="816.0" y="106" font-size="13.5" text-anchor="middle" font-weight="700" fill="#24292f">Godot master</text>
+<text x="816.0" y="124" font-size="10.5" text-anchor="middle" font-weight="400" fill="#57606a">the game</text>
+<line x1="816.0" y1="135" x2="816.0" y2="906" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 5"/>
+<rect x="953.0" y="85" width="190" height="50" rx="8" fill="#dafbe1" stroke="#24292f" stroke-width="1.5"/>
+<text x="1048.0" y="106" font-size="13.5" text-anchor="middle" font-weight="700" fill="#24292f">Tile T03</text>
+<text x="1048.0" y="124" font-size="10.5" text-anchor="middle" font-weight="400" fill="#57606a">ESP32</text>
+<line x1="1048.0" y1="135" x2="1048.0" y2="906" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 5"/>
+<rect x="1185.0" y="85" width="190" height="50" rx="8" fill="#fff1e5" stroke="#24292f" stroke-width="1.5"/>
+<text x="1280.0" y="106" font-size="13.5" text-anchor="middle" font-weight="700" fill="#24292f">Lights</text>
+<text x="1280.0" y="124" font-size="10.5" text-anchor="middle" font-weight="400" fill="#57606a">DMX bridge</text>
+<line x1="1280.0" y1="135" x2="1280.0" y2="906" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 5"/>
+<polyline points="120.0,170 352.0,170" fill="none" stroke="#57606a" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="352.0,170.0 342.9,174.1 342.9,165.9" fill="#57606a"/>
+<text x="236.0" y="163" font-size="11" text-anchor="middle" font-weight="600" fill="#57606a" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">POST /api/players  (name, colour, age)</text>
+<polyline points="120.0,216 352.0,216" fill="none" stroke="#57606a" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="352.0,216.0 342.9,220.1 342.9,211.9" fill="#57606a"/>
+<text x="236.0" y="209" font-size="11" text-anchor="middle" font-weight="600" fill="#57606a" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">POST /api/players/42/assign {tile: 3}</text>
+<polyline points="352.0,262 584.0,262" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="584.0,262.0 574.9,266.1 574.9,257.9" fill="#0a7d6f"/>
+<text x="468.0" y="255" font-size="11" text-anchor="middle" font-weight="600" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">cmd {assign: 42, tile: 3}</text>
+<polyline points="584.0,308 816.0,308" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="816.0,308.0 806.9,312.1 806.9,303.9" fill="#0a7d6f"/>
+<text x="700.0" y="301" font-size="11" text-anchor="middle" font-weight="600" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">cmd {assign: 42, tile: 3}</text>
+<polyline points="816.0,354 352.0,354" fill="none" stroke="#57606a" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="352.0,354.0 361.1,349.9 361.1,358.1" fill="#57606a"/>
+<text x="584.0" y="347" font-size="11" text-anchor="middle" font-weight="600" fill="#57606a" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">GET player 42 (name, colour)</text>
+<polyline points="816.0,400 584.0,400" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="584.0,400.0 593.1,395.9 593.1,404.1" fill="#0a7d6f"/>
+<text x="700.0" y="393" font-size="11" text-anchor="middle" font-weight="600" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">tile/3/state {mode: pending, color}  · registered · light/event registered</text>
+<polyline points="584.0,446 1048.0,446" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="1048.0,446.0 1038.9,450.1 1038.9,441.9" fill="#0a7d6f"/>
+<text x="816.0" y="439" font-size="11" text-anchor="middle" font-weight="600" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">tile/3/state (retained)</text>
+<polyline points="584.0,492 1280.0,492" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="1280.0,492.0 1270.9,496.1 1270.9,487.9" fill="#0a7d6f"/>
+<text x="932.0" y="485" font-size="11" text-anchor="middle" font-weight="600" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">light/event {registered, tile 3, angle 55°}</text>
+<rect x="898.0" y="522" width="300" height="26" rx="4" fill="#fff8c5" stroke="#d4a72c" stroke-width="1.5"/>
+<text x="1048.0" y="540" font-size="11" text-anchor="middle" font-weight="400" fill="#24292f">the tile glows in the colour; the player presses the 4 icons</text>
+<polyline points="1048.0,584 584.0,584" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="584.0,584.0 593.1,579.9 593.1,588.1" fill="#0a7d6f"/>
+<text x="816.0" y="577" font-size="11" text-anchor="middle" font-weight="600" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">tile/3/event {press: Square} … ×4</text>
+<polyline points="584.0,630 816.0,630" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="816.0,630.0 806.9,634.1 806.9,625.9" fill="#0a7d6f"/>
+<text x="700.0" y="623" font-size="11" text-anchor="middle" font-weight="600" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">tile/3/event</text>
+<polyline points="816.0,676 584.0,676" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="584.0,676.0 593.1,671.9 593.1,680.1" fill="#0a7d6f"/>
+<text x="700.0" y="669" font-size="11" text-anchor="middle" font-weight="600" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">state {mode: playing, lives…} · activated · light/event join</text>
+<rect x="666.0" y="706" width="300" height="26" rx="4" fill="#fff8c5" stroke="#d4a72c" stroke-width="1.5"/>
+<text x="816.0" y="724" font-size="11" text-anchor="middle" font-weight="400" fill="#24292f">a quiz round: question on the screens, voice line</text>
+<polyline points="1048.0,768 816.0,768" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="816.0,768.0 825.1,763.9 825.1,772.1" fill="#0a7d6f"/>
+<text x="932.0" y="761" font-size="11" text-anchor="middle" font-weight="600" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">tile/3/event {press: Cross}  (via the broker)</text>
+<polyline points="816.0,814 352.0,814" fill="none" stroke="#57606a" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="352.0,814.0 361.1,809.9 361.1,818.1" fill="#57606a"/>
+<text x="584.0" y="807" font-size="11" text-anchor="middle" font-weight="600" fill="#57606a" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">POST score (end of the game)</text>
+<polyline points="352.0,860 584.0,860" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="584.0,860.0 574.9,864.1 574.9,855.9" fill="#0a7d6f"/>
+<text x="468.0" y="853" font-size="11" text-anchor="middle" font-weight="600" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">db {changed: ranking}</text>
+</svg>

@@ -10,6 +10,7 @@ Gamemaster app in a browser (iPhone): http://<this pc>:8080/gm/ (the Flutter web
   game master  GET /api/questions, GET /api/players/{id}, GET /api/ranking,
                POST /api/games, POST /api/games/{id}/rounds|results|end
   displays     GET /api/master        (where the master is: the Pis connect to it)
+  performance  GET /api/metrics       (every component: fps, frame times, CPU, memory, links; Prestaties tab)
   app          POST /api/players {name, color, age, card?} -> {id};  POST /api/players/{id}/assign {tile?}
   website      GET /api/website (is the registration website up? --website=URL of its health endpoint,
                none: a mock - POST /api/website/mock {"up": false} to test), the last registration in
@@ -161,6 +162,55 @@ class TileIn(BaseModel):
 GM_WEB = os.path.join(HERE, "..", "gamemaster_app", "build", "web")
 
 
+def proc_cpu():
+    """This process's CPU seconds (user + system), or None."""
+    try:
+        import resource
+        r = resource.getrusage(resource.RUSAGE_SELF)
+        return r.ru_utime + r.ru_stime
+    except (ImportError, OSError):
+        return None
+
+
+def _proc_status(key):
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith(key + ":"):
+                    return line.split()[1]
+    except OSError:
+        pass
+    return None
+
+
+def proc_rss_mb():
+    kb = _proc_status("VmRSS")
+    return round(int(kb) / 1024, 1) if kb else None
+
+
+def proc_threads():
+    n = _proc_status("Threads")
+    return int(n) if n else None
+
+
+def machine_stats():
+    """The machine: load, memory, temperature (Linux)."""
+    out = {}
+    try:
+        out["load"] = float(open("/proc/loadavg").read().split()[0])
+        out["cpus"] = os.cpu_count()
+        mem = {line.split(":")[0]: int(line.split()[1]) for line in open("/proc/meminfo")}
+        out["sys_mem_mb"] = mem["MemTotal"] // 1024
+        out["sys_mem_used"] = round(100 * (mem["MemTotal"] - mem["MemAvailable"]) / mem["MemTotal"], 1)
+    except (OSError, KeyError, ValueError, IndexError):
+        pass
+    try:
+        out["temp_c"] = round(int(open("/sys/class/thermal/thermal_zone0/temp").read()) / 1000, 1)
+    except (OSError, ValueError):
+        pass
+    return out
+
+
 def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website | None = None,
                public_mqtt: str = "", a11y_opts: dict | None = None) -> FastAPI:
     site = site or Website()
@@ -205,9 +255,16 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
     DB_WRITES = (("/api/players", "players"), ("/api/cards/", "players"), ("/api/questions", "questions"),
                  ("/api/games/", "ranking"))
 
+    http = {"requests": 0, "ms": 0.0, "errors": 0}     # (the control server's own metrics: Prestaties)
+
     @app.middleware("http")
     async def notify_db_writes(request: Request, call_next):
+        t0 = time.perf_counter()
         response = await call_next(request)
+        if not request.url.path.endswith("/live") and not request.url.path.endswith("/events"):
+            http["requests"] += 1                          # (an SSE stream lasts as long as the page: not a request)
+            http["ms"] += (time.perf_counter() - t0) * 1000.0
+            http["errors"] += response.status_code >= 500
         path = request.url.path
         if request.method in ("POST", "PUT", "DELETE") and response.status_code < 300 and not path.endswith("/assign"):
             what = next((w for prefix, w in DB_WRITES if path.startswith(prefix)), None)
@@ -231,6 +288,37 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
                 "t01_clock": float(db.setting("t01_clock", "12") or 12),
                 "website": {k: v for k, v in site.snapshot().items() if k != "history"},
                 "gamemasters_online": online_ref[0]() if online_ref else []}
+
+    # ------------------------------------------------------------ performance (web interface: Prestaties)
+
+    started = time.time()
+    last = {"t": time.time(), "cpu": proc_cpu(), "req": 0, "ms": 0.0, "rx": 0, "rxb": 0}
+
+    @app.get("/api/metrics")
+    def metrics():
+        """Every component's performance: the Godot processes (fps, frame times, CPU,
+        memory, the mirror links to the display nodes), the broker, this server,
+        the tiles, the gamemaster apps, the website."""
+        now, cpu = time.time(), proc_cpu()
+        span = max(now - last["t"], 0.001)
+        req = http["requests"] - last["req"]
+        control = {"uptime": int(now - started), "pid": os.getpid(),
+                   "cpu": round(100.0 * (cpu - last["cpu"]) / span, 1) if cpu is not None and last["cpu"] is not None else None,
+                   "rss_mb": proc_rss_mb(), "threads": proc_threads(),
+                   "http_s": round(req / span, 2), "http_ms": round((http["ms"] - last["ms"]) / req, 1) if req else None,
+                   "http_errors": http["errors"], "sse": len(listeners), "mqtt": link.online,
+                   "mqtt_in_s": round((link.rx_msgs - last["rx"]) / span, 1),
+                   "mqtt_in_kbps": round((link.rx_bytes - last["rxb"]) * 8 / 1000 / span, 1),
+                   "mqtt_reconnects": max(link.connects - 1, 0), **machine_stats()}
+        last.update(t=now, cpu=cpu, req=http["requests"], ms=http["ms"], rx=link.rx_msgs, rxb=link.rx_bytes)
+        tiles = [{k: d.get(k) for k in ("device", "fw", "net", "ip", "rssi", "link", "uptime", "heap", "loop_hz",
+                                        "mqtt_reconnects", "online")} | {"age": round(now - d.get("seen", now))}
+                 for d in link.device_list()]
+        w = site.snapshot()
+        return {"time": now, "nodes": link.metrics_list(), "announced": link.node_list(), "broker": link.broker_stats(),
+                "control": control, "tiles": tiles, "gamemasters": len(online_ref[0]()) if online_ref else 0,
+                "website": {"status": w["status"], "latency_ms": w["latency_ms"], "mock": w["mock"]},
+                "streams": {str(k): v for k, v in link.streams.items()}}
 
     # ------------------------------------------------------------ live (web interface)
 
@@ -442,6 +530,8 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         node = next((n for n in link.node_list() if n.get("id") == m.node), None)
         if node is None:
             raise HTTPException(404, "unknown node")
+        if node.get("role") == "display":
+            raise HTTPException(409, "a display node cannot be the master")
         link.set_master({"node": node["id"], "host": node.get("host", ""), "port": node.get("port", 0),
                          "since": time.strftime("%H:%M:%S")})
         return link.master

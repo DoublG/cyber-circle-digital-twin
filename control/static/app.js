@@ -28,7 +28,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button, .tab").forEach(e => e.classList.remove("active"));
   b.classList.add("active");
   $(`#tab-${b.dataset.tab}`).classList.add("active");
-  ({ recovery: renderRecovery, mqtt: startMqttLog, website: loadWebsite, sounds: renderSounds, texts: loadTexts, gamemasters: loadGamemasters, players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: loadTiles, settings: loadSettings })[b.dataset.tab]?.();
+  ({ perf: startPerf, recovery: renderRecovery, mqtt: startMqttLog, website: loadWebsite, sounds: renderSounds, texts: loadTexts, gamemasters: loadGamemasters, players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: loadTiles, settings: loadSettings })[b.dataset.tab]?.();
 });
 
 // ---------------------------------------------------------------- live
@@ -155,10 +155,15 @@ function renderNodes() {
   const tbody = $("#nodes tbody");
   tbody.innerHTML = (live.nodes || []).map(n => {
     const isMaster = live.master?.node === n.id;
-    return `<tr class="${isMaster ? "master" : ""}"><td>${esc(n.id)}</td><td>${esc(isMaster ? "MASTER" : n.role)}</td>
-      <td>${esc(n.host)}${n.port ? ":" + n.port : ""}</td><td>${esc((n.screens || []).join(", ") || "-")}</td>
-      <td><span class="dot ${n.online ? "on" : ""}"></span> ${n.online ? "online" : "offline"}${n.fps ? ` · ${n.fps} fps` : ""}${n.db_pending ? ` · <b class="bad">database: ${n.db_pending} writes waiting</b>` : ""}</td>
-      <td>${isMaster || !n.online ? "" : `<button class="small" data-master="${esc(n.id)}">Maak master</button>`}</td></tr>`;
+    const display = n.role === "display";
+    // a display node (a Pi): its screens and whether it is connected to the master; the master: which screens the Pis render
+    const screens = esc((n.screens || []).join(", ") || "-")
+      + (n.remote_screens?.length ? ` <span class="hint">(op de displays: ${esc(n.remote_screens.join(", "))}; ${n.displays || 0} verbonden)</span>` : "");
+    const link = display ? (n.master ? ` · verbonden met ${esc(n.master)}` : ` · <b class="bad">wacht op de master</b>`) : "";
+    return `<tr class="${isMaster ? "master" : ""}"><td>${esc(n.id)}</td><td>${esc(isMaster ? "MASTER" : display ? "DISPLAY" : n.role)}</td>
+      <td>${esc(n.host)}${n.port ? ":" + n.port : ""}</td><td>${screens}</td>
+      <td><span class="dot ${n.online ? "on" : ""}"></span> ${n.online ? "online" : "offline"}${n.fps ? ` · ${n.fps} fps` : ""}${link}${n.db_pending ? ` · <b class="bad">database: ${n.db_pending} writes waiting</b>` : ""}</td>
+      <td>${isMaster || !n.online || display ? "" : `<button class="small" data-master="${esc(n.id)}">Maak master</button>`}</td></tr>`;
   }).join("") || `<tr><td colspan="6" class="hint">Nog geen processen gezien.</td></tr>`;
   $("#master").textContent = live.master?.node
     ? `Master: ${live.master.node} (${live.master.host}:${live.master.port}) sinds ${live.master.since || "?"}`
@@ -328,6 +333,126 @@ $("#tile-table").onclick = async e => {
   await api("PUT", `/api/tiles/${t.number}`, { enabled: !t.enabled });
   loadTiles();
 };
+
+// ---------------------------------------------------------------- Prestaties: every component's performance
+let perfTimer = null;
+function startPerf() {
+  if (perfTimer) return;
+  perfTimer = setInterval(pollPerf, 2000);
+  pollPerf();
+}
+async function pollPerf() {
+  if (!$("#tab-perf").classList.contains("active")) { clearInterval(perfTimer); perfTimer = null; return; }
+  try { renderPerf(await (await fetch("/api/metrics")).json()); } catch (e) { /* the next poll */ }
+}
+const num = (v, d = 0) => v == null || Number.isNaN(Number(v)) ? "–" : Number(v).toFixed(d);
+// a value coloured by its thresholds: higher is worse (hi) or lower is worse (lo)
+function lvl(v, warn, bad, lowerIsWorse = false) {
+  if (v == null) return "";
+  return lowerIsWorse ? (v < bad ? "bad" : v < warn ? "warn" : "good") : (v > bad ? "bad" : v > warn ? "warn" : "good");
+}
+const span = (cls, text) => `<span class="${cls}">${text}</span>`;
+function dur(s) {
+  if (s == null) return "–";
+  s = Math.round(s);
+  return s < 120 ? `${s} s` : s < 7200 ? `${Math.round(s / 60)} min` : s < 172800 ? `${(s / 3600).toFixed(1)} u` : `${Math.round(s / 86400)} d`;
+}
+function spark(values, max, target) {
+  if (!values.length) return "";
+  const w = 120, h = 22, top = Math.max(max, ...values, 1), n = Math.max(values.length - 1, 1);
+  const pts = values.map((v, i) => `${(i / n * w).toFixed(1)},${(h - v / top * (h - 2) - 1).toFixed(1)}`).join(" ");
+  const ty = target ? (h - target / top * (h - 2) - 1).toFixed(1) : null;
+  return `<svg class="spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${ty ? `<line x1="0" x2="${w}" y1="${ty}" y2="${ty}"/>` : ""}<polyline points="${pts}"/></svg>`;
+}
+// fps: a Pi aims at 30 (a slow frame is over 1/30 s), the master at 60
+const fpsLevel = n => lvl(n.fps, n.role === "display" ? 29 : 55, n.role === "display" ? 24 : 30, true);
+function renderPerf(m) {
+  const nodes = m.nodes || [], c = m.control || {}, b = m.broker || {};
+  const master = nodes.find(n => n.role === "master"), displays = nodes.filter(n => n.role === "display");
+  const tilesOn = (m.tiles || []).filter(t => t.online);
+  const weakest = Math.min(...tilesOn.map(t => t.rssi ?? 0));
+  const card = (cls, k, v, sub) => `<div class="card ${cls}"><div class="k">${esc(k)}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
+  const nodeCard = n => card(n.online ? fpsLevel(n) : "off", `${n.role === "master" ? "Master" : "Display"} ${n.id}`,
+    n.online ? `${num(n.fps)} fps` : "offline", n.online ? `CPU ${num(n.cpu)}% · ${n.temp_c != null ? num(n.temp_c, 0) + " °C" : num(n.rss_mb) + " MB"}` : `${dur(n.age)} geleden`);
+  $("#perf-cards").innerHTML = [
+    master ? nodeCard(master) : card("off", "Master", "–", "stuurt geen metingen"),
+    ...displays.map(nodeCard),
+    card(c.mqtt ? lvl(c.cpu, 50, 90) : "bad", "Controleserver", `${num(c.cpu)}% CPU`, `${num(c.http_s, 1)} verz./s · ${c.sse} live`),
+    card(b.clients != null ? "good" : "off", "MQTT-broker", b.clients != null ? `${num(b.clients)} clients` : "–",
+      b.clients != null ? `${num(b.msgs_in_min)} / ${num(b.msgs_out_min)} ber./min` : "geen $SYS-gegevens"),
+    card(!m.tiles?.length ? "off" : tilesOn.length < m.tiles.length ? "warn" : "good", "Tegels", `${tilesOn.length} / ${(m.tiles || []).length}`,
+      tilesOn.length && Number.isFinite(weakest) && weakest < 0 ? `zwakste signaal ${weakest} dBm` : "online"),
+    card(m.gamemasters ? "good" : "off", "Gamemaster-apps", String(m.gamemasters), "ingelogd"),
+    card(m.website?.mock ? "off" : m.website?.status === "up" ? "good" : "bad", "Website", esc(m.website?.status || "–"),
+      m.website?.latency_ms != null ? `${num(m.website.latency_ms)} ms` : ""),
+  ].join("");
+
+  $("#perf-nodes tbody").innerHTML = nodes.map(n => {
+    const hist = n.hist || [];
+    const machine = [n.load != null ? `load ${num(n.load, 2)}/${n.cpus}` : "", n.sys_mem_used != null ? `${num(n.sys_mem_used)}% RAM` : "",
+      n.temp_c != null ? span(lvl(n.temp_c, 70, 80), `${num(n.temp_c, 0)} °C`) : "", n.cpu_mhz ? `${n.cpu_mhz} MHz` : ""].filter(Boolean).join(" · ");
+    return `<tr><td><span class="dot ${n.online ? "on" : ""}"></span> ${esc(n.id)} <span class="hint">${esc(n.role)}</span></td>
+      <td>${span(fpsLevel(n), num(n.fps))}${spark(hist.map(h => h[1]), n.role === "display" ? 30 : 60, n.role === "display" ? 30 : 60)}</td>
+      <td>${num(n.frame_ms, 1)} / ${span(lvl(n.worst_ms, 50, 100), num(n.worst_ms))} ms</td>
+      <td>${span(n.slow_frames > 5 ? "bad" : n.slow_frames ? "warn" : "good", num(n.slow_frames))}</td>
+      <td>${num(n.cpu)}%</td><td>${num(n.rss_mb)} MB</td><td>${num(n.vram_mb)} MB</td>
+      <td>${num(n.draw_calls)}</td><td>${num((n.primitives || 0) / 1000)}k</td><td>${num(n.nodes)}${n.orphans ? span("warn", ` (+${n.orphans} los)`) : ""}</td>
+      <td>${machine || "–"}</td><td>${n.mqtt ? `${num(n.mqtt.in_s, 1)}↓ ${num(n.mqtt.out_s, 1)}↑ /s` : "–"}</td>
+      <td class="hint">${esc(n.renderer)} · ${esc(n.gpu)}</td><td>${dur(n.uptime)}</td></tr>`;
+  }).join("") || `<tr><td colspan="14" class="hint">Nog geen metingen: start het spel met --mqtt (de processen sturen ze elke 2 s).</td></tr>`;
+
+  // a display link: the master's side (ENet's own statistics) with the display's side
+  const links = master?.replica?.displays || [];
+  const ids = [...new Set([...links.map(l => l.node), ...displays.map(d => d.id)])];
+  $("#perf-links tbody").innerHTML = ids.map(id => {
+    const l = links.find(x => x.node === id) || {}, d = displays.find(x => x.id === id), r = d?.replica || {};
+    const up = links.some(x => x.node === id) || r.online;
+    const rtt = l.rtt_ms ?? r.rtt_ms, jit = l.rtt_var_ms ?? r.rtt_var_ms, loss = l.loss ?? r.loss;
+    return `<tr><td><span class="dot ${up ? "on" : ""}"></span> ${esc(id)}</td><td>${esc(l.host || "–")}</td>
+      <td>${esc((l.screens || d?.screens_shown || []).join(", "))}</td>
+      <td>${rtt != null ? span(lvl(rtt, 20, 100), num(rtt) + " ms") : "–"}</td>
+      <td>${jit != null ? span(lvl(jit, 15, 60), num(jit) + " ms") : "–"}</td>
+      <td>${loss != null ? span(lvl(loss, 1, 5), num(loss, 1) + "%") : "–"}</td>
+      <td>${r.events != null ? `${r.events} <span class="hint">· ${r.deltas} delta's · ${r.live} live</span>` : "–"}</td>
+      <td>${r.snapshots ?? "–"}</td>
+      <td>${d ? (d.own_tiles_mqtt ? span("good", "ja") : span("warn", "nee (via de master)")) : "–"}</td>
+      <td>${dur(l.connected_s ?? r.connected_s)}</td><td>${r.connects ? Math.max(r.connects - 1, 0) + "×" : "–"}</td></tr>`;
+  }).join("") || `<tr><td colspan="11" class="hint">Geen displays (de master rendert alle schermen zelf, of geen --serve-replicas).</td></tr>`;
+  const rp = master?.replica;
+  $("#perf-mirror").textContent = rp ? `Displays op UDP-poort ${rp.port}: ${rp.events} gebeurtenissen, ${rp.deltas} delta's, `
+    + `${rp.snapshots} snapshots verstuurd. Rondreis, jitter en verlies: ENet's eigen metingen per display. `
+    + `De displays spelen het spel zelf af uit de spelstatus van de master; valt de verbinding weg, dan spelen ze door en halen ze bij terugkomst een nieuwe snapshot.` : "";
+
+  const row = (k, v) => `<tr><td>${esc(k)}</td><td>${v}</td></tr>`;
+  $("#perf-control").innerHTML = [
+    row("CPU / geheugen", `${num(c.cpu)}% · ${num(c.rss_mb)} MB · ${c.threads ?? "–"} threads`),
+    row("HTTP", `${num(c.http_s, 1)} verzoeken/s · ${c.http_ms != null ? num(c.http_ms, 1) + " ms gem." : "–"} · ${c.http_errors} fouten (5xx)`),
+    row("Live-verbindingen", `${c.sse} (webinterface en toegankelijke pagina's)`),
+    row("MQTT", `${c.mqtt ? span("good", "verbonden") : span("bad", "niet verbonden")} · ${num(c.mqtt_in_s, 1)} ber./s · ${num(c.mqtt_in_kbps, 1)} kbit/s · ${c.mqtt_reconnects}× herverbonden`),
+    row("Machine", [c.load != null ? `load ${num(c.load, 2)}/${c.cpus}` : "", c.sys_mem_used != null ? `${num(c.sys_mem_used)}% van ${num(c.sys_mem_mb / 1024, 1)} GB` : "",
+      c.temp_c != null ? `${num(c.temp_c, 0)} °C` : ""].filter(Boolean).join(" · ") || "–"),
+    row("Actief", dur(c.uptime)),
+  ].join("");
+  $("#perf-broker").innerHTML = b.clients == null ? row("", `<span class="hint">Geen $SYS-tellers ontvangen (Mosquitto stuurt ze elke 10 s; een andere broker misschien niet).</span>`) : [
+    row("Versie / actief", `${esc(b.version)} · ${esc(b.uptime)}`),
+    row("Clients", `${num(b.clients)} verbonden (max ${num(b.clients_max)})`),
+    row("Berichten", `${num(b.msgs_in_min)} in / ${num(b.msgs_out_min)} uit per min (gem. 1 min)`),
+    row("Data", `${num(b.bytes_in_min * 8 / 60 / 1000, 1)} in / ${num(b.bytes_out_min * 8 / 60 / 1000, 1)} uit kbit/s`),
+    row("Abonnementen / bewaard", `${num(b.subscriptions)} / ${num(b.retained)}`),
+    row("Weggegooid", b.dropped ? span("warn", num(b.dropped)) : "0"),
+  ].join("");
+
+  $("#perf-tiles tbody").innerHTML = (m.tiles || []).map(t => `<tr><td><span class="dot ${t.online ? "on" : ""}"></span> ${esc(t.device)}</td>
+    <td>${esc(t.fw || "–")}</td><td>${esc(t.net || "–")} <span class="hint">${esc(t.ip || "")}</span></td>
+    <td>${t.rssi != null ? span(lvl(t.rssi, -70, -80, true), `${t.rssi} dBm`) : t.link != null ? esc(String(t.link)) : "–"}</td>
+    <td>${t.loop_hz != null ? span(lvl(t.loop_hz, 500, 100, true), `${t.loop_hz} Hz`) : "–"}</td>
+    <td>${t.heap != null ? span(lvl(t.heap / 1024, 40, 20, true), `${num(t.heap / 1024)} KB`) : "–"}</td>
+    <td>${t.mqtt_reconnects != null ? `${t.mqtt_reconnects}×` : "–"}</td><td>${dur(t.uptime)}</td><td>${dur(t.age)} geleden</td></tr>`).join("")
+    || `<tr><td colspan="9" class="hint">Geen fysieke tegels gezien.</td></tr>`;
+  const streams = Object.entries(m.streams || {}).filter(([, s]) => s.on);
+  $("#perf-streams").innerHTML = streams.length ? streams.map(([tile, s]) => `${label(Number(tile))}: ${esc(s.encoder || "")}${s.error ? span("bad", " " + esc(s.error)) : ""}`).join(" · ")
+    : `Geen (de master: ${master ? master.streams ?? 0 : "–"} actief).`;
+}
 
 // ---------------------------------------------------------------- MQTT traffic
 // (the game's state every 0.5 s, the tiles' displays, the announcements: "status" - hidden by default)

@@ -1,0 +1,24 @@
+written;spoken
+# How a word is read out (tools/make_voice.py): the speech model reads Dutch
+# words well, but acronyms and English names badly. Whole words, case-sensitive;
+# the first column may hold a regular expression when it starts with "re:".
+# Unknown all-caps words: 2-3 letters are spelled (letter by letter), longer
+# ones (ROOD) are read as a normal word.
+CPU;cee pee uu
+USB;uu es bee
+HTML;haa tee em el
+MP3;em pee drie
+JPEG;jee peg
+XP;iks pee
+MS-DOS;em es dos
+Windows;windoos
+Linux;lienuks
+Android Auto;endroid ooto
+Raspberry Pi;rasbérrie paai
+e-mail;iemeel
+wifi;waaifaai
+Wi-Fi;waaifaai
+re:\bM([1-9])\b;em \1
+www;wee wee wee
+Cyclone;saaikloon
+re:\s\+\s; plus 

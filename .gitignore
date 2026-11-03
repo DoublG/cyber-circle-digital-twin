@@ -38,3 +38,10 @@ godot/tests/_recovery_broker.log
 # generated: the read-aloud lines export (--voice-export), release builds (deploy/install/build.sh)
 voice_lines.csv
 dist/
+
+# read-aloud generator (tools/voice/setup.sh): its venv, the downloaded model,
+# the reference voice (a person's voice: not in git) and test output
+tools/voice/.venv/
+tools/voice/models/
+tools/voice/reference*.wav
+godot/tests/_voice/

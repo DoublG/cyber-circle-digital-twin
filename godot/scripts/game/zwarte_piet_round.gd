@@ -141,6 +141,10 @@ func progress(id: int) -> int:
 	return points[id]
 
 
+func replica_keys() -> Array:              # (what its overlay reads: Replica)
+	return ["holder", "speed"]
+
+
 func make_player_overlay(id: int) -> Control:
 	var line := StatusLine.new()
 	line.source = func():

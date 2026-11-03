@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# Install the GAME COMPUTER: the game on all its screens, started at login.
+# Install a GAME machine: the game, started at login, in one of two roles:
+#   sudo deploy/install/install_game.sh                  the MASTER: game logic, the overview,
+#                                                        the sound (the server box) - the split
+#                                                        screens on display nodes (GAME_REMOTE_SCREENS)
+#   sudo deploy/install/install_game.sh --display 1,2    a DISPLAY NODE (a Raspberry Pi 5): renders
+#                                                        these split screens, mirrored from the master
 # x86-64 PC (Ubuntu / Debian, GNOME) or ARM board (Raspberry Pi OS 64-bit,
-# Debian arm64 and similar). Can be the same machine as the server.
-#   sudo deploy/install/install_game.sh            (needs /etc/cybercircle/cybercircle.env:
-#                                                    copy it from the server first)
+# Debian arm64 and similar). Needs /etc/cybercircle/cybercircle.env: copy the
+# server's first (the role is then written into this machine's copy).
 # Safe to run again. What it does:
 #   1. the settings (/etc/cybercircle/cybercircle.env) and the project in CC_ROOT
 #   2. the kiosk user (GAME_KIOSK_USER): logs in automatically on the desktop
@@ -20,6 +24,18 @@ ENV_FILE=/etc/cybercircle/cybercircle.env
 say() { printf '\n\033[1;36m== %s\033[0m\n' "$*"; }
 
 [ "$(id -u)" = 0 ] || { echo "run as root: sudo $0"; exit 1; }
+ROLE=""
+SHOW=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --display) ROLE=display; SHOW=${2:?--display needs the screen numbers, e.g. --display 1,2}; shift 2 ;;
+        --master) ROLE=master; shift ;;
+        *) echo "unknown option $1"; exit 1 ;;
+    esac
+done
+setenv() {                                     # KEY VALUE in this machine's settings file
+    if grep -q "^$1=" "$ENV_FILE"; then sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"; else echo "$1=$2" >> "$ENV_FILE"; fi
+}
 if [ ! -f "$ENV_FILE" ]; then
     mkdir -p /etc/cybercircle
     cp "$HERE/cybercircle.env.example" "$ENV_FILE"
@@ -27,8 +43,16 @@ if [ ! -f "$ENV_FILE" ]; then
     echo "(same passwords, SERVER_IP), then run this again."
     exit 1
 fi
+if [ "$ROLE" = display ]; then
+    setenv GAME_ROLE display
+    setenv GAME_SHOW "$SHOW"
+    setenv GAME_NODE "display-$(hostname -s)"
+elif [ "$ROLE" = master ]; then
+    setenv GAME_ROLE master
+fi
 # shellcheck source=/dev/null
 . "$ENV_FILE"
+ROLE=${GAME_ROLE:-master}
 case "$(uname -m)" in
     x86_64) ARCH=x86_64 ;;
     aarch64|arm64) ARCH=arm64 ;;
@@ -38,12 +62,12 @@ KIOSK=${GAME_KIOSK_USER:-cybercircle}
 PI=0; command -v raspi-config >/dev/null && PI=1
 
 # ---------------------------------------------------------------- packages
-say "packages ($ARCH$([ $PI = 1 ] && echo ', Raspberry Pi'))"
+say "packages ($ARCH$([ $PI = 1 ] && echo ', Raspberry Pi'), role $ROLE$([ "$ROLE" = display ] && echo ": screens ${GAME_SHOW:-1,2}"))"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
 apt-get install -y -q rsync curl unzip libgl1 libgles2 libasound2t64 2>/dev/null \
     || apt-get install -y -q rsync curl unzip libgl1 libgles2 libasound2
-if [ "${A11Y_VIDEO:-0}" = "1" ]; then                 # the accessible page's video: the game pipes frames to FFmpeg
+if [ "${A11Y_VIDEO:-0}" = "1" ] && [ "$ROLE" = master ]; then   # the accessible page's video: the master pipes frames to FFmpeg
     apt-get install -y -q ffmpeg
 fi
 
@@ -91,10 +115,30 @@ else
         echo "      (--control); only the standalone mode (--db=FILE) needs them (docs/SETUP.md §3)"
     fi
 fi
-if [ "$ARCH" = arm64 ] && ! grep -q "rendering-driver\|rendering-method" <<<"${GAME_EXTRA_ARGS:-}"; then
-    # (in the settings file, so it shows and can be changed)
-    sed -i 's/^GAME_EXTRA_ARGS=.*/GAME_EXTRA_ARGS=--rendering-method gl_compatibility/' "$ENV_FILE"
-    echo "ARM: GAME_EXTRA_ARGS=--rendering-method gl_compatibility (OpenGL ES 3)"
+if [ "$ARCH" = arm64 ] && ! grep -q "rendering-driver\|rendering-method" <<<"${GAME_EXTRA_ARGS:-} ${GAME_ENGINE_ARGS:-}"; then
+    # (in the settings file, so it shows and can be changed; quoted: the file is sourced)
+    setenv GAME_ENGINE_ARGS '"--rendering-method gl_compatibility"'
+    echo "ARM: GAME_ENGINE_ARGS=\"--rendering-method gl_compatibility\" (OpenGL ES 3)"
+fi
+
+# ---------------------------------------------------------------- the display mode
+if [ "$ROLE" = master ] && [ -n "${GAME_REMOTE_SCREENS:-}" ]; then
+    say "display nodes connect on UDP port ${GAME_DISPLAY_PORT:-7350} (Godot multiplayer, ENet)"
+    if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then
+        ufw allow "${GAME_DISPLAY_PORT:-7350}/udp" comment "cybercircle display nodes" >/dev/null
+    fi
+fi
+if [ "$ROLE" = display ]; then
+    say "display node: the master's beacon on UDP 7351, MQTT user ${MQTT_DISPLAY_USER:-display} (own tiles, read-only)"
+    if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then
+        ufw allow 7351/udp comment "cybercircle: where the master is" >/dev/null
+    fi
+    [ -n "${MQTT_DISPLAY_PASSWORD:-}" ] || echo "  (no MQTT_DISPLAY_PASSWORD: its tiles come through the master only)"
+fi
+if [ "$ROLE" = display ] && [ $PI = 1 ] && [[ "${GAME_SHOW:-}" == *,* ]]; then
+    # two monitors: X11 places a full-screen window on each one reliably
+    raspi-config nonint do_wayland W1 || true
+    echo "Pi with 2 screens: the desktop runs on X11 (raspi-config: Advanced > Wayland > X11)"
 fi
 
 # ---------------------------------------------------------------- desktop: auto-login, no blanking
@@ -154,8 +198,8 @@ systemctl daemon-reload
 
 cat <<EOF
 
-Done. Reboot: $KIOSK logs in and the game starts on all screens.
-  settings      $ENV_FILE  (GAME_SCREENS, GAME_MONITORS, ...)
+Done ($ROLE$([ "$ROLE" = display ] && echo ", screens ${GAME_SHOW:-1,2}")). Reboot: $KIOSK logs in and the game starts.
+  settings      $ENV_FILE  (GAME_ROLE, GAME_SHOW, GAME_SCREENS, GAME_MONITORS, ...)
   restart       sudo -u $KIOSK XDG_RUNTIME_DIR=/run/user/\$(id -u $KIOSK) systemctl --user restart cybercircle-game
   logs          journalctl --user-unit cybercircle-game -f   (as $KIOSK)
 EOF

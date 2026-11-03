@@ -147,6 +147,121 @@ var recovery: Recovery                 # crash / power cut: the game comes back 
 var _current_entry := {}               # the round being played, as it was planned (replayed after a crash)
 var _pending_lives := {}               # end of a round: the lives about to change {tile_id: -1/0/+1}
 var _target_lives := {}                # ... and once given / taken: what they become (shots still flying)
+var view := {}                         # what the screens show (show_view): a display node builds the same
+var _view_seq := 0
+var _replica_round := 0                # a display node: the master's round it has (instance id there)
+
+
+## The scoreboard shows the lives changing (here and on the display nodes).
+func reveal_lives() -> void:
+	Replica.relay("game", &"reveal_lives", [])
+	lives_revealed.emit()
+
+
+# ---------------------------------------------------------------- what the screens show
+
+## The screens show this (kinds: players [overlay: the round's, look_down],
+## message (a round's intro), round (a shared round's view), ranking, scores).
+## As data, so a display node (Replica) builds the very same views itself.
+func show_view(v: Dictionary) -> void:
+	_view_seq += 1
+	view = v.merged({"seq": _view_seq}, true)
+	_build_view()
+
+
+func _build_view() -> void:
+	var v := view
+	match str(v.get("kind", "players")):
+		"players":
+			var f := Callable()
+			if v.get("overlay", false) and current:
+				f = func(id): return current.make_player_overlay(id) if in_round(id) else _waiting_overlay()
+			screen_wall.show_players(f, bool(v.get("look_down", false)))
+		"message":
+			screen_wall.show_shared(func(): return MessageView.new())
+		"round":
+			if current:
+				screen_wall.show_shared(current.make_shared_view)
+		"ranking":
+			screen_wall.show_shared(func():
+				var r := RankingView.new()
+				r.show_ranking(str(v.title), str(v.label), v.rows)
+				return r)
+		"scores":
+			var rows: Array = v.rows
+			screen_wall.show_shared(func():               # (also rebuilt when a player joins / leaves)
+				var b := ScoreboardView.new()
+				var shown := rows.duplicate()
+				var listed := rows.map(func(r): return r.tile)
+				for id in arena.player_ids():               # new players come in here: at the bottom
+					if id not in listed and not arena.tiles[id - 1].is_dead:
+						var h: int = arena.tiles[id - 1].health
+						shown.append({"name": arena.player_name(id), "tile": id, "survived": 0, "lives": h,
+							"lives_before": h, "change": 0, "score": 0, "delta": 0, "out": false, "was_out": false,
+							"record": record(id), "rank": overall_rank(id), "new": true})
+				b.show_scores(str(v.title), str(v.subtitle), shown, _lives_shown)
+				lives_revealed.connect(b.reveal_lives)
+				return b)
+
+
+# ---------------------------------------------------------------- display nodes (Replica)
+
+## What the display nodes' screens read of the game (Arena.replica_fields).
+func replica_fields() -> Dictionary:
+	var r := {}
+	if current:
+		r = {"id": current.get_instance_id(), "type": round_type_name(current.get_script()),
+			"init": current.replica_init()}
+	return {"g_state": state, "g_mode": mode, "scores": scores, "survived": survived, "streaks": streaks,
+		"round_number": round_number, "records": _records, "started": _started, "lives_shown": _lives_shown,
+		"tempo": tempo, "round": r, "round_sync": current.replica_sync() if current else {}, "view": view}
+
+
+## A display node: the game's fields from the master.
+func apply_replica(f: Dictionary, full: bool) -> void:
+	for k in ["scores", "survived", "streaks", "round_number", "tempo"]:
+		if f.has(k):
+			set(k, f[k])
+	if f.has("records"):
+		_records = f.records
+	if f.has("started"):
+		_started = f.started
+	if f.has("lives_shown"):
+		_lives_shown = bool(f.lives_shown)
+	if f.has("round"):
+		var r: Dictionary = f.round
+		if (r.is_empty() or _replica_round != int(r.get("id", 0))) and current:
+			current.replica_end()
+		if r.is_empty():
+			current = null
+			_replica_round = 0
+		elif current == null or _replica_round != int(r.id):
+			var t: Script = _round_type(str(r.type))
+			current = t.new() if t else null
+			_replica_round = int(r.id)
+			if current:
+				current.replica_begin(self, r.init)
+		elif current:
+			current.replica_begin(self, r.init)
+	if f.has("round_sync") and current:
+		current.apply_replica_sync(f.round_sync)
+	if f.has("g_mode") and int(f.g_mode) != mode:
+		mode = int(f.g_mode) as Mode
+		mode_changed.emit(mode)
+	if f.has("g_state") and int(f.g_state) != state:
+		state = int(f.g_state) as State
+		state_changed.emit(state)
+	if f.has("view") and (full or int(f.view.get("seq", -1)) != int(view.get("seq", -2))):
+		view = f.view
+		_build_view()
+
+
+## A display node: no database, no game logic - only the screens.
+func setup_replica(arena_node: Node3D) -> void:
+	arena = arena_node
+	screen_wall = arena.screen_wall
+	restore = false
+	show_view({"kind": "players"})
 
 
 func setup(arena_node: Node3D) -> void:
@@ -198,7 +313,7 @@ func resume(changes: Dictionary) -> void:
 	if state != State.SCOREBOARD or seq != _score_seq:
 		return
 	_lives_shown = true
-	lives_revealed.emit()
+	reveal_lives()
 	if not changes.is_empty():
 		_apply_lives(changes)
 	_timer = scoreboard_time / tempo
@@ -226,6 +341,10 @@ func use_database(path: String) -> void:
 
 
 func _process(delta: float) -> void:
+	if Replica.client:                   # a display node: the round's clocks run on between the master's updates
+		if current and mode != Mode.PAUSED:
+			current.replica_tick(delta)
+		return
 	if mode == Mode.PAUSED:
 		return                           # frozen: no timers, no rounds
 	match state:
@@ -237,9 +356,8 @@ func _process(delta: float) -> void:
 					start_game()
 		State.INTRO:
 			_timer -= delta
-			for v in screen_wall.shared_views:
-				v.show_message(current.title, current.rules,
-					"Start over %d" % ceili(_timer))
+			screen_wall.call_shared(&"show_message", [current.title, current.rules,
+				"Start over %d" % ceili(_timer)], true)
 			if _timer <= 0.0:
 				_begin_round()
 		State.PLAYING:
@@ -330,9 +448,8 @@ func _next_round() -> void:
 	arena.narrator.say("round_" + round_type_name(_last_type), "%s. %s" % [current.title, current.rules], "round", {}, true)
 	_timer = intro_time / tempo
 	screen_wall.set_timer("")
-	screen_wall.show_shared(func(): return MessageView.new())
-	arena.robot.set_party_lamp(true)
-	arena.robot.set_bulb_effect("rainbow")
+	show_view({"kind": "message"})
+	arena.npc.mood("intro")
 
 
 ## Random round type after `after`: personal rounds only with enough players,
@@ -595,19 +712,18 @@ func _begin_round() -> void:
 		if not scores.has(id) or not _started.has(id):  # activated since the last round
 			scores[id] = scores.get(id, 0)
 			var t: CyberTile = arena.tiles[id - 1]
-			t.revive(lives_for(id))
+			arena.rt(t).revive(lives_for(id))
 			_started[id] = true
 	current.begin(self, ids)
 	arena.cue(&"round_start", 0, {"round": round_type_name(current.get_script())})
 	log_event("%s BEGINT" % current.title.to_upper(), Retro.TEAL)
 	_set_state(State.PLAYING)
-	arena.robot.set_bulb_effect("chase")
+	arena.npc.mood("playing")
 	if current.mode == "personal":
-		screen_wall.show_players(func(id): return current.make_player_overlay(id) if in_round(id) else _waiting_overlay(),
-			current.on_tile)
+		show_view({"kind": "players", "overlay": true, "look_down": current.on_tile})
 	else:
 		screen_wall.set_timer("")
-		screen_wall.show_shared(current.make_shared_view)
+		show_view({"kind": "round"})
 
 
 ## The end of a round. Lives only change here, and only on the scoreboard:
@@ -655,7 +771,7 @@ func _end_round() -> void:
 	if state != State.SCOREBOARD or seq != _score_seq:
 		return
 	_lives_shown = true
-	lives_revealed.emit()
+	reveal_lives()
 	_apply_lives(changes)
 	_timer = scoreboard_time / tempo
 	if doomed.is_empty():
@@ -724,9 +840,8 @@ func _enter_lobby() -> void:
 	current = null
 	_set_state(State.LOBBY)
 	screen_wall.set_timer("")
-	screen_wall.show_players()
-	arena.robot.set_bulb_effect("rainbow")
-	arena.robot.release_head()
+	show_view({"kind": "players"})
+	arena.npc.mood("lobby")
 	_plan_rounds()                       # the web interface shows the coming rounds already
 
 
@@ -770,10 +885,10 @@ func on_players_changed() -> void:
 			if arena.player_ids().is_empty():
 				_lobby_timer = -1.0
 				screen_wall.set_timer("")
-			screen_wall.refresh()
+			screen_wall.refresh_all()
 		State.PLAYING:
 			if current and current.mode == "personal":
-				screen_wall.refresh()
+				screen_wall.refresh_all()
 		_:
 			pass
 	for id in arena.player_ids():
@@ -814,7 +929,7 @@ func set_mode(m: Mode) -> void:
 		t.show_number = m == Mode.SETUP
 	log_event({Mode.SETUP: "SETUP", Mode.CLOSED: "SPEL GESLOTEN", Mode.OPEN: "SPEL OPEN",
 		Mode.PAUSED: "PAUZE"}[m], Retro.AMBER)
-	screen_wall.refresh()
+	screen_wall.refresh_all()
 	mode_changed.emit(m)
 	on_players_changed()
 
@@ -978,10 +1093,7 @@ func _show_round_ranking(changes: Dictionary) -> void:
 	var title := current.title
 	var label := current.progress_label
 	screen_wall.set_timer("")
-	screen_wall.show_shared(func():
-		var v := RankingView.new()
-		v.show_ranking(title, label, rows)
-		return v)
+	show_view({"kind": "ranking", "title": title, "label": label, "rows": rows})
 	ranking_shown.emit(title, label, rows)
 	for r in rows:                                    # each player: their own place (accessible page)
 		var change := " Je krijgt er een leven bij." if r.change > 0 else (" Je verliest een leven." if r.change < 0 else "")
@@ -991,19 +1103,7 @@ func _show_round_ranking(changes: Dictionary) -> void:
 func _show_scores(title: String, subtitle: String, round_points: Dictionary, changes := {}) -> void:
 	var rows := _ranking(round_points, changes)
 	screen_wall.set_timer("")
-	screen_wall.show_shared(func():               # (also rebuilt when a player joins / leaves)
-		var v := ScoreboardView.new()
-		var shown := rows.duplicate()
-		var listed := rows.map(func(r): return r.tile)
-		for id in arena.player_ids():               # new players come in here: at the bottom
-			if id not in listed and not arena.tiles[id - 1].is_dead:
-				var h: int = arena.tiles[id - 1].health
-				shown.append({"name": arena.player_name(id), "tile": id, "survived": 0, "lives": h,
-					"lives_before": h, "change": 0, "score": 0, "delta": 0, "out": false, "was_out": false,
-					"record": record(id), "rank": overall_rank(id), "new": true})
-		v.show_scores(title, subtitle, shown, _lives_shown)
-		lives_revealed.connect(v.reveal_lives)
-		return v)
+	show_view({"kind": "scores", "title": title, "subtitle": subtitle, "rows": rows})
 	scores_shown.emit(title, subtitle, rows)
 	arena.cue(&"scoreboard")
 
@@ -1013,11 +1113,7 @@ func _celebrate_leader() -> void:
 	var rows := _ranking({})
 	if rows.is_empty():
 		return
-	var side: int = arena.robot_side(rows[0].tile)
-	arena.robot.set_bulb_effect("none")
-	arena.robot.set_all_bulbs(Color.BLACK)
-	arena.robot.set_side_bulbs(side, Color(1.0, 0.75, 0.2))
-	arena.robot.look_at_side(side)
+	arena.npc.celebrate(int(rows[0].tile))
 
 
 # ---------------------------------------------------------------- settings

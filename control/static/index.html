@@ -19,6 +19,7 @@
   <button data-tab="game" class="active">Spel</button>
   <button data-tab="tiles">Tegels</button>
   <button data-tab="nodes">Processen</button>
+  <button data-tab="perf">Prestaties</button>
   <button data-tab="recovery">Herstel</button>
   <button data-tab="players">Spelers</button>
   <button data-tab="gamemasters">Gamemasters</button>
@@ -82,6 +83,30 @@
     database, tegels); de schermen verbinden met die master.</p>
   <table id="nodes"><thead><tr><th>Proces</th><th>Rol</th><th>Adres</th><th>Schermen</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
   <p id="master" class="hint"></p>
+</section>
+
+<section id="tab-perf" class="tab">
+  <p class="hint">Hoe elk onderdeel het doet, elke 2 s ververst: de Godot-processen (master en displays), de
+    verbindingen naar de displays, de controleserver, de MQTT-broker, de tegels. Grafieken: de laatste 5 minuten.</p>
+  <div id="perf-cards" class="perf-cards"></div>
+  <h2>Godot-processen</h2>
+  <div class="scroll"><table id="perf-nodes"><thead><tr><th>Proces</th><th>fps (5 min)</th><th>frame gem. / max</th>
+    <th>trage frames</th><th>CPU</th><th>geheugen</th><th>VRAM</th><th>draw calls</th><th>driehoeken</th><th>nodes</th>
+    <th>machine</th><th>MQTT</th><th>renderer</th><th>actief</th></tr></thead><tbody></tbody></table></div>
+  <h2>Verbindingen master → displays <span class="hint">(Godot multiplayer, ENet over UDP)</span></h2>
+  <div class="scroll"><table id="perf-links"><thead><tr><th>Display</th><th>Adres</th><th>Schermen</th><th>Rondreis</th>
+    <th>Jitter</th><th>Verlies</th><th>Gebeurtenissen</th><th>Snapshots</th><th>Eigen tegels (MQTT)</th>
+    <th>Verbonden</th><th>Herverbonden</th></tr></thead><tbody></tbody></table></div>
+  <p id="perf-mirror" class="hint"></p>
+  <div class="perf-two">
+    <div><h2>Controleserver</h2><table id="perf-control" class="kv"></table></div>
+    <div><h2>MQTT-broker</h2><table id="perf-broker" class="kv"></table></div>
+  </div>
+  <h2>Tegels</h2>
+  <div class="scroll"><table id="perf-tiles"><thead><tr><th>Tegel</th><th>Firmware</th><th>Netwerk</th><th>Signaal</th>
+    <th>Lus</th><th>Vrij geheugen</th><th>Herverbonden</th><th>Actief</th><th>Laatst gezien</th></tr></thead><tbody></tbody></table></div>
+  <h2>Meekijkvideo's</h2>
+  <div id="perf-streams" class="hint"></div>
 </section>
 
 <section id="tab-recovery" class="tab">

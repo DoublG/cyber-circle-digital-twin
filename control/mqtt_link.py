@@ -1,6 +1,9 @@
 """MQTT side of the control server: follows the Godot processes and the game,
 sends commands. Topics (prefix "cybercircle"):
   node/<id>     process -> all   retained announcement {id, role, host, port, screens, version, ...}
+  metrics/<id>  process -> all   every 2 s: fps, frame times, CPU, memory, the mirror links (Prestaties tab;
+                                 kept here with 5 minutes of history, not in the traffic log)
+  $SYS/broker/#  broker -> all   Mosquitto's own counters (clients, messages/s, bytes/s)
   state         master -> all    retained game state {state, round, time, players, pending, ...}
   event         master -> all    {text, color} (the overview's event feed)
   master        control -> all   retained {node, host, port}: the chosen master
@@ -47,6 +50,11 @@ class MqttLink:
         self.db_notice = {}
         self.online = False
         self.lock = threading.Lock()
+        self.metrics = {}                    # node id -> {"last": the latest metrics, "hist": deque of [t, fps, frame_ms, worst_ms, cpu]}
+        self.broker = {}                     # $SYS/broker/... -> value (Mosquitto, every sys_interval s)
+        self.rx_msgs = 0                     # (this link's counters: the control server's own metrics)
+        self.rx_bytes = 0
+        self.connects = 0
         u = urlparse(url)
         ws = u.scheme in ("ws", "wss")
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="cybercircle-control",
@@ -76,6 +84,9 @@ class MqttLink:
     def _on_connect(self, client, userdata, flags, reason, props):
         self.online = not reason.is_failure
         client.subscribe(f"{self.prefix}/#")   # everything: the topics below + the raw traffic log
+        client.subscribe("$SYS/broker/#")      # the broker's counters (Mosquitto; ignored by brokers without them)
+        if self.online:
+            self.connects += 1
         self.on_change("mqtt")
 
     def _on_disconnect(self, client, userdata, flags, reason, props):
@@ -83,6 +94,26 @@ class MqttLink:
         self.on_change("mqtt")
 
     def _on_message(self, client, userdata, msg):
+        self.rx_msgs += 1
+        self.rx_bytes += len(msg.payload)
+        if msg.topic.startswith("$SYS/"):
+            with self.lock:
+                self.broker[msg.topic[len("$SYS/broker/"):]] = msg.payload.decode(errors="replace")
+            return
+        if msg.topic.startswith(self.prefix + "/metrics/"):
+            try:
+                data = json.loads(msg.payload.decode() or "null")
+            except ValueError:
+                return
+            if isinstance(data, dict):
+                node = msg.topic.rsplit("/", 1)[1]
+                data["seen"] = time.time()
+                with self.lock:
+                    m = self.metrics.setdefault(node, {"hist": deque(maxlen=150)})   # 5 min at 2 s
+                    m["last"] = data
+                    m["hist"].append([round(data["seen"], 1), data.get("fps", 0), data.get("frame_ms", 0),
+                                      data.get("worst_ms", 0), data.get("cpu", 0)])
+            return                              # (every 2 s per process: not in the traffic log, no live push)
         self.traffic_seq += 1
         self.traffic.append({"seq": self.traffic_seq, "time": time.strftime("%H:%M:%S") + ".%03d" % (time.time() % 1 * 1000),
                              "topic": msg.topic, "payload": msg.payload[:4000].decode(errors="replace"),
@@ -143,6 +174,32 @@ class MqttLink:
         with self.lock:
             return sorted(({**d, "online": now - d.get("seen", 0) < NODE_TIMEOUT}
                            for d in self.devices.values()), key=lambda d: d["device"])
+
+    def metrics_list(self):
+        """Every process's latest metrics and its history (the Prestaties tab)."""
+        now = time.time()
+        with self.lock:
+            return sorted(({**m["last"], "age": round(now - m["last"]["seen"], 1),
+                            "online": now - m["last"]["seen"] < 10, "hist": list(m["hist"])}
+                           for m in self.metrics.values()), key=lambda m: (m.get("role") != "master", m.get("id", "")))
+
+    def broker_stats(self):
+        with self.lock:
+            b = dict(self.broker)
+
+        def num(k):
+            try:
+                return float(b[k])
+            except (KeyError, ValueError):
+                return None
+        if not b:
+            return {}
+        return {"version": b.get("version", ""), "uptime": b.get("uptime", ""),
+                "clients": num("clients/connected"), "clients_max": num("clients/maximum"),
+                "subscriptions": num("subscriptions/count"), "retained": num("retained messages/count"),
+                "msgs_in_min": num("load/messages/received/1min"), "msgs_out_min": num("load/messages/sent/1min"),
+                "bytes_in_min": num("load/bytes/received/1min"), "bytes_out_min": num("load/bytes/sent/1min"),
+                "dropped": num("publish/messages/dropped"), "heap": num("heap/current")}
 
     def node_list(self):
         now = time.time()

@@ -99,7 +99,7 @@ func _ready() -> void:
 	_build_shield()
 	if not (self is DroneTile):
 		_contact_shadow()
-	_idle_time = randf() * 10.0  # tiles don't animate in lockstep
+	_idle_time = fmod(tile_id * 3.7, 10.0)  # tiles don't animate in lockstep (the same on every node: display nodes)
 	clear_ring()
 	set_health(health)
 	set_status(Color(0.1, 1.0, 0.2))
@@ -765,6 +765,34 @@ func revive(lives := -1) -> void:
 		max_health = clampi(lives, 1, HEART_COUNT)
 	set_health(max_health)
 	set_status(Color(0.1, 1.0, 0.2))
+
+
+## What a display node's twin of this tile needs (Replica; Arena.replica_fields).
+## The ring and the icons are not in it: the display runs the tile's own logic
+## and animations itself (TileFirmware, the idle / invite animations).
+func replica_state() -> Dictionary:
+	return {"h": health, "m": max_health, "i": idle, "o": out_of_service, "n": show_number,
+		"s": shielded, "d": is_dead, "p": pending, "c": _activation_color, "a": _activation_pressed.duplicate()}
+
+
+func apply_replica_state(st: Dictionary) -> void:
+	if st.is_empty():
+		return
+	if out_of_service != bool(st.o):
+		out_of_service = bool(st.o)
+	if idle != bool(st.i):
+		idle = bool(st.i)
+	pending = bool(st.p)
+	_activation_color = st.c
+	_activation_pressed.assign(st.a)
+	is_dead = bool(st.d)
+	max_health = int(st.m)
+	if health != int(st.h):
+		health = int(st.h)
+	if show_number != bool(st.n):
+		show_number = bool(st.n)
+	if shielded != bool(st.s):
+		shielded = bool(st.s)
 
 
 ## Colour of the RGB LED under a button symbol (Color.BLACK = off).

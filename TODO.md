@@ -34,6 +34,16 @@ same layout given as `--sounds=DIR` (no re-export needed).
 | ☐ | `join` | a player activates their tile (presses the 4 icons) | ~500× a day: keep it short and pleasant, make several | 0.2–0.5 s | `blip.ogg` 0.18 s |
 | ☐ | `random` | now and then while the game is open (not on the scoreboard): robot chatter, beeps, servos, voice lines | every 20–60 s (*Instellingen*) | 0.5–3 s each; **5–10+ files** so it does not repeat | 5 files: beeps, servo, voice |
 
+## Read-aloud voice (`godot/data/voice/`, docs/SETUP.md §4 *Generating the voice*)
+
+| ☐ | step |
+|---|---|
+| ☐ | `tools/voice/setup.sh` on the server box (GPU) |
+| ☐ | a reference clip `tools/voice/reference.wav`: 5–15 s, one speaker who agreed, quiet room |
+| ☐ | export the current lines (`--voice-export`), `make_voice.py --dry-run`: check the spoken texts, fix `tools/voice/pronunciation.csv` / `spoken.csv` |
+| ☐ | `make_voice.py`, listen to every file; re-take bad ones (`--only NAME --seed 8 --force`) |
+| ☐ | licence: Babbeldoos is CC BY-NC 4.0, fine for a non-commercial booth only |
+
 ## Movies
 
 Convert to the format the game plays (Theora `.ogv`) with
@@ -80,3 +90,31 @@ Moments that have no sound event today:
 * ☐ the drones' rotor hum
 * ☐ music for **Ritme** (the dance game has no music now: the falling icons
   would have to follow the beat), and background music in the lobby
+
+## Display nodes (Raspberry Pi per 2 screens)
+
+- [ ] Measure the frame rate on a real Raspberry Pi 5 with 2 full screens
+      (6 player views; *Prestaties* shows each display's fps, frame times, CPU
+      and temperature). Below 30 fps: `GAME_VIEW_SCALE=0.6`, `GAME_DETAIL=2.5`,
+      `GAME_DETAIL_SIZE=0.3`, or one screen per Pi (docs/SETUP.md §8).
+- [ ] Check on the Pi with 2 monitors that each full-screen window lands on its
+      own HDMI output (X11; `GAME_DISPLAY_MONITORS`).
+- [ ] Sound on the Pis: which output (HDMI to the screen's speakers, or the
+      audio jack), and the volume per Pi; *Instellingen › Geluid* "waar":
+      automatic = on the displays.
+- [ ] Files outside the project (quiz videos, `--sounds`, `--voice`): copy them
+      to the Pis at the same path (a display plays them itself).
+- [ ] The booth network: run the display test through the bad-network proxy
+      with the real switch's numbers (`PROXY=... tests/run_replica_test.sh`),
+      and keep the Pis' clocks on NTP (the slogans and invites run on the
+      wall clock, in step on every screen).
+
+## Web interface (later)
+
+- [ ] **The connected MQTT clients** in the web interface (*Prestaties* or
+      *MQTT*): who is connected now - client id, user, IP, since when. Mosquitto's
+      `$SYS` only gives the count; the way: `log_dest topic` + `log_type notice`
+      in `mosquitto-cybercircle.conf` (the broker publishes its "New client
+      connected from IP as ID (u'user')" / "Client ID disconnected" lines on
+      `$SYS/broker/log/N`), the control server keeps the list from those (the
+      ACL already lets the installation's user read `$SYS/#`).

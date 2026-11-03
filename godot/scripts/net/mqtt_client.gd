@@ -17,6 +17,11 @@ signal message(topic: String, payload: PackedByteArray)
 @export var reconnect_delay := 3.0
 
 var online := false
+var msgs_in := 0                           # (counters: the Prestaties tab, NodeMetrics)
+var msgs_out := 0
+var bytes_in := 0
+var bytes_out := 0
+var reconnects := 0                        # connections lost since the start
 var _ws := WebSocketPeer.new()
 var _subs: Array[String] = []
 var _rx := PackedByteArray()
@@ -84,6 +89,8 @@ func _process(delta: float) -> void:
 					_send(0xC0, PackedByteArray())    # PINGREQ
 		WebSocketPeer.STATE_CLOSED:
 			if online or _was_open:
+				if online:
+					reconnects += 1
 				online = false
 				disconnected.emit()
 			_retry = reconnect_delay
@@ -158,6 +165,8 @@ func _handle(header: int, body: PackedByteArray) -> void:
 				p += 2
 				if qos == 1:
 					_send(0x40, pid)           # PUBACK
+			msgs_in += 1
+			bytes_in += body.size()
 			message.emit(topic, body.slice(p))
 
 
@@ -171,6 +180,9 @@ func _send(header: int, body: PackedByteArray) -> void:
 		if n == 0:
 			break
 	pkt.append_array(body)
+	if header >> 4 == 3:
+		msgs_out += 1
+		bytes_out += pkt.size()
 	_ws.send(pkt, WebSocketPeer.WRITE_MODE_BINARY)
 
 

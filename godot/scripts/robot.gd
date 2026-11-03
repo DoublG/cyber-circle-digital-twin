@@ -202,6 +202,20 @@ func set_head_angle(deg: float) -> void:
 	_has_target = true
 
 
+## The head as the master has it now (Replica: a display node's robot follows
+## the master's actions itself; this only pulls a drifted idle spin back).
+func replica_pose() -> Array:
+	return [snappedf(head.rotation.y, 0.001), 1 if (_has_target or _head_locked or _hits > 0 or _death_running) else 0]
+
+
+func apply_replica_pose(pose: Array) -> void:
+	if pose.size() < 2 or int(pose[1]) == 1 or _has_target or _head_locked or _hits > 0 or _death_running:
+		return                                 # (an action is turning it: that is the same on both)
+	var diff := wrapf(float(pose[0]) - head.rotation.y, -PI, PI)
+	if absf(diff) > 0.05:
+		head.rotation.y += diff * 0.3
+
+
 ## Direction (robot-local, horizontal) that side k / tile k+1 is in.
 static func side_direction(side: int) -> Vector3:
 	var a := PI / 2 - TAU * side / SIDE_COUNT

@@ -34,6 +34,11 @@ struct SerialPort {
 };
 extern SerialPort Serial;
 
+struct EspChip {                     // (the hello's free heap: a fixed number in the emulator)
+    uint32_t getFreeHeap() { return 200000; }
+};
+inline EspChip ESP;
+
 // the emulator's settings (command line): MQTT_HOST etc. in config.h point here
 extern const char *emu_host;
 extern int emu_port;

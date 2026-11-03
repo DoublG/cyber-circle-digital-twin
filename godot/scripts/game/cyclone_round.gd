@@ -114,12 +114,9 @@ func result(id: int, r: Dictionary) -> void:
 	game.screen_wall.popup(id, "%+d" % pts, col)
 	var arena := game.arena
 	if r.outcome == "miss":
-		arena.send_packet(id, Color.RED, Callable(), false)
+		arena.npc.feedback(id, Color.RED, 0.0, false)
 	else:
-		arena.send_packet(id, col, func():
-			arena.robot.set_side_glow(arena.robot_side(id), col, 2.0)
-			await arena.get_tree().create_timer(0.25).timeout
-			arena.robot.set_side_glow(arena.robot_side(id), Color.BLACK))
+		arena.npc.feedback(id, col, 0.25)
 
 
 func finish() -> void:
@@ -130,6 +127,10 @@ func finish() -> void:
 ## Places: the highest level reached.
 func progress(id: int) -> int:
 	return state[id].best
+
+
+func replica_keys() -> Array:              # (what its overlay reads: Replica)
+	return ["state"]
 
 
 func make_player_overlay(id: int) -> Control:

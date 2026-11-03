@@ -123,3 +123,19 @@ dialog label input, dialog label textarea, dialog label select { display: block;
 /* installation (partial setups) */
 .install-place { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border: 1px solid var(--line); }
 .install-place.mobile { border-color: var(--amber); }
+
+/* Prestaties */
+.warn { color: var(--amber); }
+.perf-cards { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.perf-cards .card { background: var(--panel); border: 2px solid var(--line); border-left-width: 6px; padding: 8px 12px; min-width: 150px; }
+.perf-cards .card.good { border-left-color: var(--good); } .perf-cards .card.warn { border-left-color: var(--amber); }
+.perf-cards .card.bad { border-left-color: var(--bad); } .perf-cards .card.off { border-left-color: var(--dim); opacity: .7; }
+.perf-cards .card .k { color: var(--dim); font-size: 12px; } .perf-cards .card .v { font-size: 20px; font-weight: bold; color: var(--cream); }
+.perf-cards .card .s { color: var(--dim); font-size: 12px; }
+.scroll { overflow-x: auto; }
+#tab-perf td { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.spark { vertical-align: middle; margin-left: 6px; }
+.spark polyline { fill: none; stroke: var(--teal); stroke-width: 1.5; }
+.spark line { stroke: var(--line); stroke-dasharray: 2 2; }
+.perf-two { display: flex; gap: 24px; flex-wrap: wrap; } .perf-two > div { flex: 1; min-width: 300px; }
+table.kv td:first-child { color: var(--dim); width: 45%; }

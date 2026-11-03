@@ -92,6 +92,72 @@ func make_shared_view() -> Control:
 	return null
 
 
+# ---------------------------------------------------------------- display nodes (Replica)
+# A display node runs no round: it makes the same round type, with the
+# master's data (replica_init) and fields (replica_sync, on change;
+# replica_live, every frame), and its views read those as here.
+
+const SYNC_BASE := ["title", "rules", "mode", "on_tile", "players", "points", "duration", "progress_label", "ranked"]
+
+
+## The fields this round type's views read (besides SYNC_BASE), sent on change.
+func replica_keys() -> Array:
+	return []
+
+
+## What is decided at the start (the questions, a chart): sent with the round.
+func replica_init() -> Dictionary:
+	return {}
+
+
+## What changes every frame (sent LIVE_HZ, the latest wins).
+func replica_live() -> Dictionary:
+	return {"time_left": time_left}
+
+
+func replica_sync() -> Dictionary:
+	var d := {}
+	for k in SYNC_BASE + replica_keys():
+		if k in self:
+			d[k] = get(k)
+	return d
+
+
+## A display node: the master's round.
+func replica_begin(game_manager: GameManager, init: Dictionary) -> void:
+	game = game_manager
+	_replica_set(init)
+
+
+func apply_replica_sync(d: Dictionary) -> void:
+	_replica_set(d)
+
+
+func apply_replica_live(d: Dictionary) -> void:
+	_replica_set(d)
+
+
+## A display node: this round is over there (stop its videos).
+func replica_end() -> void:
+	pass
+
+
+## A display node: the clocks run on between the master's updates.
+func replica_tick(delta: float) -> void:
+	time_left -= delta
+
+
+func _replica_set(d: Dictionary) -> void:
+	for k in d:
+		if not (k in self):
+			continue
+		var cur = get(k)
+		if cur is Array and (cur as Array).is_typed():
+			(cur as Array).assign(d[k])
+		else:
+			set(k, d[k])
+
+
 ## Round points can go below 0 (they decide this round's places); the total
 ## (a tie-break between equal rounds survived) never does.
 func add_points(tile_id: int, n: int) -> void:

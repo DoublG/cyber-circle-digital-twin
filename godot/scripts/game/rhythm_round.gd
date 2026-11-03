@@ -163,10 +163,7 @@ func button(id: int, b: StringName) -> void:
 ## On the line: the icon's colour runs down the cable and lights the robot side.
 func _flash(id: int, color: Color) -> void:
 	var arena := game.arena
-	arena.send_packet(id, color, func():
-		arena.robot.set_side_glow(arena.robot_side(id), color, 2.0)
-		await arena.get_tree().create_timer(0.15).timeout
-		arena.robot.set_side_glow(arena.robot_side(id), Color.BLACK))
+	arena.npc.feedback(id, color, 0.15)
 
 
 ## The longest combo of the round in the event feed.
@@ -181,6 +178,24 @@ func finish() -> void:
 			names.append(game.arena.player_name(id).to_upper())
 	if best >= 5:
 		game.log_event("LANGSTE COMBO %d: %s" % [best, ", ".join(names)], Retro.CREAM)
+
+
+# (Replica: what RhythmView reads)
+func replica_keys() -> Array:
+	return ["state", "band", "line", "points_line", "latency_ms"]
+
+
+func replica_init() -> Dictionary:
+	return {"notes": notes}
+
+
+func replica_live() -> Dictionary:
+	return {"time_left": time_left, "clock": clock, "_first": _first}
+
+
+func replica_tick(delta: float) -> void:
+	time_left -= delta
+	clock += delta
 
 
 func make_player_overlay(id: int) -> Control:

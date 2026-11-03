@@ -84,8 +84,10 @@
 #endif
 
 // ---- pressure sensors (FSR in a voltage divider) under the 4 icons, on ADC1
-// pins (ADC2 does not work while wifi is on); order Square, Triangle, Cross, Circle
-static const int SENSOR_PINS[4] = {32, 33, 34, 35};
+// pins (ADC2 does not work while wifi is on); order Square, Triangle, Cross, Circle.
+// 32, 33, 35, 39: broken out on the WT32-ETH01, the Olimex ESP32-POE (its GPIO34 is
+// the button) and a DevKit alike (the WT32-ETH01 has no GPIO34). docs/WIRING.md
+static const int SENSOR_PINS[4] = {32, 33, 39, 35};
 #ifndef SENSOR_PRESS
 #define SENSOR_PRESS     600            // ADC counts above the resting value (calibrated at power-up) = pressed
 #endif

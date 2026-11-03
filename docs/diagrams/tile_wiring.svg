@@ -1,0 +1,208 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="960" viewBox="0 0 1400 960" font-family="Helvetica, Arial, sans-serif">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="24" y="38" font-size="24" text-anchor="start" font-weight="700" fill="#24292f">One tile – wiring</text>
+<text x="24" y="62" font-size="13" text-anchor="start" font-weight="400" fill="#57606a">ESP32 module with Ethernet (default WT32-ETH01), one WS2812B chain of 58 LEDs, 4 pressure sensors (FSR). Pins: tile_firmware/include/config.h</text>
+<rect x="20" y="90" width="330" height="400" rx="14" fill="#ffebe9" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="34" y="110" font-size="13" text-anchor="start" font-weight="700" fill="#57606a">POWER</text>
+<rect x="40" y="120" width="290" height="70" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="52" y="142" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">24 V DC in  (from the central PSU)</text>
+<text x="52" y="171.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">2-core 1.5 mm², fuse 2 A per tile</text>
+<rect x="40" y="230" width="290" height="80" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="52" y="252" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">DC-DC buck 24 V → 5 V, 5 A</text>
+<text x="52" y="281.5" font-size="12" text-anchor="start" font-weight="400" fill="#57606a">(or a local 5 V / 5 A supply)</text>
+<text x="52" y="297.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">set to 5.1 V before connecting</text>
+<polyline points="120,190 120,230" fill="none" stroke="#a40e26" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="120.0,230.0 115.9,220.9 124.1,220.9" fill="#a40e26"/>
+<text x="128" y="214" font-size="11" text-anchor="start" font-weight="700" fill="#a40e26">+24 V</text>
+<polyline points="240,190 240,230" fill="none" stroke="#24292f" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="240.0,230.0 235.9,220.9 244.1,220.9" fill="#24292f"/>
+<text x="248" y="214" font-size="11" text-anchor="start" font-weight="700" fill="#24292f">GND</text>
+<rect x="40" y="350" width="290" height="120" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="52" y="372" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">5 V rail (terminal block)</text>
+<text x="52" y="401.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">1000 µF / 10 V electrolytic across</text>
+<text x="52" y="417.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">+5 V – GND at the LED input</text>
+<text x="52" y="433.5" font-size="12" text-anchor="start" font-weight="400" fill="#57606a">(protects the first LED at power-on)</text>
+<text x="52" y="449.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">all grounds joined here</text>
+<polyline points="120,310 120,350" fill="none" stroke="#cf222e" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="120.0,350.0 115.9,340.9 124.1,340.9" fill="#cf222e"/>
+<text x="128" y="334" font-size="11" text-anchor="start" font-weight="700" fill="#cf222e">+5 V</text>
+<polyline points="240,310 240,350" fill="none" stroke="#24292f" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="240.0,350.0 235.9,340.9 244.1,340.9" fill="#24292f"/>
+<rect x="520" y="150" width="260" height="420" rx="6" fill="#e6edf3" stroke="#24292f" stroke-width="2"/>
+<text x="650.0" y="178" font-size="17" text-anchor="middle" font-weight="700" fill="#24292f">WT32-ETH01</text>
+<text x="650.0" y="196" font-size="11.5" text-anchor="middle" font-weight="400" fill="#57606a">ESP32 + LAN8720 (RMII)</text>
+<rect x="600" y="110" width="100" height="50" rx="4" fill="#ffffff" stroke="#24292f" stroke-width="1.5"/>
+<text x="650" y="140" font-size="13" text-anchor="middle" font-weight="700" fill="#24292f">RJ45</text>
+<rect x="512" y="233" width="16" height="14" rx="2" fill="#cf222e" stroke="#24292f" stroke-width="1"/>
+<text x="536" y="244" font-size="12.5" text-anchor="start" font-weight="700" fill="#24292f">5V</text>
+<rect x="512" y="277" width="16" height="14" rx="2" fill="#24292f" stroke="#24292f" stroke-width="1"/>
+<text x="536" y="288" font-size="12.5" text-anchor="start" font-weight="700" fill="#24292f">GND</text>
+<rect x="512" y="321" width="16" height="14" rx="2" fill="#e16f24" stroke="#24292f" stroke-width="1"/>
+<text x="536" y="332" font-size="12.5" text-anchor="start" font-weight="700" fill="#24292f">3V3</text>
+<rect x="512" y="365" width="16" height="14" rx="2" fill="#9a6700" stroke="#24292f" stroke-width="1"/>
+<text x="536" y="376" font-size="12.5" text-anchor="start" font-weight="700" fill="#24292f">IO32</text>
+<rect x="512" y="409" width="16" height="14" rx="2" fill="#9a6700" stroke="#24292f" stroke-width="1"/>
+<text x="536" y="420" font-size="12.5" text-anchor="start" font-weight="700" fill="#24292f">IO33</text>
+<rect x="512" y="453" width="16" height="14" rx="2" fill="#9a6700" stroke="#24292f" stroke-width="1"/>
+<text x="536" y="464" font-size="12.5" text-anchor="start" font-weight="700" fill="#24292f">IO39</text>
+<rect x="512" y="497" width="16" height="14" rx="2" fill="#9a6700" stroke="#24292f" stroke-width="1"/>
+<text x="536" y="508" font-size="12.5" text-anchor="start" font-weight="700" fill="#24292f">IO35</text>
+<rect x="772" y="233" width="16" height="14" rx="2" fill="#9a6700" stroke="#24292f" stroke-width="1"/>
+<text x="764" y="244" font-size="12.5" text-anchor="end" font-weight="700" fill="#24292f">IO5</text>
+<rect x="772" y="277" width="16" height="14" rx="2" fill="#24292f" stroke="#24292f" stroke-width="1"/>
+<text x="764" y="288" font-size="12.5" text-anchor="end" font-weight="700" fill="#24292f">GND</text>
+<rect x="772" y="321" width="16" height="14" rx="2" fill="#6e7781" stroke="#24292f" stroke-width="1"/>
+<text x="764" y="332" font-size="12.5" text-anchor="end" font-weight="700" fill="#24292f">TXD0 / IO1</text>
+<rect x="772" y="365" width="16" height="14" rx="2" fill="#6e7781" stroke="#24292f" stroke-width="1"/>
+<text x="764" y="376" font-size="12.5" text-anchor="end" font-weight="700" fill="#24292f">RXD0 / IO3</text>
+<rect x="772" y="409" width="16" height="14" rx="2" fill="#6e7781" stroke="#24292f" stroke-width="1"/>
+<text x="764" y="420" font-size="12.5" text-anchor="end" font-weight="700" fill="#24292f">IO0</text>
+<rect x="772" y="453" width="16" height="14" rx="2" fill="#6e7781" stroke="#24292f" stroke-width="1"/>
+<text x="764" y="464" font-size="12.5" text-anchor="end" font-weight="700" fill="#24292f">EN</text>
+<text x="650.0" y="530" font-size="10.5" text-anchor="middle" font-weight="400" fill="#57606a">Ethernet uses GPIO 0, 16, 18, 19, 21–23, 25–27:</text>
+<text x="650.0" y="546" font-size="10.5" text-anchor="middle" font-weight="400" fill="#57606a">never wire LEDs / sensors there</text>
+<polyline points="650,110 650,75" fill="none" stroke="#1f6feb" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="650.0,110.0 645.9,100.9 654.1,100.9" fill="#1f6feb"/>
+<text x="660" y="86" font-size="11.5" text-anchor="start" font-weight="700" fill="#1f6feb">Cat6 → floor switch</text>
+<polyline points="330,380 420,380 420,240 512,240" fill="none" stroke="#cf222e" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="512.0,240.0 502.9,244.1 502.9,235.9" fill="#cf222e"/>
+<polyline points="330,440 440,440 440,284 512,284" fill="none" stroke="#24292f" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="512.0,284.0 502.9,288.1 502.9,279.9" fill="#24292f"/>
+<text x="420" y="232" font-size="11" text-anchor="middle" font-weight="700" fill="#cf222e">5 V (~250 mA)</text>
+<rect x="900" y="120" width="220" height="120" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="912" y="142" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">74AHCT125</text>
+<text x="912" y="171.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">3.3 V → 5 V data (pin 2 in,</text>
+<text x="912" y="187.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">pin 3 out) · VCC 5 V, GND,</text>
+<text x="912" y="203.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">pin 1 (/OE) to GND</text>
+<polyline points="788,240 850,240 850,200 900,200" fill="none" stroke="#9a6700" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="900.0,200.0 890.9,204.1 890.9,195.9" fill="#9a6700"/>
+<text x="853" y="224" font-size="11" text-anchor="start" font-weight="600" fill="#9a6700" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">IO5 – LED data</text>
+<rect x="1150" y="190" width="60" height="20" rx="3" fill="#ffffff" stroke="#24292f" stroke-width="1.5"/>
+<text x="1180" y="204" font-size="11" text-anchor="middle" font-weight="700" fill="#24292f">330 Ω</text>
+<polyline points="1120,200 1150,200" fill="none" stroke="#9a6700" stroke-width="2.2" stroke-linejoin="round"/>
+<polyline points="1210,200 1250,200 1250,290" fill="none" stroke="#9a6700" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="1250.0,290.0 1245.9,280.9 1254.1,280.9" fill="#9a6700"/>
+<text x="1258" y="250" font-size="11" text-anchor="start" font-weight="700" fill="#9a6700">DIN</text>
+<rect x="1150" y="290" width="230" height="92" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="1162" y="312" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Ring</text>
+<text x="1162" y="340.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">48 LEDs  #0–47</text>
+<text x="1162" y="355.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">#0 = LED_00, facing the robot,</text>
+<text x="1162" y="370.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">then clockwise seen from above</text>
+<polyline points="1250,382 1250,402" fill="none" stroke="#9a6700" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="1250.0,402.0 1245.9,392.9 1254.1,392.9" fill="#9a6700"/>
+<text x="1258" y="396" font-size="10" text-anchor="start" font-weight="600" fill="#9a6700">DOUT → DIN</text>
+<rect x="1150" y="402" width="230" height="92" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="1162" y="424" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Hearts</text>
+<text x="1162" y="452.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">5 LEDs  #48–52</text>
+<text x="1162" y="467.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">heart 1 (nearest the logo)</text>
+<text x="1162" y="482.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">first</text>
+<polyline points="1250,494 1250,514" fill="none" stroke="#9a6700" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="1250.0,514.0 1245.9,504.9 1254.1,504.9" fill="#9a6700"/>
+<text x="1258" y="508" font-size="10" text-anchor="start" font-weight="600" fill="#9a6700">DOUT → DIN</text>
+<rect x="1150" y="514" width="230" height="92" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="1162" y="536" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Icons</text>
+<text x="1162" y="564.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">4 LEDs  #53–56</text>
+<text x="1162" y="579.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">under the glass: Square,</text>
+<text x="1162" y="594.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Triangle, Cross, Circle</text>
+<polyline points="1250,606 1250,626" fill="none" stroke="#9a6700" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="1250.0,626.0 1245.9,616.9 1254.1,616.9" fill="#9a6700"/>
+<text x="1258" y="620" font-size="10" text-anchor="start" font-weight="600" fill="#9a6700">DOUT → DIN</text>
+<rect x="1150" y="626" width="230" height="92" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="1162" y="648" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Status</text>
+<text x="1162" y="676.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">1 LED  #57</text>
+<text x="1162" y="691.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">blue net · amber no place</text>
+<text x="1162" y="706.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">green ready · red no network</text>
+<polyline points="330,365 380,365 380,100 1360,100 1360,290" fill="none" stroke="#cf222e" stroke-width="2.6" stroke-linejoin="round"/>
+<polygon points="1360.0,290.0 1355.9,280.9 1364.1,280.9" fill="#cf222e"/>
+<text x="1352" y="94" font-size="11.5" text-anchor="end" font-weight="700" fill="#cf222e">+5 V to the LEDs, 1.0 mm² + GND alongside: into the ring at its start (#0) and its end (#47)</text>
+<polyline points="1360,100 1392,100 1392,340 1380,340" fill="none" stroke="#cf222e" stroke-width="2.6" stroke-linejoin="round"/>
+<polygon points="1380.0,340.0 1389.1,335.9 1389.1,344.1" fill="#cf222e"/>
+<polyline points="1010,240 1010,270" fill="none" stroke="#cf222e" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="1018" y="262" font-size="10.5" text-anchor="start" font-weight="600" fill="#cf222e">5 V + GND</text>
+<rect x="20" y="520" width="470" height="420" rx="14" fill="#dafbe1" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="34" y="540" font-size="13" text-anchor="start" font-weight="700" fill="#57606a">PRESSURE SENSORS  (one per icon, ×4)</text>
+<polyline points="90,570 90,600" fill="none" stroke="#e16f24" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="98" y="584" font-size="11" text-anchor="start" font-weight="700" fill="#e16f24">3V3 (pin 3V3)</text>
+<rect x="60" y="600" width="60" height="70" rx="4" fill="#ffffff" stroke="#24292f" stroke-width="1.5"/>
+<text x="90" y="632" font-size="12" text-anchor="middle" font-weight="700" fill="#24292f">FSR</text>
+<text x="90" y="648" font-size="10" text-anchor="middle" font-weight="400" fill="#57606a">under</text>
+<text x="90" y="660" font-size="10" text-anchor="middle" font-weight="400" fill="#57606a">the icon</text>
+<polyline points="90,670 90,700" fill="none" stroke="#9a6700" stroke-width="2.2" stroke-linejoin="round"/>
+<circle cx="90" cy="700" r="4" fill="#9a6700" stroke="#9a6700" stroke-width="1.5"/>
+<rect x="75" y="720" width="30" height="60" rx="3" fill="#ffffff" stroke="#24292f" stroke-width="1.5"/>
+<text x="90" y="755" font-size="11" text-anchor="middle" font-weight="700" fill="#24292f">10k</text>
+<polyline points="90,700 90,720" fill="none" stroke="#9a6700" stroke-width="2.2" stroke-linejoin="round"/>
+<polyline points="90,780 90,810" fill="none" stroke="#24292f" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="98" y="806" font-size="11" text-anchor="start" font-weight="700" fill="#24292f">GND</text>
+<polyline points="90,700 180,700" fill="none" stroke="#9a6700" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="180.0,700.0 170.9,704.1 170.9,695.9" fill="#9a6700"/>
+<text x="186" y="704" font-size="11" text-anchor="start" font-weight="700" fill="#9a6700">to the ADC pin</text>
+<rect x="140" y="740" width="50" height="22" rx="3" fill="#ffffff" stroke="#24292f" stroke-width="1.5"/>
+<text x="165" y="755" font-size="10" text-anchor="middle" font-weight="700" fill="#24292f">100 nF</text>
+<text x="200" y="755" font-size="10" text-anchor="start" font-weight="400" fill="#57606a">optional, pin → GND</text>
+<text x="40" y="840" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Pressed = the reading rises above its resting value (measured at power-up:</text>
+<text x="40" y="856" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">nobody on the tile then) by SENSOR_PRESS (600) – released below 350.</text>
+<text x="40" y="878" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Shielded 2-core or twisted pair to each FSR; keep away from the LED 5 V.</text>
+<rect x="300" y="546" width="150" height="28" rx="4" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="312" y="564" font-size="12" text-anchor="start" font-weight="700" fill="#24292f">Square</text>
+<text x="440" y="564" font-size="12" text-anchor="end" font-weight="700" fill="#9a6700">IO32</text>
+<rect x="300" y="586" width="150" height="28" rx="4" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="312" y="604" font-size="12" text-anchor="start" font-weight="700" fill="#24292f">Triangle</text>
+<text x="440" y="604" font-size="12" text-anchor="end" font-weight="700" fill="#9a6700">IO33</text>
+<rect x="300" y="626" width="150" height="28" rx="4" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="312" y="644" font-size="12" text-anchor="start" font-weight="700" fill="#24292f">Cross</text>
+<text x="440" y="644" font-size="12" text-anchor="end" font-weight="700" fill="#9a6700">IO39</text>
+<rect x="300" y="666" width="150" height="28" rx="4" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="312" y="684" font-size="12" text-anchor="start" font-weight="700" fill="#24292f">Circle</text>
+<text x="440" y="684" font-size="12" text-anchor="end" font-weight="700" fill="#9a6700">IO35</text>
+<text x="300" y="538" font-size="11" text-anchor="start" font-weight="400" fill="#57606a">icon  →  divider node  →  pin</text>
+<polyline points="450,560 470,560 470,372 512,372" fill="none" stroke="#9a6700" stroke-width="1.6" stroke-linejoin="round"/>
+<polygon points="512.0,372.0 502.9,376.1 502.9,367.9" fill="#9a6700"/>
+<polyline points="450,600 470,600 470,416 512,416" fill="none" stroke="#9a6700" stroke-width="1.6" stroke-linejoin="round"/>
+<polygon points="512.0,416.0 502.9,420.1 502.9,411.9" fill="#9a6700"/>
+<polyline points="450,640 470,640 470,460 512,460" fill="none" stroke="#9a6700" stroke-width="1.6" stroke-linejoin="round"/>
+<polygon points="512.0,460.0 502.9,464.1 502.9,455.9" fill="#9a6700"/>
+<polyline points="450,680 470,680 470,504 512,504" fill="none" stroke="#9a6700" stroke-width="1.6" stroke-linejoin="round"/>
+<polygon points="512.0,504.0 502.9,508.1 502.9,499.9" fill="#9a6700"/>
+<polyline points="512,328 455,328 455,528" fill="none" stroke="#e16f24" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="455.0,528.0 450.9,518.9 459.1,518.9" fill="#e16f24"/>
+<text x="449" y="500" font-size="10.5" text-anchor="end" font-weight="700" fill="#e16f24">3V3 → top of each FSR</text>
+<rect x="840" y="300" width="280" height="150" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="852" y="322" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Flashing (USB-serial, 3.3 V)</text>
+<text x="852" y="350.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">adapter TX → RXD0 (IO3)</text>
+<text x="852" y="365.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">adapter RX → TXD0 (IO1)</text>
+<text x="852" y="380.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">GND → GND (adapter: 3.3 V levels!)</text>
+<text x="852" y="395.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">IO0 → GND while EN is pulsed = boot mode</text>
+<text x="852" y="410.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">then: deploy/install/flash_tiles.sh</text>
+<polyline points="788,328 840,328" fill="none" stroke="#6e7781" stroke-width="1.4" stroke-linejoin="round"/>
+<polygon points="788.0,328.0 797.1,323.9 797.1,332.1" fill="#6e7781"/>
+<polyline points="788,372 840,372" fill="none" stroke="#6e7781" stroke-width="1.4" stroke-linejoin="round"/>
+<polygon points="788.0,372.0 797.1,367.9 797.1,376.1" fill="#6e7781"/>
+<polyline points="788,416 840,416" fill="none" stroke="#6e7781" stroke-width="1.4" stroke-linejoin="round"/>
+<polygon points="788.0,416.0 797.1,411.9 797.1,420.1" fill="#6e7781"/>
+<rect x="520" y="620" width="600" height="153.5" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
+<text x="532" y="640" font-size="12.5" text-anchor="start" font-weight="700" fill="#24292f">Power budget &amp; choices</text>
+<text x="532" y="662" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">LEDs: 58 × 60 mA = 3.5 A at full white; BRIGHTNESS 160 → ≤ 2.2 A  ⇒  5 V / 5 A buck</text>
+<text x="532" y="678.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">ESP32 + Ethernet: ~250 mA. One tile ≈ 12 W max; 13 tiles + reserve ⇒ 24 V / 10 A (240 W) PSU</text>
+<text x="532" y="695.0" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">Why 24 V: 5 V over 10 m of cable loses volts; 24 V to each tile, 5 V made at the tile</text>
+<text x="532" y="711.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">Level shifter: WS2812B at 5 V wants ≥ 3.5 V data; 3.3 V often works, not always</text>
+<text x="532" y="728.0" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">Other modules: Olimex ESP32-POE (ETH addr 0, power 12, clock GPIO17 out: config.h) – PoE</text>
+<text x="532" y="744.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">802.3af gives only ~13 W: lower BRIGHTNESS to ≤ 100 or keep the 24 V feed for the LEDs</text>
+<text x="532" y="761.0" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">A bare ESP32 DevKit: same pins, wifi instead of Ethernet (pio env esp32dev-wifi)</text>
+<rect x="1150" y="760" width="250" height="170" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
+<text x="1162" y="780" font-size="12" text-anchor="start" font-weight="700" fill="#24292f">Legend</text>
+<polyline points="1164,796 1210,796" fill="none" stroke="#a40e26" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="1222" y="800" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">24 V</text>
+<polyline points="1164,816 1210,816" fill="none" stroke="#cf222e" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="1222" y="820" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">5 V</text>
+<polyline points="1164,836 1210,836" fill="none" stroke="#e16f24" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="1222" y="840" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">3.3 V</text>
+<polyline points="1164,856 1210,856" fill="none" stroke="#24292f" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="1222" y="860" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">ground</text>
+<polyline points="1164,876 1210,876" fill="none" stroke="#9a6700" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="1222" y="880" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">signal</text>
+<polyline points="1164,896 1210,896" fill="none" stroke="#6e7781" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="1222" y="900" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">serial (flashing)</text>
+<polyline points="1164,916 1210,916" fill="none" stroke="#1f6feb" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="1222" y="920" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Ethernet</text>
+</svg>

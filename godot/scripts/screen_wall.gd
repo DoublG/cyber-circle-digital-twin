@@ -29,6 +29,10 @@ extends CanvasLayer
 ## observer_page: an extra full-screen display for visitors (ObserverView):
 ## the floating observer camera with the round and a live player list
 ## (multi_window: monitor 6; preview: next to screens 4 and 5).
+## remote_screens: screens a display node renders (Replica: a Raspberry Pi per
+## 2 screens): built here as always - the game drives them - but off stage and
+## never rendered (only for a companion video). On a display node itself every
+## screen it does not show is remote, and stays empty.
 
 const SCREEN_RES := Vector2i(1920, 1080)   # resolution of each physical screen
 const GUTTER := 10                          # px of screen background between split views
@@ -42,6 +46,12 @@ const GUTTER := 10                          # px of screen background between sp
 ## multi_window: the monitor (OS numbering) of screen 1, 2, ... (the floor
 ## screens, then the mobile screens) and then the overview page. Empty / too short: screen k on monitor k-1, the overview next.
 @export var monitors: Array = []
+## Screen numbers (1-based) rendered by display nodes, not here.
+@export var remote_screens: Array = []
+var windowed := false                   # a display node: windows, not full screen (testing on one monitor)
+var view_scale := 1.0                   # the 3D views' resolution (a display node: lighter, Arena --view-scale)
+var view_msaa := Viewport.MSAA_2X
+var view_lod := 1.0                     # mesh LOD threshold (higher: coarser models further away)
 @export var eye_height := 1.45          # camera height above the tile (m)
 @export var player_fov := 70.0
 @export var look_at := Vector3(0, 1.0, 0)  # robot point the players look at
@@ -67,10 +77,20 @@ var _timer_labels: Array[Label] = []
 var shared_views: Array = []            # current shared views, one per screen
 var _observer_screen: Control           # the overview page's screen (observer_page)
 var _followers: Array[Camera3D] = []    # cameras that show the floating observer rig
+var _offstage: SubViewport              # remote screens live here: in the tree, never rendered
+var _rendered := {}                     # remote screen index -> users that need its picture here (companion video)
+var _link: Array[Label] = []            # a display node: the connection notice on each screen
+var _offline_since := -1.0              # a display node: msec the link to the master went (-1: online)
 
 
 func setup(arena_node: Node3D) -> void:
 	arena = arena_node
+	if not remote_screens.is_empty():
+		_offstage = SubViewport.new()
+		_offstage.name = "Offstage"
+		_offstage.size = Vector2i(2, 2)
+		_offstage.render_target_update_mode = SubViewport.UPDATE_DISABLED
+		add_child(_offstage)
 	if multi_window:
 		_build_windows()
 	else:
@@ -98,6 +118,8 @@ func show_shared(factory: Callable) -> void:
 
 
 func _process(_delta: float) -> void:
+	if Replica.client:
+		_update_link()
 	_followers = _followers.filter(func(c): return is_instance_valid(c))
 	for cam in _followers:
 		cam.global_transform = arena.observer.global_transform
@@ -116,6 +138,7 @@ func make_observer_cell() -> Control:
 
 ## Text in the top-right corner of every screen (countdown / round timer).
 func set_timer(text: String) -> void:
+	Replica.relay_live("wall", &"set_timer", [text])
 	_timer_text = text
 	for l in _timer_labels:
 		if is_instance_valid(l):
@@ -139,6 +162,8 @@ func play_clip(tile_id: int, path: String, from := 0.0) -> float:
 	var player := VideoStreamPlayer.new()
 	player.stream = load(path)
 	player.visible = false                # decode only; shown via the TextureRect
+	if not arena.sound.plays_here():
+		player.volume_db = -80.0          # (the display nodes play its sound)
 	cell.add_child(player)
 	var back := ColorRect.new()
 	back.color = Color.BLACK
@@ -171,6 +196,7 @@ func play_clip(tile_id: int, path: String, from := 0.0) -> float:
 ## Floating text (e.g. "+3") over one player's view.
 ## log = false: not in the overview's event feed (it already has a summary line).
 func popup(tile_id: int, text: String, color: Color, log := true) -> void:
+	Replica.relay("wall", &"popup", [tile_id, text, color, false])
 	if log:
 		arena.game.log_event("%s  %s" % [arena.player_name(tile_id).to_upper(), text], color)
 	if not _huds.has(tile_id):
@@ -188,6 +214,52 @@ func popup(tile_id: int, text: String, color: Color, log := true) -> void:
 	tw.chain().tween_callback(l.queue_free)
 
 
+## refresh() here and on the display nodes (the game: players joined / left,
+## a mode, a text changed). Their own show_players / show_shared refresh there.
+func refresh_all() -> void:
+	Replica.relay("wall", &"refresh", [])
+	refresh()
+
+
+## A method of every shared view (the quiz's show_question, the intro's
+## show_message, the scoreboard's reveal_lives): here, and on the displays
+## (live: called every frame - only the latest goes out, see Replica.relay_live).
+func call_shared(method: StringName, args: Array, live := false) -> void:
+	if live:
+		Replica.relay_live("wall", &"call_shared", [method, args])
+	else:
+		Replica.relay("wall", &"call_shared", [method, args])
+	for v in shared_views:
+		if is_instance_valid(v) and v.has_method(method):
+			v.callv(method, args)
+
+
+## A display node: the link to the master came / went (Replica.online_changed).
+func set_link(on: bool) -> void:
+	_offline_since = -1.0 if on else Time.get_ticks_msec()
+	_update_link()
+
+
+func _update_link() -> void:
+	var off := -1.0 if _offline_since < 0.0 else (Time.get_ticks_msec() - _offline_since) / 1000.0
+	var never: bool = arena.replica == null or arena.replica.stats.snapshots == 0
+	for l in _link:
+		if not is_instance_valid(l):
+			continue
+		if never:
+			l.text = "WACHTEN OP DE MASTER …"
+			l.visible = true
+		elif off >= 30.0:
+			l.text = "GEEN VERBINDING MET DE MASTER (%d s)\nHET SPEL LOOPT DOOR" % int(off)
+			l.visible = true
+		elif off >= 3.0:
+			l.text = "VERBINDING HERSTELLEN …"
+			l.visible = true
+		else:
+			l.visible = false
+		l.add_theme_font_size_override("font_size", 64 if off >= 30.0 or never else 34)
+
+
 ## Rebuild what the screens show (call when players join or leave).
 func refresh() -> void:
 	_huds.clear()
@@ -197,6 +269,8 @@ func refresh() -> void:
 		var screen := _screens[k]
 		for child in screen.get_children():
 			child.queue_free()
+		if Replica.client and is_remote(k):
+			continue                                    # (a display node: not one of its screens)
 		if _mode == "shared":
 			var view: Control = _shared_factory.call()
 			view.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -232,6 +306,31 @@ func refresh() -> void:
 	for id in _huds:
 		update_player(id)
 	play_death_clips(true)
+	_freeze_remote()
+
+
+func is_remote(k: int) -> bool:
+	return (k + 1) in remote_screens
+
+
+## The remote screens and their 3D views: never rendered here (the displays
+## do) - unless their picture is needed here (render_remote: a companion video).
+func _freeze_remote() -> void:
+	for k in _screens.size():
+		if is_remote(k):
+			var mode := SubViewport.UPDATE_ALWAYS if _rendered.get(k, 0) > 0 else SubViewport.UPDATE_DISABLED
+			var vp := _screens[k].get_viewport() as SubViewport
+			vp.render_target_update_mode = mode
+			for sub in vp.find_children("*", "SubViewport", true, false):
+				(sub as SubViewport).render_target_update_mode = mode
+
+
+## A remote screen rendered here after all (on = true) or not any more.
+func render_remote(k: int, on: bool) -> void:
+	if not is_remote(k):
+		return
+	_rendered[k] = maxi(int(_rendered.get(k, 0)) + (1 if on else -1), 0)
+	_freeze_remote()
 
 
 ## Death clips (only in split-screen player views, never over shared screens):
@@ -417,7 +516,9 @@ func _view_cell(xform: Transform3D, fov: float) -> Control:
 	cell.add_child(container)
 	var vp := SubViewport.new()
 	vp.physics_object_picking = true   # click the tile icons inside a view
-	vp.msaa_3d = Viewport.MSAA_2X
+	vp.msaa_3d = view_msaa
+	vp.scaling_3d_scale = view_scale
+	vp.mesh_lod_threshold = view_lod
 	container.add_child(vp)
 	cell.add_child(Retro.ViewFrame.new())
 	var cam := Camera3D.new()
@@ -521,6 +622,14 @@ func _new_screen(parent: Node, register := true) -> Control:
 	crt.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	crt.size = SCREEN_RES
 	vp.add_child(crt)
+	if Replica.client and register:  # a display node: the link to the master, over everything
+		var link := _label(34, Retro.AMBER)
+		link.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		link.add_theme_stylebox_override("normal", Retro.panel(Color(Retro.PANEL, 0.92), Retro.ORANGE, 4, 16, 26))
+		link.position = Vector2(SCREEN_RES.x / 2.0 - 500, SCREEN_RES.y - 260)
+		link.size = Vector2(1000, 0)
+		vp.add_child(link)
+		_link.append(link)
 	var fit := func():
 		var k := minf(holder.size.x / SCREEN_RES.x, holder.size.y / SCREEN_RES.y)
 		container.scale = Vector2(k, k)
@@ -586,8 +695,12 @@ func _build_preview() -> void:
 	rows.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(rows)
 	var row: HBoxContainer
+	var shown := 0
 	for k in groups().size():
-		if k % 3 == 0:
+		if is_remote(k):
+			_new_screen(_offstage)
+			continue
+		if shown % 3 == 0:
 			row = HBoxContainer.new()
 			row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 			row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -597,8 +710,9 @@ func _build_preview() -> void:
 		aspect.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(aspect)
 		_new_screen(aspect)
+		shown += 1
 	if observer_page:
-		if groups().size() % 3 == 0:
+		if shown % 3 == 0:
 			row = HBoxContainer.new()
 			row.size_flags_vertical = Control.SIZE_EXPAND_FILL
 			row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -611,35 +725,48 @@ func _build_preview() -> void:
 
 
 ## One screen per monitor: screen 1 in the main window, the others in windows.
+## Remote screens (display nodes) get no window: the first window here (a
+## screen, or only the overview) is the main window.
 func _build_windows() -> void:
+	var local := 0
 	for k in groups().size():
-		if k == 0:
-			_place(get_window(), 0)
-			_new_screen(self)
+		if is_remote(k):
+			_new_screen(_offstage)
 			continue
-		var win := Window.new()
-		win.title = "Cyber Circle - scherm %d" % (k + 1)
-		win.size = Vector2i(1280, 720)
-		add_child(win)
-		_place(win, k)
-		_new_screen(win)
+		if local == 0:
+			_place(get_window(), k, local)
+			_new_screen(self)
+		else:
+			var win := Window.new()
+			win.title = "Cyber Circle - scherm %d" % (k + 1)
+			win.size = Vector2i(1280, 720)
+			add_child(win)
+			_place(win, k, local)
+			_new_screen(win)
+		local += 1
 	if observer_page:
+		if local == 0:
+			_place(get_window(), groups().size(), 0)
+			_add_observer_page(self)
+			return
 		var win := Window.new()
 		win.title = "Cyber Circle - overzicht"
 		win.size = Vector2i(1280, 720)
 		add_child(win)
-		_place(win, groups().size())
+		_place(win, groups().size(), local)
 		_add_observer_page(win)
 
 
 ## Full screen on the monitor for window k (screens first, then the overview).
 ## Not enough monitors (e.g. testing on one big screen): the windows that have
 ## no monitor of their own are put in a 3-column grid on the first monitor.
-func _place(win: Window, k: int) -> void:
+func _place(win: Window, k: int, local := -1) -> void:
+	if local < 0:
+		local = k
 	var count := DisplayServer.get_screen_count()
-	var m: int = int(monitors[k]) if k < monitors.size() else k
-	var windows := groups().size() + (1 if observer_page else 0)
-	if count >= windows and m < count:
+	var m: int = int(monitors[k]) if k < monitors.size() else local
+	var windows := groups().size() - remote_screens.size() + (1 if observer_page else 0)
+	if count >= windows and m < count and not windowed:
 		win.position = DisplayServer.screen_get_position(m)
 		win.mode = Window.MODE_FULLSCREEN
 		return
@@ -652,4 +779,4 @@ func _place(win: Window, k: int) -> void:
 		size = Vector2i(cell.y * 16 / 9, cell.y)
 	win.mode = Window.MODE_WINDOWED
 	win.size = size
-	win.position = area.position + Vector2i((k % cols) * cell.x, (k / cols) * cell.y)
+	win.position = area.position + Vector2i((local % cols) * cell.x, (local / cols) * cell.y)

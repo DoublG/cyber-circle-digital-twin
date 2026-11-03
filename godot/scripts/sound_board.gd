@@ -11,7 +11,10 @@ extends Node
 ##   explosion   the tile explodes                 life       +1 life
 ##   round_start a round begins                    scoreboard the scoreboard
 ##   join        a player activates their tile     random     now and then, between the action
-## Settings (web interface, group "Geluid"): volume, the random sounds' interval.
+## Settings (web interface, group "Geluid"): volume, the random sounds' interval,
+## where the sound plays (where_to): with display nodes (Replica) every Pi plays
+## every sound on its own speakers (HDMI or the audio jack) - the master picks
+## the file, so all play the same one.
 ##
 ## Any other folder is an event too, e.g. data/sounds/announce/ or DIR/gong/:
 ## external systems play sounds through the command {"sound": "gong"}
@@ -29,6 +32,8 @@ var volume := 80                       # %
 var random_min := 20.0                 # s between random sounds (when the game is open)
 var random_max := 60.0
 var extra_dir := ""                    # --sounds=DIR
+var where_to := 0                      # 0 automatic (on the displays when any are connected, else here),
+                                       # 1 here (the master), 2 the displays, 3 both
 
 var _sounds := {}                      # event -> [AudioStream]
 var _files := {}                       # event -> [file name], in the same order as _sounds
@@ -53,7 +58,23 @@ func tunables() -> Array:
 		GameRound.setting("volume", "Volume (%)", 0, 100, 5),
 		GameRound.setting("random_min", "Willekeurig geluid na min.", 5, 600, 5, "s"),
 		GameRound.setting("random_max", "Willekeurig geluid na max.", 5, 600, 5, "s"),
+		GameRound.setting("where_to", "Geluid op: 0 automatisch, 1 master, 2 displays, 3 beide", 0, 3, 1),
 	]
+
+
+## Sound here? (the master: where_to; a display node: always, as the master sends it)
+func plays_here() -> bool:
+	if Replica.client:
+		return true
+	match where_to:
+		1, 3: return true
+		2: return false
+	return not (Replica.server and Replica._self and not Replica._self.peers.is_empty())
+
+
+## Sound on the display nodes too?
+static func plays_on_displays(w: int) -> bool:
+	return w != 1
 
 
 ## Plays a random sound of `event` (nothing if there is none). Not the same
@@ -65,9 +86,28 @@ func play(event: StringName, min_gap := 0.08) -> void:
 	if now - int(_last.get(event, -100000)) < min_gap * 1000.0:
 		return
 	_last[event] = now
+	var i: int = randi() % _sounds[event].size()
+	if plays_on_displays(where_to):
+		Replica.relay("sound", &"play_file", [String(event), _files[event][i], -1])
+	if plays_here():
+		_start(_sounds[event][i], volume)
+
+
+## A display node: the master's choice (play / play_external there).
+func play_file(event: String, file: String, vol := -1) -> void:
+	if not enabled or not _sounds.has(StringName(event)):
+		return
+	var i: int = _files[StringName(event)].find(file)
+	var stream: AudioStream = _sounds[StringName(event)][i] if i >= 0 else _sounds[StringName(event)].pick_random()
+	_start(stream, volume if vol < 0 else clampi(vol, 0, 100))
+
+
+func _start(stream: AudioStream, vol: float) -> void:
+	if vol <= 0.0:
+		return
 	var p := _free_player()
-	p.stream = _sounds[event].pick_random()
-	p.volume_db = linear_to_db(volume / 100.0)
+	p.stream = stream
+	p.volume_db = linear_to_db(vol / 100.0)
 	p.play()
 
 
@@ -78,26 +118,22 @@ func play(event: StringName, min_gap := 0.08) -> void:
 func play_external(event: StringName, file := "", vol := -1) -> bool:
 	if not _sounds.has(event):
 		return false
-	var stream: AudioStream = _sounds[event].pick_random()
+	var i: int = randi() % _sounds[event].size()
 	if file != "":
-		var i: int = _files[event].find(file)
+		i = _files[event].find(file)
 		if i < 0:
 			return false
-		stream = _sounds[event][i]
-	if not enabled:
+	if plays_on_displays(where_to):
+		Replica.relay("sound", &"play_file", [String(event), _files[event][i], vol])
+	if not enabled or not plays_here():
 		return true
-	var v := float(volume if vol < 0 else clampi(vol, 0, 100))
-	if v <= 0.0:
-		return true
-	var p := _free_player()
-	p.stream = stream
-	p.volume_db = linear_to_db(v / 100.0)
-	p.play()
+	_start(_sounds[event][i], float(volume if vol < 0 else clampi(vol, 0, 100)))
 	return true
 
 
 ## Stops every sound that is playing now.
 func stop_all() -> void:
+	Replica.relay("sound", &"stop_all", [])
 	for p in _players:
 		p.stop()
 
@@ -126,6 +162,8 @@ func has_sounds(event: StringName) -> bool:
 
 
 func _process(delta: float) -> void:
+	if Replica.client:
+		return                             # (the master times the random sounds)
 	_clock += delta
 	if _clock < _next_random:
 		return

@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="834" viewBox="0 0 1400 834" font-family="Helvetica, Arial, sans-serif">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="24" y="38" font-size="24" text-anchor="start" font-weight="700" fill="#24292f">Sequence – a display node (Raspberry Pi) joins the master</text>
+<text x="24" y="62" font-size="13" text-anchor="start" font-weight="400" fill="#57606a">The master decides; the Pi plays the game&#x27;s scene itself from its state (Godot multiplayer, ENet) - the robot is an NPC on both</text>
+<rect x="25.0" y="85" width="190" height="50" rx="8" fill="#fbefff" stroke="#24292f" stroke-width="1.5"/>
+<text x="120.0" y="106" font-size="13.5" text-anchor="middle" font-weight="700" fill="#24292f">Display node</text>
+<text x="120.0" y="124" font-size="10.5" text-anchor="middle" font-weight="400" fill="#57606a">Pi: screens 1, 2</text>
+<line x1="120.0" y1="135" x2="120.0" y2="814" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 5"/>
+<rect x="257.0" y="85" width="190" height="50" rx="8" fill="#ddf4ff" stroke="#24292f" stroke-width="1.5"/>
+<text x="352.0" y="106" font-size="13.5" text-anchor="middle" font-weight="700" fill="#24292f">Broker</text>
+<text x="352.0" y="124" font-size="10.5" text-anchor="middle" font-weight="400" fill="#57606a">Mosquitto</text>
+<line x1="352.0" y1="135" x2="352.0" y2="814" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 5"/>
+<rect x="489.0" y="85" width="190" height="50" rx="8" fill="#fbefff" stroke="#24292f" stroke-width="1.5"/>
+<text x="584.0" y="106" font-size="13.5" text-anchor="middle" font-weight="700" fill="#24292f">Godot master</text>
+<text x="584.0" y="124" font-size="10.5" text-anchor="middle" font-weight="400" fill="#57606a">Replica :7350 UDP</text>
+<line x1="584.0" y1="135" x2="584.0" y2="814" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 5"/>
+<rect x="721.0" y="85" width="190" height="50" rx="8" fill="#fff8c5" stroke="#24292f" stroke-width="1.5"/>
+<text x="816.0" y="106" font-size="13.5" text-anchor="middle" font-weight="700" fill="#24292f">Tiles</text>
+<text x="816.0" y="124" font-size="10.5" text-anchor="middle" font-weight="400" fill="#57606a">its own: T04-T06</text>
+<line x1="816.0" y1="135" x2="816.0" y2="814" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 5"/>
+<rect x="953.0" y="85" width="190" height="50" rx="8" fill="#fbefff" stroke="#24292f" stroke-width="1.5"/>
+<text x="1048.0" y="106" font-size="13.5" text-anchor="middle" font-weight="700" fill="#24292f">The game</text>
+<text x="1048.0" y="124" font-size="10.5" text-anchor="middle" font-weight="400" fill="#57606a">rounds, lives, scores</text>
+<line x1="1048.0" y1="135" x2="1048.0" y2="814" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 5"/>
+<rect x="1185.0" y="85" width="190" height="50" rx="8" fill="#fff8c5" stroke="#24292f" stroke-width="1.5"/>
+<text x="1280.0" y="106" font-size="13.5" text-anchor="middle" font-weight="700" fill="#24292f">Screens</text>
+<text x="1280.0" y="124" font-size="10.5" text-anchor="middle" font-weight="400" fill="#57606a">HDMI 1 + 2, sound</text>
+<line x1="1280.0" y1="135" x2="1280.0" y2="814" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="5 5"/>
+<polyline points="120.0,170 1280.0,170" fill="none" stroke="#8250df" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="1280.0,170.0 1270.9,174.1 1270.9,165.9" fill="#8250df"/>
+<text x="700.0" y="163" font-size="11" text-anchor="middle" font-weight="600" fill="#8250df" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">boot: WACHTEN OP DE MASTER on both screens</text>
+<polyline points="584.0,216 120.0,216" fill="none" stroke="#bf3989" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="120.0,216.0 129.1,211.9 129.1,220.1" fill="#bf3989"/>
+<text x="352.0" y="209" font-size="11" text-anchor="middle" font-weight="600" fill="#bf3989" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">beacon UDP 7351 every second: master here, port 7350  (or --master=HOST)</text>
+<polyline points="120.0,262 584.0,262" fill="none" stroke="#bf3989" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="584.0,262.0 574.9,266.1 574.9,257.9" fill="#bf3989"/>
+<text x="352.0" y="255" font-size="11" text-anchor="middle" font-weight="600" fill="#bf3989" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">ENet connect :7350 · hello {node, screens: [1, 2]}</text>
+<polyline points="584.0,308 120.0,308" fill="none" stroke="#bf3989" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="120.0,308.0 129.1,303.9 129.1,312.1" fill="#bf3989"/>
+<text x="352.0" y="301" font-size="11" text-anchor="middle" font-weight="600" fill="#bf3989" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">snapshot: the game state the screens read (players, lives, round, view)</text>
+<polyline points="120.0,354 1280.0,354" fill="none" stroke="#8250df" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="1280.0,354.0 1270.9,358.1 1270.9,349.9" fill="#8250df"/>
+<text x="700.0" y="347" font-size="11" text-anchor="middle" font-weight="600" fill="#8250df" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">builds its 2 screens with the game&#x27;s own views, renders them</text>
+<polyline points="1048.0,400 584.0,400" fill="none" stroke="#9a6700" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="584.0,400.0 593.1,395.9 593.1,404.1" fill="#9a6700"/>
+<text x="816.0" y="393" font-size="11" text-anchor="middle" font-weight="600" fill="#9a6700" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">a round, a hit, an extermination: the game changes state</text>
+<polyline points="584.0,446 120.0,446" fill="none" stroke="#bf3989" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="120.0,446.0 129.1,441.9 129.1,450.1" fill="#bf3989"/>
+<text x="352.0" y="439" font-size="11" text-anchor="middle" font-weight="600" fill="#bf3989" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">deltas (on change) + events (popup, attack, sound, light cue) - reliable</text>
+<polyline points="584.0,492 120.0,492" fill="none" stroke="#bf3989" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="120.0,492.0 129.1,487.9 129.1,496.1" fill="#bf3989"/>
+<text x="352.0" y="485" font-size="11" text-anchor="middle" font-weight="600" fill="#bf3989" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">live 15/s: clocks, countdowns, the quiz screen - unreliable, the latest wins</text>
+<polyline points="120.0,538 1280.0,538" fill="none" stroke="#1a7f37" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="1280.0,538.0 1270.9,542.1 1270.9,533.9" fill="#1a7f37"/>
+<text x="700.0" y="531" font-size="11" text-anchor="middle" font-weight="600" fill="#1a7f37" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">the robot NPC acts on the events · the sound on its HDMI / jack</text>
+<polyline points="816.0,584 352.0,584" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="352.0,584.0 361.1,579.9 361.1,588.1" fill="#0a7d6f"/>
+<text x="584.0" y="577" font-size="11" text-anchor="middle" font-weight="600" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">a press on its own tile: tile/&lt;n&gt;/event</text>
+<polyline points="352.0,630 120.0,630" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="120.0,630.0 129.1,625.9 129.1,634.1" fill="#0a7d6f"/>
+<text x="236.0" y="623" font-size="11" text-anchor="middle" font-weight="600" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">read-only user display: its own tiles&#x27; cmd + event - shows at once</text>
+<polyline points="120.0,676 584.0,676" fill="none" stroke="#bf3989" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="584.0,676.0 574.9,680.1 574.9,671.9" fill="#bf3989"/>
+<text x="352.0" y="669" font-size="11" text-anchor="middle" font-weight="600" fill="#bf3989" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">every 2 s: its metrics (fps, CPU, link) - the master publishes them</text>
+<polyline points="584.0,722 120.0,722" fill="none" stroke="#bf3989" stroke-width="2.2" stroke-linejoin="round" stroke-dasharray="6 4"/>
+<polygon points="120.0,722.0 129.1,717.9 129.1,726.1" fill="#bf3989"/>
+<text x="352.0" y="715" font-size="11" text-anchor="middle" font-weight="600" fill="#bf3989" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">network gone: the Pi plays on, after 3 s VERBINDING HERSTELLEN</text>
+<polyline points="120.0,768 584.0,768" fill="none" stroke="#bf3989" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="584.0,768.0 574.9,772.1 574.9,763.9" fill="#bf3989"/>
+<text x="352.0" y="761" font-size="11" text-anchor="middle" font-weight="600" fill="#bf3989" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">every 1-5 s: connect again -&gt; a fresh snapshot, back in step</text>
+</svg>

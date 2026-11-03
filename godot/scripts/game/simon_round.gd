@@ -127,10 +127,7 @@ func result(id: int, r: Dictionary) -> void:
 			st.text = "+%d  REEKS %d" % [level * points_per_level, level]
 			game.screen_wall.popup(id, "+%d" % (level * points_per_level), Retro.GOOD)
 			var arena := game.arena
-			arena.send_packet(id, Retro.GOOD, func():
-				arena.robot.set_side_glow(arena.robot_side(id), Retro.GOOD, 2.0)
-				await arena.get_tree().create_timer(0.3).timeout
-				arena.robot.set_side_glow(arena.robot_side(id), Color.BLACK))
+			arena.npc.feedback(id, Retro.GOOD, 0.3)
 		"fail":                            # back to the shortest sequence
 			st.phase = "pause"
 			st.fails += 1
@@ -148,6 +145,10 @@ func finish() -> void:
 ## Places: the longest sequence repeated correctly.
 func progress(id: int) -> int:
 	return state[id].best
+
+
+func replica_keys() -> Array:              # (what its overlay reads: Replica)
+	return ["state"]
 
 
 func make_player_overlay(id: int) -> Control:

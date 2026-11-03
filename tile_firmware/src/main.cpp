@@ -1,6 +1,7 @@
 // Cyber Circle tile (ESP32): Ethernet (net.cpp; wifi as an option) + MQTT, the
 // 4 pressure sensors, the LEDs.
-//   announces itself    device/<mac>/hello (retained, every HELLO_MS) {device, fw, net, ip, link | rssi}
+//   announces itself    device/<mac>/hello (retained, every HELLO_MS) {device, fw, net, ip, link | rssi,
+//                       uptime (s), heap (free bytes), loop_hz, mqtt_reconnects}
 //   its place           device/<mac>/config {"tile": n} (the control server: Tegels / the app)
 //   find it             device/<mac>/identify {"seconds": 6}
 //   then, as tile n     tile/<n>/state  (retained) what to show - display.cpp
@@ -25,6 +26,7 @@ static PubSubClient mqtt(socket);
 static String deviceId;                     // the MAC address
 static int place = 0;                       // 0 = no place yet
 static uint32_t lastHello = 0, lastTry = 0, lastFrame = 0, lastSensorReport = 0;
+static uint32_t loops = 0, loopsAt = 0, mqttConnects = 0;   // (hello: the loop rate and reconnects, Prestaties tab)
 
 int iconByName(const char *name) {
     if (!name) return -1;
@@ -65,6 +67,13 @@ static void hello() {
     doc["fw"] = FW_VERSION;
     net::describe(doc);
     doc["leds"] = RING_COUNT;
+    uint32_t now = millis();
+    doc["uptime"] = now / 1000;
+    doc["heap"] = ESP.getFreeHeap();
+    doc["loop_hz"] = now > loopsAt ? (uint32_t)(loops * 1000ULL / (now - loopsAt)) : 0;
+    doc["mqtt_reconnects"] = mqttConnects > 0 ? mqttConnects - 1 : 0;
+    loops = 0;
+    loopsAt = now;
     String out;
     serializeJson(doc, out);
     mqtt.publish(deviceTopic("hello").c_str(), out.c_str(), true);
@@ -110,6 +119,7 @@ static void connect() {
     String client = "tile-" + deviceId;
     client.replace(":", "");
     if (!mqtt.connect(client.c_str(), MQTT_USER, MQTT_PASSWORD)) return;
+    mqttConnects++;
     Serial.println("mqtt: connected");
     int was = place;
     place = 0;
@@ -135,6 +145,7 @@ void setup() {
 }
 
 void loop() {
+    loops++;
     connect();
     mqtt.loop();
     uint32_t now = millis();

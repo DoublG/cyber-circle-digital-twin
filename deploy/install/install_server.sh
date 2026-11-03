@@ -33,7 +33,9 @@ elif [ -n "${1:-}" ]; then
 fi
 grep -q "^A11Y_VIDEO=" "$ENV_FILE" || sed -n '/^# ---.*accessible page/,/^CONTROL_INTERNAL_PORT/p' \
     "$HERE/cybercircle.env.example" >> "$ENV_FILE"         # (an older settings file: add the new block)
-for key in MQTT_PASSWORD DB_PASSWORD STREAM_PASSWORD; do         # never empty or the example's "change-me"
+grep -q "^MQTT_DISPLAY_USER=" "$ENV_FILE" || printf '%s\n' "# the display nodes' MQTT user: only reads its own tiles (mosquitto-cybercircle.acl)" \
+    "MQTT_DISPLAY_USER=display" "MQTT_DISPLAY_PASSWORD=change-me" >> "$ENV_FILE"   # (an older settings file)
+for key in MQTT_PASSWORD MQTT_DISPLAY_PASSWORD DB_PASSWORD STREAM_PASSWORD; do   # never empty or the example's "change-me"
     if grep -qE "^$key=(change-me)?$" "$ENV_FILE"; then
         sed -i "s/^$key=.*/$key=$(secret)/" "$ENV_FILE"
         echo "$key: a random password"
@@ -66,8 +68,11 @@ sed -e "s/@MQTT_PORT@/${MQTT_PORT:-1883}/" -e "s/@MQTT_WS_PORT@/${MQTT_WS_PORT:-
     "$HERE/mosquitto-cybercircle.conf" > /etc/mosquitto/conf.d/cybercircle.conf
 rm -f /etc/mosquitto/cybercircle.passwd
 mosquitto_passwd -b -c /etc/mosquitto/cybercircle.passwd "$MQTT_USER" "$MQTT_PASSWORD"
-chown mosquitto:mosquitto /etc/mosquitto/cybercircle.passwd
-chmod 600 /etc/mosquitto/cybercircle.passwd
+mosquitto_passwd -b /etc/mosquitto/cybercircle.passwd "${MQTT_DISPLAY_USER:-display}" "$MQTT_DISPLAY_PASSWORD"
+sed -e "s/@MQTT_USER@/$MQTT_USER/" -e "s/@MQTT_DISPLAY_USER@/${MQTT_DISPLAY_USER:-display}/" \
+    -e "s/@PREFIX@/${MQTT_PREFIX:-cybercircle}/" "$HERE/mosquitto-cybercircle.acl" > /etc/mosquitto/cybercircle.acl
+chown mosquitto:mosquitto /etc/mosquitto/cybercircle.passwd /etc/mosquitto/cybercircle.acl
+chmod 600 /etc/mosquitto/cybercircle.passwd /etc/mosquitto/cybercircle.acl
 systemctl enable --now mosquitto
 systemctl restart mosquitto
 

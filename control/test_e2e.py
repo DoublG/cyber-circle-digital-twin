@@ -275,6 +275,9 @@ try:
     check(bool(rank) and rank[0]["plays"] == 2, "Tess' play saved: in the overall ranking (+ the sync test's play)")
     events = [e["text"] for e in live()["events"]]
     check(any("TESS" in e for e in events), "event feed arrived in the web interface")
+    m = until(lambda: [n for n in call("GET", "/api/metrics")["nodes"] if n.get("role") == "master" and n.get("hist")], 10)
+    check(bool(m) and m[0]["fps"] > 0 and m[0]["draw_calls"] >= 0 and "control" in call("GET", "/api/metrics"),
+          "performance metrics of the game in /api/metrics (Prestaties)")
 finally:
     for p in procs:
         p.terminate()

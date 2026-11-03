@@ -44,6 +44,7 @@ var _mutex := Mutex.new()
 var _busy := false
 var _running := false
 var _src := Vector2i.ZERO
+var _remote := false                # the screen is a display node's: rendered here only for this
 
 
 func configure(cfg: Dictionary) -> void:
@@ -74,6 +75,9 @@ func start() -> void:
 		_fail("no screen viewport")
 		return
 	_src = vp.size
+	if not _remote and arena.screen_wall.is_remote(_screen):
+		_remote = true
+		arena.screen_wall.render_remote(_screen, true)
 	if sink_file != "":
 		_pipe = FileAccess.open(sink_file, FileAccess.WRITE)
 		_used_encoder = "file"
@@ -103,6 +107,9 @@ func stop(reason := "") -> void:
 	if _pid > 0 and OS.is_process_running(_pid):
 		OS.kill(_pid)
 	_pid = -1
+	if _remote:
+		_remote = false
+		arena.screen_wall.render_remote(_screen, false)
 	print("stream: %s stopped%s (%d frames)" % [Retro.tile_label(tile_id), " - " + reason if reason else "", _frames])
 	state_changed.emit(tile_id, false, {"reason": reason})
 
@@ -176,6 +183,9 @@ func _write(data: PackedByteArray) -> void:
 
 
 func _fail(why: String) -> void:
+	if _remote:
+		_remote = false
+		arena.screen_wall.render_remote(_screen, false)
 	push_warning("stream %s: %s" % [Retro.tile_label(tile_id), why])
 	state_changed.emit(tile_id, false, {"error": why})
 	queue_free()

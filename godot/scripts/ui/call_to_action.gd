@@ -1,9 +1,12 @@
 class_name CallToAction
 extends Label
 ## Big rotating slogan (Texts.calls(): the operator's, else Retro.CALLS_TO_ACTION): types itself out, pulses,
-## and is replaced by the next one every `interval` seconds.
+## and is replaced by the next one every `interval` seconds. On the wall clock,
+## so every screen of every node (display nodes) shows the same at the same time;
+## offset: another slogan than its neighbours (e.g. the tile number).
 
 var interval := 5.0
+var offset := 0
 var _index := 0
 var _t := 0.0
 
@@ -17,17 +20,17 @@ func _init(font_size := 72) -> void:
 	add_theme_color_override("font_color", Retro.AMBER)
 	add_theme_color_override("font_outline_color", Color(Retro.ORANGE, 0.6))
 	add_theme_constant_override("outline_size", 10)
+	_index = -1
+	_process(0.0)
+
+
+func _process(_delta: float) -> void:
+	var now := Time.get_unix_time_from_system()
+	_t = fmod(now, interval)
 	var calls := Texts.calls()
-	_index = randi() % calls.size()
-	text = calls[_index]
-
-
-func _process(delta: float) -> void:
-	_t += delta
-	if _t >= interval:
-		_t = 0.0
-		var calls := Texts.calls()
-		_index = (_index + 1) % calls.size()
+	var i := (int(now / interval) + offset) % calls.size()
+	if i != _index:
+		_index = i
 		text = calls[_index]
 	visible_ratio = clampf(_t / 0.8, 0.0, 1.0)            # typewriter
 	modulate.a = 0.75 + 0.25 * sin(_t * 6.0)              # glow pulse
