@@ -190,8 +190,7 @@ func _process(delta: float) -> void:
 				publish("%s/tile/%d/state" % [topic_prefix, t.tile_id], json, true)
 	if not online:
 		return
-	_announce_timer -= delta
-	if _announce_timer <= 0.0:          # heartbeat: the web interface shows who is online
+	if Time.get_ticks_msec() / 1000.0 >= _announce_timer:   # heartbeat (wall clock): the web interface shows who is online
 		_announce()
 	_state_timer -= delta
 	if _state_timer <= 0.0:
@@ -266,7 +265,7 @@ func _publish_display(peer: Dictionary, m: Dictionary) -> void:
 
 
 func _announce() -> void:
-	_announce_timer = 10.0
+	_announce_timer = Time.get_ticks_msec() / 1000.0 + 10.0
 	publish_json(topic_prefix + "/node/" + node_id, {"id": node_id, "role": role, "host": _lan_address(),
 		"port": display_port, "screens": range(1, arena.screen_wall.groups().size() + 1).filter(
 			func(k): return k not in arena.screen_wall.remote_screens),

@@ -36,11 +36,13 @@ func _process(delta: float) -> void:
 	_worst_ms = maxf(_worst_ms, ms)
 	if ms > BUDGET_MS:
 		_slow += 1
-	_t += delta
-	if _t < INTERVAL:
+	var now := Time.get_ticks_msec() / 1000.0           # (wall clock: also at --fixed-fps, recording movies)
+	if _t <= 0.0:
+		_t = now
+	if now - _t < INTERVAL:
 		return
-	var span := _t
-	_t = 0.0
+	var span := now - _t
+	_t = now
 	if not sink.is_valid() and (mqtt == null or not mqtt.online or topic == ""):
 		_reset()
 		return

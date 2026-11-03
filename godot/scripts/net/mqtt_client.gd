@@ -82,10 +82,10 @@ func _process(delta: float) -> void:
 			while _ws.get_available_packet_count() > 0:
 				_rx.append_array(_ws.get_packet())
 			_parse()
-			if online:
-				_ping_timer += delta
-				if _ping_timer >= keep_alive * 0.5:
-					_ping_timer = 0.0
+			if online:                         # (wall clock: the broker counts real seconds, also at --fixed-fps)
+				var now := Time.get_ticks_msec() / 1000.0
+				if now - _ping_timer >= keep_alive * 0.5:
+					_ping_timer = now
 					_send(0xC0, PackedByteArray())    # PINGREQ
 		WebSocketPeer.STATE_CLOSED:
 			if online or _was_open:
@@ -148,7 +148,7 @@ func _handle(header: int, body: PackedByteArray) -> void:
 		2:                                     # CONNACK
 			if body.size() >= 2 and body[1] == 0:
 				online = true
-				_ping_timer = 0.0
+				_ping_timer = Time.get_ticks_msec() / 1000.0
 				for t in _subs:
 					_send_subscribe(t)
 				connected.emit()

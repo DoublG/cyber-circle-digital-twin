@@ -45,3 +45,5 @@ tools/voice/.venv/
 tools/voice/models/
 tools/voice/reference*.wav
 godot/tests/_voice/
+godot/movie/game_tmp/
+movies/game/
