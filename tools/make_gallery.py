@@ -247,12 +247,15 @@ def main():
             s.save(s.phone, "app", "ga_naar_tegel" if got else "scannen")
             s.tap("VOLGENDE")
             s.save(s.phone, "app", "scannen_open")
-            if s.tap("BEZOEKER ZONDER GSM"):
+            if s.tap("ZONDER GSM"):
                 for field, text in (("Naam", "Zoë"), ("Leeftijd (niet verplicht)", "9"),
                                     ("E-mail (niet verplicht)", "zoe@example.org")):
                     if s.tap(field, role="textbox"):
                         s.phone.keyboard.type(text)
                 s.save(s.phone, "app", "bezoeker_zonder_gsm")
+                s.close_sheet()
+            if s.tap("MOBIELE SPELER"):                    # the mobile places M1-M5: pick one, then scan
+                s.save(s.phone, "app", "mobiele_speler_kiezen")
                 s.close_sheet()
             s.tab("Tegels")
             s.save(s.phone, "app", "tegels_open")
