@@ -11,6 +11,9 @@ extends Node
 ##   round_<type>             a round's intro          ("<name>. <rules>")
 ##   time_up                  "Tijd om!"
 ##   invite_tile_03 / invite_m1   an invited player     ("Ga naar tegel 3 en druk op de 4 iconen.")
+## Personal lines (say_to): for one player only ("tile"), e.g. "Je koos
+## Driehoek." - for the accessible page of a blind or partially sighted player
+## (control server /a11y/<token>); without a file they are only sent out.
 ## Output (web interface, group "Voorlezen"): off / stereo (mixed with the
 ## sound effects) / the CENTRE channel of a 5.1 or 7.1 sound card (its own
 ## jack: a separate speaker or headphones). Its own audio bus, "Voice".
@@ -131,6 +134,12 @@ func _stream(name: String) -> AudioStream:
 
 
 # ---------------------------------------------------------------- the lines
+
+## A line for one player only (kind "personal"): their answer, right or
+## wrong, hit, a life, their place. name: a fixed file name (personal_<what>).
+func say_to(tile_id: int, what: String, text: String) -> void:
+	say("personal_" + what, text, "personal", {"tile": tile_id})
+
 
 ## A question's file name, from its text: readable and a short hash, e.g.
 ## question_wat-is-phishing_32c557. A changed text gets a new name, so an old

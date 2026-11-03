@@ -200,6 +200,37 @@ class _ScanPageState extends State<ScanPage> {
     return (name: name.text.trim(), age: int.tryParse(age.text.trim()) ?? 0, email: email.text.trim());
   }
 
+  /// A blind or partially sighted visitor: their own page (read by their own
+  /// screen reader; their screen as live video) - a QR code they scan with
+  /// their own phone.
+  Future<void> _accessibleLink(Player player) async {
+    try {
+      final link = await app.api!.a11yLink(player.id);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: Retro.panel,
+          title: Text('${player.name}: eigen scherm', style: const TextStyle(color: Retro.amber)),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('Laat de bezoeker deze code scannen met de eigen gsm: de schermlezer leest alles '
+                'voor.', style: TextStyle(color: Retro.cream)),
+            if (link.video)
+              const Text('(en het eigen spelscherm van dichtbij, om in te zoomen)', style: TextStyle(color: Retro.dim)),
+            const SizedBox(height: 12),
+            Container(color: Colors.white, padding: const EdgeInsets.all(8),
+                child: Image.network(link.qr, width: 240, height: 240, filterQuality: FilterQuality.none)),
+            const SizedBox(height: 8),
+            SelectableText(link.url, style: const TextStyle(color: Retro.dim, fontSize: 12)),
+          ]),
+          actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('KLAAR'))],
+        ),
+      );
+    } on ApiError catch (e) {
+      _show('$e');
+    }
+  }
+
   /// MOBIELE SPELER: choose a free mobile place (M1-M5); the next scanned card goes there.
   Future<void> _chooseStation() async {
     final picked = await showModalBottomSheet<int>(
@@ -395,6 +426,13 @@ class _ScanPageState extends State<ScanPage> {
                 if (mounted) await _scanner.start();
               },
               child: const Text('andere plaats / annuleren', style: TextStyle(color: Retro.dim)),
+            ),
+          if (r != null && !failed)
+            TextButton.icon(
+              onPressed: () => _accessibleLink(r.player),
+              icon: const Icon(Icons.record_voice_over, color: Retro.amber),
+              label: const Text('SCHERMLEZER / SCHERM VAN DICHTBIJ',
+                  style: TextStyle(color: Retro.amber, fontWeight: FontWeight.bold)),
             ),
           Container(height: 18, color: color),
           SizedBox(

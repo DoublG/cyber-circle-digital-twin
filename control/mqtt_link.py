@@ -38,6 +38,9 @@ class MqttLink:
         self.devices = {}                    # physical tile id -> hello + "seen"
         self.state = {}
         self.events = deque(maxlen=60)
+        self.voice = deque(maxlen=200)       # the lines the game reads out (voice), each with "seq" (the a11y pages)
+        self.voice_seq = 0
+        self.streams = {}                    # tile -> the companion video's last state (stream)
         self.traffic = deque(maxlen=1000)    # the raw messages (web interface: MQTT): {seq, time, topic, payload, retained}
         self.traffic_seq = 0
         self.master = {}
@@ -120,6 +123,13 @@ class MqttLink:
             elif topic == "master":
                 self.master = data or {}
                 kind = "master"
+            elif topic == "voice" and isinstance(data, dict):
+                self.voice_seq += 1
+                self.voice.append({**data, "seq": self.voice_seq, "at": time.time()})
+                kind = "voice"
+            elif topic == "stream" and isinstance(data, dict):
+                self.streams[int(data.get("tile", 0))] = data
+                kind = "stream"
             elif topic == "event":
                 self.events.appendleft({**(data if isinstance(data, dict) else {"text": str(data)}),
                                         "time": time.strftime("%H:%M:%S")})

@@ -208,7 +208,7 @@ func _start_answering() -> void:
 	var q: Dictionary = _questions[_index]
 	var qn := Narrator.question_name(q)
 	for n in mini(q.answers.size(), 4):                     # read out after the question
-		game.arena.narrator.say("%s_answer_%d" % [qn, n + 1], Narrator.answer_line(q, n), "answer")
+		game.arena.narrator.say("%s_answer_%d" % [qn, n + 1], Narrator.answer_line(q, n), "answer", {"answer": n + 1})
 	for id in players:
 		for b in CyberTile.BUTTONS:
 			tile(id).set_button_led(b, CyberTile.BUTTON_COLORS[b])
@@ -302,7 +302,10 @@ func _update(delta: float) -> void:
 func button(id: int, b: StringName) -> void:
 	if _phase != "question":
 		return
+	var was: int = _answers[id].answer if _answers.has(id) else -1
 	_answers[id] = {"answer": ANSWER_BUTTONS.find(b)}
+	if was != _answers[id].answer:                         # (for the player's accessible page)
+		game.arena.narrator.say_to(id, "answer", "Je koos %s." % Narrator.ICON_NAMES[_answers[id].answer])
 	for other in CyberTile.BUTTONS:  # only the chosen icon stays lit
 		tile(id).set_button_led(other, CyberTile.BUTTON_COLORS[other] if other == b else Color.BLACK)
 
@@ -327,6 +330,12 @@ func _reveal() -> void:
 			wrong.append(id)
 			_wrong[id] = _wrong.get(id, 0) + 1
 			_count_streak(id, false)
+	for id in right:
+		game.arena.narrator.say_to(id, "right", "Goed!")
+	for id in wrong:
+		game.arena.narrator.say_to(id, "wrong", "Fout." if _answers.has(id) else "Geen antwoord.")
+	for id in shielded:
+		game.arena.narrator.say_to(id, "shielded", "Fout, maar je schild beschermt je.")
 	_attacks(right, wrong, shielded)
 
 

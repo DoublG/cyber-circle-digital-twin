@@ -446,6 +446,7 @@ Prefix `cybercircle` (setting `topic_prefix` on the *Mqtt* node). Payloads are J
 | `cybercircle/cmd` | app/operator → game | `{"assign": 42, "tile": 3}`, `{"game": "start"}`, `{"sound": "attack", "file"?: "laser2.ogg", "volume"?: 60}`, `{"sound_stop": true}`, `{"sound_reload": true}`, … |
 | `cybercircle/light/event` | game → lighting | a game moment for the real lights, see *Lights* below |
 | `cybercircle/light/scene` | game → lighting | retained: the base look, see *Lights* below |
+| `cybercircle/stream` | game → control | a companion video started / stopped `{tile, on, encoder?, error?}` (§14) |
 | `cybercircle/voice` | game → all | a line read out (§4 *Read aloud*): `{name, text, kind, screens, tile?, file}` |
 | `cybercircle/sounds` | master → all | retained `{"events": {"attack": ["laser1.ogg", …], …}}`: the sounds `{"sound": …}` can play |
 | `cybercircle/tile/<n>/cmd` | game → tile | `{"program": {...}}`, `{"start": "<id>"}`, `{"stop": true}`, `{"pause": true}`, `{"piet": {"on": true, "speed": 20, "color": "#ff2a00"}}`, effects `{"fx": "attack" \| "hit" \| "block" \| "life" \| "doomed" \| "death", "color": "#rrggbb"}` |
@@ -644,6 +645,7 @@ godot-4 --headless --path . --fixed-fps 60 res://tests/test_settings.tscn  # set
 godot-4 --path . --disable-vsync --fixed-fps 30 res://tests/test_drones.tscn       # mobile players (video frames)
 godot-4 --path . --disable-vsync --fixed-fps 30 res://tests/test_13_players.tscn   # end-of-round screens, 13 players
 godot-4 --path . --disable-vsync --fixed-fps 30 res://tests/test_many_players.tscn # the same views with 24
+godot-4 --path . --disable-vsync res://tests/test_stream_capture.tscn -- --out=$HOME/x   # the accessible video's capture
 godot-4 --path . --disable-vsync res://tests/test_installed_shot.tscn      # a partial installation: hidden places, screens (shots/86_*)
 godot-4 --path . --disable-vsync res://tests/test_invite_shot.tscn         # the invite: tile drawn, pressed icons greyed (shots/85_*)
 godot-4 --path . --disable-vsync res://tests/test_explosion_shot.tscn       # hit, explosion, shield, drone, room lights (shots/80-84_*)
@@ -940,6 +942,8 @@ when there are enough others.
 `POST /api/players/<id>/assign {tile, gamemaster}` (tile 0 = a free floor tile, 14–18 = M1–M5) ·
 `GET /api/questions` · `POST /api/questions/import` (CSV) · `GET /api/questions.csv` · `GET /api/ranking` · `POST /api/games` · `POST /api/games/<id>/rounds|results|end` ·
 `GET /api/sounds` · `POST /api/sound/<event> {file?, volume?}` · `POST /api/sounds/stop` · `POST /api/sounds/reload` ·
+`POST /api/players/<id>/a11y` → `{url, qr}` · `GET /a11y/<token>` (the accessible page) · `GET /api/a11y/<token>/events` (SSE) ·
+`POST /api/a11y/<token>/press {button}` · `POST /api/a11y/<token>/video {on}` · `POST /api/a11y/stream-auth` (MediaMTX) ·
 `GET /api/master` · `POST /api/mode {mode}` · `GET|PUT /api/settings` · · `POST /api/plan {slot, round, options}` ·
 `POST /api/tiles/<n>/points|lives|leave|revive|attack|attacked|fire` · `POST /api/cmd {...}` (any game
 command). Interactive documentation: **http://\<overview pc\>:8080/docs**.
@@ -1091,7 +1095,75 @@ and the *display mode* (a Pi per screen following one master) is the next step.
 The `godot-sqlite` add-on has no arm64 binaries in the project: not needed with
 the control server (`--control`), only for the standalone `--db=FILE`.
 
-## 14. Troubleshooting
+## 14. Accessible page: blind and partially sighted players
+
+Every player can get **their own page** on their own phone or tablet, with
+their own screen reader (VoiceOver, TalkBack, NVDA) and its settings (voice,
+speed, braille). The gamemaster app, on the GA NAAR … screen after assigning a
+visitor: **SCHERMLEZER / SCHERM VAN DICHTBIJ** – a QR code the visitor scans
+(their link: `http://<server>:8080/a11y/<token>`, valid 12 hours, one player).
+
+**The text** (for blind players) – semantic HTML, high contrast, larger /
+smaller text, no video needed:
+
+* the question as a heading and the 4 answers with **their place on the tile**
+  ("Driehoek, rechts boven: …"), *Herhaal de vraag*;
+* their status (place, lives, round) and their own lines: *Je koos Driehoek*,
+  *Goed!* / *Fout.*, *Geraakt!*, a life more, their place in the round, joining
+  and leaving – the urgent ones as an assertive ARIA live region, the rest
+  polite, about one a second (so VoiceOver drops none); a log to read back;
+* optionally 4 big **answer buttons** (= pressing the tile; `A11Y_BUTTONS=0`:
+  only the tile).
+
+How: the game's read-aloud lines (MQTT `cybercircle/voice`, §4 *Read aloud*,
+plus the personal lines with `tile`) → the control server (`control/a11y.py`:
+only that player's and the shared lines – the broker and the others' data stay
+private) → Server-Sent Events → the page (`control/static/a11y.html`).
+
+**The video** (for partially sighted players, `A11Y_VIDEO=1`) – *Toon het
+scherm*: their screen live on their phone, to read it close by (pinch to zoom,
+full screen). The game reads back the picture of the screen the player faces
+(no second render), FFmpeg encodes it (H.264, 1280×720, 15 fps), **MediaMTX**
+on the server passes it on over WebRTC (~0.2–0.5 s delay: a reading aid, not
+for the reaction games). The control server decides who may watch: only that
+player's link, only their stream (`/api/a11y/stream-auth`, MediaMTX's
+`authHTTPAddress`). The page keeps it alive every 10 s; closed – or the player
+gone – the game stops it within 30 s.
+
+**Not used, no cost.** Nothing runs while no page is open: no extra render,
+no encoder, no stream (`CompanionStream` only exists while a video is
+watched); MediaMTX idles. The text lines are small MQTT messages the game sends
+anyway.
+
+**Hardware.**
+
+| | per watched video (1280×720, 15 fps) | notes |
+|---|---|---|
+| game computer, GPU | reading back the screen's picture: ~2–5 ms of GPU time per frame | an RTX-class card: several at once without a dent |
+| game computer, encoding | **NVENC** (NVIDIA GPU): almost nothing; **libx264** (no NVIDIA GPU): ~1 CPU core | `STREAM_ENCODER=auto` picks NVENC when FFmpeg has it, else libx264 |
+| network | ~2 Mbit/s per stream on the venue wifi | the phones on the same LAN as the server (no TURN server needed) |
+| server | MediaMTX passes the stream on: a few % of one core | a Pi 4/5 as the server is fine |
+| Raspberry Pi as the **game** computer | Pi 5: **no hardware encoder** – libx264 takes a core it needs for the game: no video there; Pi 4: `STREAM_ENCODER=h264_v4l2m2m` (its encoder), one stream | run the video from a PC with an NVIDIA GPU |
+
+Plan one stream per player who needs it (the mobile places M1–M5: up to 5).
+The text page has no hardware needs at all.
+
+Setup: `A11Y_VIDEO=1` in `/etc/cybercircle/cybercircle.env`, then
+`install_server.sh` (MediaMTX for this CPU from its GitHub releases, version
+`MEDIAMTX_VERSION`, `/etc/cybercircle/mediamtx.yml`, **systemd:
+`cybercircle-stream`**, firewall: 8554/tcp RTSP, 8889/tcp WebRTC, 8189/udp)
+and `install_game.sh` (FFmpeg). With `CONTROL_HTTPS=1` MediaMTX serves WebRTC
+over https with the same certificate (a page on https may not load an http
+video). The game must run with the official Godot build or an exported one
+(the snap version cannot start FFmpeg).
+
+Tests: `godot/tests/test_stream_capture.tscn` (the capture: started, kept
+alive, stopped, frames of the right screen). Not yet tested end to end with
+MediaMTX and real screen readers – do that on the installation, with a blind
+tester if possible (live regions behave differently in VoiceOver, TalkBack and
+NVDA).
+
+## 15. Troubleshooting
 
 | problem | fix |
 |---|---|

@@ -40,6 +40,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+import a11y
 import questions_csv
 from website import Website
 from db import FLOOR_TILES, PLACES, Database
@@ -161,7 +162,7 @@ GM_WEB = os.path.join(HERE, "..", "gamemaster_app", "build", "web")
 
 
 def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website | None = None,
-               public_mqtt: str = "") -> FastAPI:
+               public_mqtt: str = "", a11y_opts: dict | None = None) -> FastAPI:
     site = site or Website()
     listeners: set[asyncio.Queue] = set()
     loop: dict = {}
@@ -728,6 +729,10 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
 
     # ------------------------------------------------------------ web interface
 
+    # the accessible companion page (blind / partially sighted players): a11y.py
+    a11y.add_routes(app, db, link, listeners,
+                    lambda t: f"T{t:02d}" if t <= FLOOR_TILES else f"M{t - FLOOR_TILES}",
+                    a11y_opts or {}, os.path.join(HERE, "static"))
     app.mount("/static", StaticFiles(directory=os.path.join(HERE, "static")), name="static")
     if os.path.isdir(gm_web):                # the gamemaster app for browsers (flutter build web --base-href /gm/)
         app.mount("/gm", StaticFiles(directory=gm_web, html=True), name="gm")
@@ -756,6 +761,18 @@ def main():
     ap.add_argument("--gm-web", default=GM_WEB, help="the gamemaster app's web build, served at /gm/")
     ap.add_argument("--website", default="", help="the registration website's health endpoint (none: a mock)")
     ap.add_argument("--website-interval", type=float, default=15.0, help="s between its checks")
+    # the accessible page's video (partially sighted players; docs/SETUP.md §15) - empty: text only
+    ap.add_argument("--stream-publish", default="", help="where the game publishes a player's video, "
+                    "e.g. rtsp://cybercircle:PASS@192.168.1.10:8554 (MediaMTX); empty: no video")
+    ap.add_argument("--stream-view", default="", help="where browsers watch it (MediaMTX WebRTC), e.g. http://192.168.1.10:8889")
+    ap.add_argument("--stream-user", default="cybercircle", help="the publish login MediaMTX checks here")
+    ap.add_argument("--stream-password", default="")
+    ap.add_argument("--stream-encoder", default="auto", help="auto (NVENC if there is an NVIDIA GPU, else libx264), "
+                    "h264_nvenc, libx264, h264_v4l2m2m")
+    ap.add_argument("--stream-fps", type=int, default=15)
+    ap.add_argument("--a11y-no-buttons", action="store_true", help="the accessible page may not answer (only the tile)")
+    ap.add_argument("--internal-port", type=int, default=0, help="also plain http on 127.0.0.1:PORT (only this PC: "
+                    "MediaMTX's auth calls when the web interface runs on https); 0: none")
     a = ap.parse_args()
     db = Database(a.db)
     if not db.question_rows():               # a fresh database: start with the example questions
@@ -764,7 +781,15 @@ def main():
     scheme = "https" if a.ssl_cert else "http"
     print(f"control: database {os.path.normpath(a.db)}, MQTT {a.mqtt}, web {scheme}://{a.host}:{a.port}/")
     site = Website(a.website, a.website_interval)
-    uvicorn.run(create_app(db, link, a.gm_web, site, a.public_mqtt), host=a.host, port=a.port, log_level="warning",
+    a11y_opts = {"stream_publish": a.stream_publish.rstrip("/"), "stream_view": a.stream_view.rstrip("/"),
+                 "stream_user": a.stream_user, "stream_password": a.stream_password,
+                 "encoder": a.stream_encoder, "fps": a.stream_fps, "buttons": not a.a11y_no_buttons}
+    app = create_app(db, link, a.gm_web, site, a.public_mqtt, a11y_opts)
+    if a.internal_port:                       # (no lifespan: the main server runs the MQTT link)
+        import threading
+        inner = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=a.internal_port, log_level="warning", lifespan="off"))
+        threading.Thread(target=inner.run, daemon=True).start()
+    uvicorn.run(app, host=a.host, port=a.port, log_level="warning",
                 ssl_certfile=a.ssl_cert or None, ssl_keyfile=a.ssl_key or None)
 
 

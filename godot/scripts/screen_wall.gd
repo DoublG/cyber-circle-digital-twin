@@ -532,6 +532,12 @@ func _new_screen(parent: Node, register := true) -> Control:
 	return bg
 
 
+## Screen k's own rendered picture (the SubViewport it is drawn in): the
+## companion stream reads it back (CompanionStream).
+func screen_viewport(k: int) -> Viewport:
+	return _screens[k].get_viewport() if k >= 0 and k < _screens.size() else null
+
+
 func _add_observer_page(parent: Node) -> void:
 	var page := ObserverView.new()
 	page.wall = self

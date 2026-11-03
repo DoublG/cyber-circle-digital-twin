@@ -43,6 +43,9 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
 apt-get install -y -q rsync curl unzip libgl1 libgles2 libasound2t64 2>/dev/null \
     || apt-get install -y -q rsync curl unzip libgl1 libgles2 libasound2
+if [ "${A11Y_VIDEO:-0}" = "1" ]; then                 # the accessible page's video: the game pipes frames to FFmpeg
+    apt-get install -y -q ffmpeg
+fi
 
 # ---------------------------------------------------------------- user and project
 say "kiosk user $KIOSK, project in $CC_ROOT"

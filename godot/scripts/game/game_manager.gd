@@ -983,6 +983,9 @@ func _show_round_ranking(changes: Dictionary) -> void:
 		v.show_ranking(title, label, rows)
 		return v)
 	ranking_shown.emit(title, label, rows)
+	for r in rows:                                    # each player: their own place (accessible page)
+		var change := " Je krijgt er een leven bij." if r.change > 0 else (" Je verliest een leven." if r.change < 0 else "")
+		arena.narrator.say_to(r.tile, "place", "Je bent %de met %s %s.%s" % [r.place, str(r.score), label.to_lower(), change])
 
 
 func _show_scores(title: String, subtitle: String, round_points: Dictionary, changes := {}) -> void:

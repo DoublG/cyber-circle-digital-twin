@@ -1,0 +1,16 @@
+# The stream server for the accessible page's video (MediaMTX). Only with
+# A11Y_VIDEO=1 (install_server.sh). Idle - nothing to stream - it uses no CPU.
+[Unit]
+Description=Cyber Circle accessible video (MediaMTX)
+After=network-online.target cybercircle-control.service
+Wants=network-online.target
+
+[Service]
+User=@CC_USER@
+ExecStart=/opt/mediamtx/mediamtx /etc/cybercircle/mediamtx.yml
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

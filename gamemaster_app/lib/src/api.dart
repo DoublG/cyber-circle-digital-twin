@@ -136,6 +136,13 @@ class Api {
 
   /// To a place (0 = any free floor tile), by this gamemaster: the tile lights
   /// up in their colour.
+  /// The player's accessible page (blind / partially sighted players): its
+  /// link and the link's QR code (an image the server makes).
+  Future<({String url, String qr, bool video})> a11yLink(int playerId) async {
+    final j = await _send('POST', '/api/players/$playerId/a11y') as Map<String, dynamic>;
+    return (url: '${j['url']}', qr: '${j['qr']}', video: j['video'] == true);
+  }
+
   Future<void> assign(int playerId, int tile, Gamemaster gm) =>
       _send('POST', '/api/players/$playerId/assign', {'tile': tile, 'gamemaster': gm.id, 'color': colorHex(gm.color)});
 

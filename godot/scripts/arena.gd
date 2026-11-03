@@ -103,6 +103,7 @@ signal activated(tile_id: int, player: String)
 signal exterminated(tile_id: int, player: String)   # the robot's shot hit: the death animation starts
 signal tile_message(tile_id: int, msg: Dictionary)  # to the real tile (e.g. via MQTT)
 signal light_cue(event: StringName, data: Dictionary)  # a game moment for the lights (cue(); MQTT light/event)
+signal stream_changed(tile_id: int, on: bool, info: Dictionary)  # a companion video stream (CompanionStream)
 
 var _players := {}                            # tile_id -> {name} (activated)
 var _pending := {}                            # tile_id -> {name, color, time_left} (registered)
@@ -117,6 +118,7 @@ var clip_started := {}                        # tile_id -> clock when the death 
 var _disabled := {}                           # tile_id -> true: out of service (not in the game)
 var _not_installed := {}                      # tile_id -> true: not part of this installation (hidden, see set_installed)
 var _voice_export := ""                        # --voice-export=FILE
+var _streams := {}                             # tile_id -> CompanionStream (only while one is asked for)
 
 
 func _ready() -> void:
@@ -900,6 +902,45 @@ func _export_voice() -> void:
 	get_tree().quit()
 
 
+## {"stream": {"tile": 3, "on": true, "url": "rtsp://...", "fps": 15, "encoder": "auto"}}:
+## start / keep alive / stop the video of that player's screen (CompanionStream).
+## Nothing exists until one is asked for.
+func _stream_command(s: Dictionary) -> void:
+	var id := int(s.get("tile", 0))
+	if id < 1 or id > tiles.size():
+		return
+	var cs: CompanionStream = _streams.get(id)
+	if not bool(s.get("on", true)):
+		if is_instance_valid(cs):
+			cs.stop("asked")
+			cs.queue_free()
+		_streams.erase(id)
+		return
+	if is_instance_valid(cs):
+		cs.keep_alive()
+		return
+	cs = CompanionStream.new()
+	cs.name = "Stream_%d" % id
+	cs.arena = self
+	cs.tile_id = id
+	cs.configure(s)
+	cs.state_changed.connect(func(t, on, info):
+		if not on:
+			_streams.erase(t)
+		stream_changed.emit(t, on, info))
+	_streams[id] = cs
+	add_child(cs)
+	cs.start()
+
+
+## What a game moment means for the player it happens to (Narrator.say_to).
+const PERSONAL := {
+	&"hit": "Geraakt!", &"shield": "Je schild houdt de aanval tegen.", &"life": "Je krijgt er een leven bij.",
+	&"death": "Je bent geëxtermineerd.", &"join": "Je doet mee. Je speelt vanaf de volgende ronde.",
+	&"leave": "Je bent uit het spel.",
+}
+
+
 ## A game moment: its sound (SoundBoard: data/sounds/<event>/, if there is
 ## one) and its light cue (the virtual lights, and MQTT light/event for the
 ## real ones). tile_id > 0: at that tile (adds "tile" and "angle", in degrees
@@ -912,6 +953,8 @@ func cue(event: StringName, tile_id := 0, data := {}) -> void:
 		d["angle"] = snappedf(LightDirector.angle_of(tiles[tile_id - 1].global_position), 0.1)
 	lights.on_cue(event, d)
 	light_cue.emit(event, d)
+	if tile_id > 0 and PERSONAL.has(event):                # the player's own line (accessible page)
+		narrator.say_to(tile_id, String(event), PERSONAL[event])
 
 
 ## Operator / demo keys: S = start game, N = next phase,
@@ -962,6 +1005,9 @@ func _on_robot_hit(target: Vector3) -> void:
 
 ## Single entry point for state coming from the real installation.
 func apply_command(cmd: Dictionary) -> void:
+	if cmd.get("stream") is Dictionary:       # a companion video stream of one player's screen
+		_stream_command(cmd.stream)
+		return
 	if cmd.has("sound"):     # external trigger (web interface, show control, ...)
 		if not sound.play_external(StringName(str(cmd.sound)), str(cmd.get("file", "")), int(cmd.get("volume", -1))):
 			push_warning("sound: no sound %s %s" % [cmd.sound, cmd.get("file", "")])

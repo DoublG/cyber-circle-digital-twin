@@ -26,6 +26,7 @@ extends MqttClient
 ##                                            "color": "#8c40ff", "flashes": true} (LightDirector)
 ##   <prefix>/voice            game -> all    a line read out (Narrator): {"name": "question_12", "text": ...,
 ##                                            "kind": "question", "screens": [1, 2, 3, 4, 5], "file": ...}
+##   <prefix>/stream           game -> all    a companion video started / stopped: {tile, on, encoder?, error?}
 ##   <prefix>/sounds           game -> all    retained {"events": {"attack": ["laser1.ogg", ...], ...}}:
 ##                                            the sounds {"sound": "<event>"} on <prefix>/cmd can play
 ## Leave url empty to run without MQTT.
@@ -91,6 +92,11 @@ func setup(arena_node: Node3D) -> void:
 			msg["event"] = String(event)
 			publish_json(topic_prefix + "/light/event", msg))
 	arena.lights.scene_changed.connect(func(_s): _publish_light_scene())
+	arena.stream_changed.connect(func(t, on, info):              # the companion video's state
+		if online:
+			var msg: Dictionary = info.duplicate()
+			msg.merge({"tile": t, "on": on})
+			publish_json(topic_prefix + "/stream", msg))
 	arena.narrator.line_said.connect(func(line):
 		if online and role == "master":
 			publish_json(topic_prefix + "/voice", line))

@@ -1,0 +1,28 @@
+# MediaMTX for the accessible page's video (install_server.sh -> /etc/cybercircle/mediamtx.yml).
+# The game (FFmpeg) publishes one player's screen over RTSP; the player's page
+# watches it over WebRTC (WHEP). Who may do what: the control server decides
+# (a11y.py, /api/a11y/stream-auth): the game with the stream login, a page only
+# with a valid link for exactly its stream.
+logLevel: warn
+authMethod: http
+authHTTPAddress: http://127.0.0.1:@INTERNAL_PORT@/api/a11y/stream-auth
+authHTTPExclude: []
+
+rtsp: yes
+rtspAddress: :@RTSP_PORT@
+rtspTransports: [tcp]
+rtmp: no
+hls: no
+srt: no
+
+webrtc: yes
+webrtcAddress: :@WEBRTC_PORT@
+webrtcEncryption: @HTTPS@
+webrtcServerKey: @KEY@
+webrtcServerCert: @CERT@
+webrtcAllowOrigin: '*'
+webrtcLocalUDPAddress: :@UDP_PORT@
+webrtcAdditionalHosts: [@SERVER_IP@]
+
+paths:
+  all_others:

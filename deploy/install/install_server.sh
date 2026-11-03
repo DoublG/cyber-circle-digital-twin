@@ -31,7 +31,9 @@ if [ ! -f "$ENV_FILE" ]; then
 elif [ -n "${1:-}" ]; then
     sed -i "s/^SERVER_IP=.*/SERVER_IP=$1/" "$ENV_FILE"
 fi
-for key in MQTT_PASSWORD DB_PASSWORD; do         # never empty or the example's "change-me"
+grep -q "^A11Y_VIDEO=" "$ENV_FILE" || sed -n '/^# ---.*accessible page/,/^CONTROL_INTERNAL_PORT/p' \
+    "$HERE/cybercircle.env.example" >> "$ENV_FILE"         # (an older settings file: add the new block)
+for key in MQTT_PASSWORD DB_PASSWORD STREAM_PASSWORD; do         # never empty or the example's "change-me"
     if grep -qE "^$key=(change-me)?$" "$ENV_FILE"; then
         sed -i "s/^$key=.*/$key=$(secret)/" "$ENV_FILE"
         echo "$key: a random password"
@@ -99,12 +101,40 @@ systemctl daemon-reload
 systemctl enable --now cybercircle-control.service cybercircle-backup.timer
 systemctl restart cybercircle-control.service
 
+# ---------------------------------------------------------------- 7b. the accessible page's video
+if [ "${A11Y_VIDEO:-0}" = "1" ]; then
+    say "video for the accessible page: MediaMTX $MEDIAMTX_VERSION (systemd: cybercircle-stream)"
+    case "$(uname -m)" in x86_64) march=amd64 ;; aarch64|arm64) march=arm64 ;; *) march=armv7 ;; esac
+    if [ ! -x /opt/mediamtx/mediamtx ] || ! /opt/mediamtx/mediamtx --version 2>/dev/null | grep -q "${MEDIAMTX_VERSION#v}"; then
+        tmp=$(mktemp -d)
+        curl -fL -o "$tmp/m.tgz" \
+            "https://github.com/bluenviron/mediamtx/releases/download/$MEDIAMTX_VERSION/mediamtx_${MEDIAMTX_VERSION}_linux_${march}.tar.gz"
+        mkdir -p /opt/mediamtx
+        tar xzf "$tmp/m.tgz" -C /opt/mediamtx mediamtx
+        rm -rf "$tmp"
+    fi
+    https=no; [ "${CONTROL_HTTPS:-0}" = "1" ] && https=yes
+    sed -e "s#@INTERNAL_PORT@#${CONTROL_INTERNAL_PORT:-8079}#" -e "s#@RTSP_PORT@#${STREAM_RTSP_PORT:-8554}#" \
+        -e "s#@WEBRTC_PORT@#${STREAM_WEBRTC_PORT:-8889}#" -e "s#@UDP_PORT@#${STREAM_WEBRTC_UDP_PORT:-8189}#" \
+        -e "s#@SERVER_IP@#$SERVER_IP#" -e "s#@HTTPS@#$https#" -e "s#@CERT@#$CC_ROOT/control/cert.pem#" \
+        -e "s#@KEY@#$CC_ROOT/control/key.pem#" "$HERE/mediamtx.yml" > /etc/cybercircle/mediamtx.yml
+    install_unit cybercircle-stream.service
+    systemctl daemon-reload
+    systemctl enable --now cybercircle-stream.service
+    systemctl restart cybercircle-stream.service cybercircle-control.service
+fi
+
 # ---------------------------------------------------------------- 8. firewall
 if command -v ufw >/dev/null && ufw status | grep -q "Status: active"; then
     say "firewall: open the broker and the control server on the LAN"
     ufw allow "${MQTT_PORT:-1883}/tcp"
     ufw allow "${MQTT_WS_PORT:-9001}/tcp"
     ufw allow "${CONTROL_PORT:-8080}/tcp"
+    if [ "${A11Y_VIDEO:-0}" = "1" ]; then
+        ufw allow "${STREAM_RTSP_PORT:-8554}/tcp"
+        ufw allow "${STREAM_WEBRTC_PORT:-8889}/tcp"
+        ufw allow "${STREAM_WEBRTC_UDP_PORT:-8189}/udp"
+    fi
 fi
 
 # ---------------------------------------------------------------- check
