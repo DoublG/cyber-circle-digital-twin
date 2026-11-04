@@ -51,7 +51,7 @@ func show_scores(title: String, subtitle: String, rows: Array, revealed := true)
 	_gap = 30 if n < TWO_COLUMNS else 16
 	var cols := table(box, n)
 	for c in cols:
-		c.add_child(_row(px, Retro.DIM, ["#", "SPELER", "TEGEL", "LEVENS", "RONDES", "RECORD", "PLAATS"], null))
+		c.add_child(_row(px, Retro.DIM, ["#", NAME_PAD + "SPELER", "TEGEL", "LEVENS", "RONDES", "RECORD", "PLAATS"], null))
 	for i in n:
 		var r: Dictionary = rows[i]
 		var out: bool = r.out if revealed else r.get("was_out", r.out)
@@ -67,13 +67,13 @@ func show_scores(title: String, subtitle: String, rows: Array, revealed := true)
 		if r.get("new", false):
 			style = Retro.panel(Color(0.02, 0.16, 0.15), Retro.TEAL, 3, 14, 20)
 		var cells := ["%02d" % (i + 1) if not r.get("new", false) else "+",
-			r.name.to_upper() + ("  [UIT]" if out else ("  NIEUW!" if r.get("new", false) else "")),
+			NAME_PAD + r.name.to_upper() + ("  [UIT]" if out else ("  NIEUW!" if r.get("new", false) else "")),
 			Retro.tile_label(r.tile), "♥".repeat(lives), str(r.get("survived", 0)),
 			str(r.get("record", 0)), "#%d" % r.rank if r.get("rank", 0) > 0 else "-"]
 		var row := _row(px, col, cells, style)
 		if i != 0 and not r.out:  # colour the lives, rounds and place
 			var h := row.get_child(0)
-			h.get_child(3).add_theme_color_override("font_color", Color(1.0, 0.2, 0.3))
+			h.get_child(3).add_theme_color_override("default_color", LIVES)
 			h.get_child(4).add_theme_color_override("font_color", Retro.AMBER)
 			h.get_child(6).add_theme_color_override("font_color", Retro.TEAL)
 		cols[column(i, n, cols.size())].add_child(row)
@@ -149,9 +149,14 @@ func reveal_lives() -> void:
 		var d: int = r.get("change", 0)
 		if d == 0 or r.get("was_out", false):
 			continue
-		var lives: Label = e.lives
-		lives.text = "♥".repeat(r.lives) + ("+" if d > 0 else "")
-		lives.add_theme_color_override("font_color", Retro.GOOD if d > 0 else Retro.BAD)
+		var lives: RichTextLabel = e.lives
+		if d > 0:                                  # the hearts they had stay, only the new one (and the +) green
+			var had: int = r.get("lives_before", r.lives - d)
+			_set_lives(lives, "♥".repeat(had) + "[color=#%s]%s[/color]" % [Retro.GOOD.to_html(false), "♥".repeat(r.lives - had)], "+")
+		else:                                      # the hearts left stay, the lost one greyed out, then "-"
+			var had: int = r.get("lives_before", r.lives - d)
+			_set_lives(lives, "♥".repeat(r.lives) + "[color=#%s]%s[/color]" % [Retro.DIM.to_html(false),
+				"♥".repeat(maxi(had - r.lives, 0))], "-")
 		var tw := lives.create_tween()
 		lives.pivot_offset = lives.size / 2.0
 		tw.tween_property(lives, "scale", Vector2(1.5, 1.5), 0.15)
@@ -200,9 +205,9 @@ func _exterminate_banner(names: Array) -> void:
 
 
 func _mark_exterminated(e: Dictionary) -> void:
-	e.name.text = "☠ %s ☠" % e.data.name.to_upper()           # (the banner says GEËXTERMINEERD)
+	e.name.text = e.name.text.left(NAME_PAD.length()) + "☠ %s ☠" % e.data.name.to_upper()   # (keeps ▶; the banner says GEËXTERMINEERD)
 	e.name.add_theme_color_override("font_color", Retro.BG)
-	e.lives.text = "-"
+	_set_lives(e.lives, "-")
 	e.panel.add_theme_stylebox_override("panel", Retro.panel(Retro.BAD, Retro.CREAM, 3, 14, 20))
 	var tw: Tween = e.panel.create_tween().set_loops(4)
 	tw.tween_property(e.panel, "modulate:a", 0.35, 0.18)
@@ -229,10 +234,22 @@ static func mark_own(panel: PanelContainer) -> void:
 	panel.add_theme_stylebox_override("panel", style)
 	var h := panel.get_child(0)
 	var name_label := h.get_child(1) as Label
-	if not name_label.text.begins_with("▶"):
-		name_label.text = "▶ " + name_label.text
+	if not name_label.text.begins_with("▶"):        # (into the room every name keeps for it: the names line up)
+		name_label.text = "▶ " + name_label.text.trim_prefix(NAME_PAD)
 	if style.bg_color.v < 0.5:                     # (not on the 1st place's amber: unreadable)
 		(h.get_child(2) as Label).add_theme_color_override("font_color", Retro.TEAL)
+
+
+const LIVES_CELL := 3
+const NAME_PAD := "  "                 # every name starts with this room: "▶ " on this screen's players (mark_own)
+const LIVES := Color(1.0, 0.2, 0.3)
+
+
+## sign: "+" (green) after a gained heart, "-" (red) after a lost one; without
+## it the same room stays empty, so the hearts of every row line up.
+static func _set_lives(cell: RichTextLabel, bbcode: String, sign := "") -> void:
+	var col: String = {"+": Retro.GOOD.to_html(false), "-": Retro.BAD.to_html(false)}.get(sign, "00000000")
+	cell.text = "[right]%s[color=#%s]%s[/color][/right]" % [bbcode, col, sign if sign != "" else "+"]
 
 
 ## One table row; widths are fixed so the columns line up without a grid.
@@ -244,6 +261,20 @@ func _row(px: int, col: Color, cells: Array, style: StyleBoxFlat) -> PanelContai
 	panel.add_child(h)
 	var widths := [3, 0, 4, 6, 6, 6, 6]   # in characters; 0 = take the rest
 	for k in cells.size():
+		if k == LIVES_CELL:                   # the hearts: more than one colour (the new one green)
+			var rt := RichTextLabel.new()
+			rt.bbcode_enabled = true
+			rt.fit_content = true
+			rt.scroll_active = false
+			rt.autowrap_mode = TextServer.AUTOWRAP_OFF
+			rt.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			rt.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			rt.add_theme_font_size_override("normal_font_size", px)
+			rt.add_theme_color_override("default_color", col)
+			rt.custom_minimum_size.x = widths[k] * px * 0.62
+			_set_lives(rt, cells[k])
+			h.add_child(rt)
+			continue
 		var l := Retro.label(px, col, cells[k],
 			HORIZONTAL_ALIGNMENT_LEFT if k == 1 else HORIZONTAL_ALIGNMENT_RIGHT)
 		if widths[k] == 0:

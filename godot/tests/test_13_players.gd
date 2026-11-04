@@ -104,7 +104,7 @@ func _ready() -> void:
 	_check_board("quiz scoreboard", 13)
 	var board: ScoreboardView = game.screen_wall.shared_views[0]
 	var ilias: Dictionary = board._rows.filter(func(e): return e.data.tile == 9).front()
-	check(ilias.name.text.begins_with("☠"), "scoreboard: Ilias marked exterminated (%s)" % ilias.name.text)
+	check(ilias.name.text.trim_prefix("▶").strip_edges().begins_with("☠"), "scoreboard: Ilias marked exterminated (%s)" % ilias.name.text)
 	await _shot(board, "52_13_quiz_scoreboard")
 
 	print("--- Ritme, 12 players: UITSLAG, then the scoreboard")

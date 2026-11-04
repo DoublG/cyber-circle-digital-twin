@@ -56,7 +56,7 @@ func show_ranking(title: String, label: String, rows: Array) -> void:
 	_gap = 30 if n < ScoreboardView.TWO_COLUMNS else 16
 	var cols := ScoreboardView.table(box, n)       # (two columns from 17 rows)
 	for c in cols:
-		c.add_child(_row(px, Retro.DIM, ["#", "SPELER", "TEGEL", label, "LEVEN"], null))
+		c.add_child(_row(px, Retro.DIM, ["#", ScoreboardView.NAME_PAD + "SPELER", "TEGEL", label, "LEVEN"], null))
 	var ranked := rows.any(func(r): return r.place > 1)   # (all equal: nobody in gold)
 	var step := ROWS_TIME / maxf(n, 1)
 	for i in n:
@@ -64,7 +64,7 @@ func show_ranking(title: String, label: String, rows: Array) -> void:
 		var first: bool = ranked and r.place == 1
 		var style := Retro.panel(Retro.AMBER, Retro.CREAM, 3, 14, 20) if first \
 			else Retro.panel(Retro.PANEL, Retro.ORANGE.darkened(0.35), 2, 14, 20)
-		var row := _row(px, Retro.BG if first else Retro.CREAM, [str(r.place), r.name.to_upper(),
+		var row := _row(px, Retro.BG if first else Retro.CREAM, [str(r.place), ScoreboardView.NAME_PAD + r.name.to_upper(),
 			Retro.tile_label(r.tile), str(r.score), _badge_text(r)], style)
 		var h := row.get_child(0)
 		if not first:

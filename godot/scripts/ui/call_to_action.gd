@@ -5,7 +5,7 @@ extends Label
 ## so every screen of every node (display nodes) shows the same at the same time;
 ## offset: another slogan than its neighbours (e.g. the tile number).
 
-var interval := 5.0
+var interval := 10.0                # s per slogan (time to read it on a split view)
 var offset := 0
 var _index := 0
 var _t := 0.0
