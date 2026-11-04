@@ -1085,6 +1085,14 @@ two at once start, band and line size, points, tile delay), *Randomizer* and *Vr
 The randomizer fills the round queue the way games steer their dice
 (`GameManager.round_chances`); the plan in *Spel* shows each round's chance.
 
+0. **In or out** per round type – *Spel › Randomizer* (a checkbox per game,
+   with its chance now; also *Instellingen › Randomizer*, "In de randomizer").
+   A game that is out is never drawn; a random slot already planned with it is
+   drawn again. Choosing it yourself in *Volgende rondes* still plays it: that
+   is how a new game is introduced to a chosen audience (a school group, a
+   test session) while the others never get it at random. Everything out: the
+   randomizer falls back to any game it is allowed to play
+   (`tests/check_randomizer.gd`).
 1. **Weight** per round type (default quiz 5, the others 1; 0 = never).
 2. **No repeat** – never the same game twice in a row (when there is a
    choice); the quiz can follow itself.

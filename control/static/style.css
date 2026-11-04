@@ -124,6 +124,14 @@ dialog label input, dialog label textarea, dialog label select { display: block;
 .install-place { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border: 1px solid var(--line); }
 .install-place.mobile { border-color: var(--amber); }
 
+/* Randomizer (Spel tab) */
+.randomizer { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.randomizer label { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 2px solid var(--line);
+  padding: 6px 12px; cursor: pointer; }
+.randomizer label.on { border-color: var(--teal); }
+.randomizer label.off { opacity: .6; border-style: dashed; }
+.randomizer .chance { color: var(--dim); font-size: 13px; }
+
 /* Prestaties */
 .warn { color: var(--amber); }
 .perf-cards { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }

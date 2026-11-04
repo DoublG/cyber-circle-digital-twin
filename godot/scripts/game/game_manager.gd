@@ -115,6 +115,7 @@ var _last_type: Script
 ## "director", see round_chances): weight per round type (0 = never), the
 ## extra chance per round a type was not played, and how strongly the
 ## players' lives steer it.
+var randomizer_off := {}                   # type name -> true: never drawn (the operator can still plan it)
 var round_weights := {"cyclone": 1.0, "quiz": 5.0, "reaction": 1.0, "rhythm": 1.0, "simon": 1.0, "zwarte_piet": 1.0}
 @export var drought := 0.5
 @export var mercy := 1.0
@@ -476,6 +477,9 @@ func _pick(after: Script, n: int) -> Dictionary:
 
 ## The chance of each round type for the round after `after` - a weighted
 ## random, steered the way games steer their dice:
+##   in / out   per type (settings "Randomizer", the web interface's Spel tab):
+##              out = never drawn - planning it (set_planned_round) still plays it:
+##              a new game for a chosen audience
 ##   weight     per type (settings "Randomizer"; 0 = never)
 ##   no repeat  never the same type twice in a row (when there is a choice;
 ##              the quiz can: it is the backbone, the other games come in between)
@@ -488,7 +492,9 @@ func _pick(after: Script, n: int) -> Dictionary:
 ##              (more pressure). `mercy` = how strongly (0 = off)
 ## Personal rounds only with enough players. Returns {Script: chance}.
 func round_chances(after: Script) -> Dictionary:
-	var options := round_types.filter(func(t): return _allowed(t))
+	var options := round_types.filter(func(t): return _allowed(t) and not randomizer_off.has(round_type_name(t)))
+	if options.is_empty():                       # (everything out, or not allowed: then any allowed type)
+		options = round_types.filter(func(t): return _allowed(t))
 	if options.is_empty():
 		options = round_types.duplicate()
 	if options.size() > 1:
@@ -589,7 +595,8 @@ func _plan_rounds() -> void:
 	for e in upcoming:
 		if not random_rounds or e.forced:                         # (fixed order: every type)
 			keep.append(e)
-		elif _allowed(e.type) and (e.get("personal_ok", true) or not personal_ok):
+		elif _allowed(e.type) and (e.get("personal_ok", true) or not personal_ok) \
+				and not randomizer_off.has(round_type_name(e.type)):
 			keep.append(e)
 		# else: not allowed any more, or only chosen because personal rounds were not
 		# allowed then (too few players): pick again, now from every type
@@ -668,8 +675,7 @@ func status() -> Dictionary:
 		"ranked": current.ranked if current else false,   # the round has points and places (not the quiz)
 		"floor_tiles": Retro.FLOOR_TILES, "tile_count": arena.tiles.size(),
 		"timer": screen_wall.timer_text(), "players": players, "pending": pending,
-		"plan": planned_rounds(), "round_types": ROUND_TYPES.map(func(t): return {
-			"type": round_type_name(t), "title": t.new().title}),
+		"plan": planned_rounds(), "round_types": _round_types_status(),
 		"disabled": range(1, arena.tiles.size() + 1).filter(func(id): return not arena.is_enabled(id)),
 		"dying": _dying(),
 		"installed": range(1, arena.tiles.size() + 1).filter(func(id): return arena.is_installed(id))}
@@ -687,6 +693,17 @@ func _dying() -> Array:
 
 
 ## The plan for the web interface: [{type, title, forced}].
+## Every round type for the web interface: in the randomizer or not, its
+## weight, its chance now (for a random round after the planned ones).
+func _round_types_status() -> Array:
+	var after: Script = upcoming.back().type if not upcoming.is_empty() else _last_type
+	var chances := round_chances(after) if random_rounds else {}
+	return ROUND_TYPES.map(func(t): return {"type": round_type_name(t), "title": t.new().title,
+		"random": not randomizer_off.has(round_type_name(t)), "weight": round_weights.get(round_type_name(t), 1.0),
+		"allowed": _allowed(t), "min_players": personal_min_players if t.new().mode == "personal" else 0,
+		"chance": snappedf(chances.get(t, 0.0), 0.001)})
+
+
 func planned_rounds() -> Array:
 	return upcoming.map(func(e): return {"type": round_type_name(e.type), "title": e.type.new().title,
 		"forced": e.forced, "options": e.get("options", {}), "chance": e.get("chance", 1.0)})
@@ -1176,7 +1193,9 @@ func apply_settings(values: Dictionary) -> void:
 
 func _randomizer_tunables() -> Array:
 	var items := ROUND_TYPES.map(func(t): return GameRound.setting(
-		"weight_" + round_type_name(t), "Gewicht " + t.new().title, 0, 10, 0.5))
+		"use_" + round_type_name(t), "In de randomizer: " + t.new().title + " (1 aan, 0 uit)", 0, 1, 1))
+	items.append_array(ROUND_TYPES.map(func(t): return GameRound.setting(
+		"weight_" + round_type_name(t), "Gewicht " + t.new().title, 0, 10, 0.5)))
 	items.append(GameRound.setting("drought", "Extra kans per ronde niet gespeeld (x gewicht)", 0, 3, 0.1))
 	items.append(GameRound.setting("mercy", "Sturing door levens (0 = uit)", 0, 2, 0.1))
 	return items
@@ -1200,6 +1219,8 @@ func _get_game_setting(key: String):
 		return float(category_weights.get(key.trim_prefix("cat:"), 1.0))
 	if key.begins_with("weight_"):
 		return round_weights.get(key.trim_prefix("weight_"), 1.0)
+	if key.begins_with("use_"):
+		return 0 if randomizer_off.has(key.trim_prefix("use_")) else 1
 	if key.begins_with("lives_age_"):
 		return lives_by_age.get(int(key.trim_prefix("lives_age_")), lives)
 	if key in ["clip_wait", "clip_time"]:
@@ -1210,6 +1231,11 @@ func _get_game_setting(key: String):
 func _set_game_setting(key: String, value) -> void:
 	if key.begins_with("weight_"):
 		round_weights[key.trim_prefix("weight_")] = float(value)
+	elif key.begins_with("use_"):
+		if int(value) == 0:
+			randomizer_off[key.trim_prefix("use_")] = true
+		else:
+			randomizer_off.erase(key.trim_prefix("use_"))
 	elif key.begins_with("cat:"):
 		category_weights[key.trim_prefix("cat:")] = float(value)
 	elif key.begins_with("lives_age_"):

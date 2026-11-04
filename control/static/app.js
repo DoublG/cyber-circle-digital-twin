@@ -54,6 +54,7 @@ function renderLive() {
   $("#mode-buttons").innerHTML = (MODE_ACTIONS[live.mode] || []).map(([m, label, ask]) =>
     `<button data-mode="${m}" ${ask ? `data-ask="${esc(ask)}"` : ""} class="${m === "closed" && live.mode !== "setup" ? "danger" : ""}">${label}</button>`).join("");
   renderPlan(s);
+  renderRandomizer(s);
   renderTiles(s);
   renderOnline();
   $("#events").innerHTML = (live.events || []).map(e =>
@@ -135,11 +136,29 @@ function renderPlan(s) {
   el.innerHTML = (s.plan || []).map((p, i) => `<div class="slot ${p.forced ? "forced" : ""}">
       <div class="n">${i === 0 ? "VOLGENDE" : `+${i}`} · ${p.forced ? "gekozen" : "willekeurig"}</div>
       <select data-slot="${i}"><option value="">willekeurig</option>
-        ${types.map(t => `<option value="${t.type}" ${p.forced && p.type === t.type ? "selected" : ""}>${esc(t.title)}</option>`).join("")}
+        ${types.map(t => `<option value="${t.type}" ${p.forced && p.type === t.type ? "selected" : ""}>${esc(t.title)}${t.random === false ? " (uit de randomizer)" : ""}</option>`).join("")}
       </select> ${p.forced ? "" : `<b>${esc(p.title)}</b> <span class="chance" title="kans bij het loten">${Math.round((p.chance ?? 1) * 100)}%</span>`}
       ${p.type === "quiz" && p.forced ? `<input data-slot="${i}" placeholder="categorieën (komma's)" value="${esc((p.options?.categories || []).join(", "))}">` : ""}
     </div>`).join("") + `<button class="small" id="plan-random">alles willekeurig</button>`;
 }
+// the randomizer: which games the draw can pick (out: only when planned above)
+function renderRandomizer(s) {
+  const el = $("#randomizer");
+  const types = s.round_types || [];
+  el.innerHTML = types.map(t => `<label class="${t.random === false ? "off" : "on"}" title="gewicht ${t.weight ?? 1} (Instellingen › Randomizer)">
+      <input type="checkbox" data-random="${esc(t.type)}" ${t.random === false ? "" : "checked"}>
+      <b>${esc(t.title)}</b> <span class="chance">${t.random === false ? "uit"
+        : t.allowed === false ? `nu niet (vanaf ${t.min_players} spelers)` : Math.round((t.chance ?? 0) * 100) + "%"}</span></label>`).join("")
+    || `<span class="hint">Nog geen spel verbonden.</span>`;
+}
+$("#randomizer").onchange = async e => {
+  const box = e.target.closest("input[data-random]");
+  if (!box) return;
+  const cur = await (await fetch("/api/settings")).json();       // (the other settings stay as they are)
+  const values = cur.values || {};
+  values.randomizer = { ...(values.randomizer || {}), ["use_" + box.dataset.random]: box.checked ? 1 : 0 };
+  await api("PUT", "/api/settings", values);
+};
 $("#plan").onchange = e => {
   const slot = Number(e.target.dataset.slot);
   if (e.target.matches("select")) return api("POST", "/api/plan", { slot, round: e.target.value });

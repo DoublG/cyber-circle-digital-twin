@@ -5,7 +5,8 @@ game (headless), three emulated tiles (the real firmware, tile_firmware/
 emulator) on T01-T03, and Chrome showing
   * the gamemaster app on a phone (the web version, a fake camera with QR cards)
                                                      -> movies/gallery/app/
-  * the control server's web interface, every tab   -> movies/gallery/controller/
+  * the control server's web interface, every tab (the randomizer with a game out,
+    Prestaties, Verbindingen too)                   -> movies/gallery/controller/
   * the tile emulator's top (SVG)                    -> movies/gallery/tegel/
 through setup, opening, invites, activation on the tiles, a round played on
 the tiles, the scoreboard and the registration website going down.
@@ -241,6 +242,10 @@ def main():
             until(lambda: len(state()["players"]) == 2)
             s.tile_shot(1, "speelt_levens")
             s.web("game", "spel_open_spelers_en_uitnodiging")
+            # the randomizer: a game out (only when planned: a new game for a chosen audience)
+            s.desk.click('input[data-random="zwarte_piet"]')
+            s.desk.wait_for_timeout(2500)
+            s.web("game", "spel_randomizer_zwarte_piet_uit")
             # the app: Gust's card in front of the camera -> where to go
             s.tab("Scannen")
             got = until(lambda: any(p["name"] == "Gust" for p in state()["pending"]), 40)
@@ -289,6 +294,8 @@ def main():
             s.tile_shot(2, "reactie_ronde")
             s.web("game", "spel_ronde_bezig")
             s.web("recovery", "herstel_ronde_bezig")
+            s.web("perf", "prestaties_ronde_bezig")
+            s.web("clients", "verbindingen_ronde_bezig")
             end = time.time() + 40
             while time.time() < end and state()["state"] == "PLAYING":
                 for t in (1, 2, 3):
