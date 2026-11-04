@@ -73,7 +73,14 @@ func _ready() -> void:
 	check(view._player_cards.size() == 13, "quiz: 13 player cards (%d)" % view._player_cards.size())
 	await _shot(view, "50_13_quiz_answers")
 	await _record_until(func(): return quiz._phase == "reveal")
+	await _record(0.3)
+	var before := view._player_cards.values().map(func(c): return c.panel.global_position)
+	var scale_before: Vector2 = view._player_grid.scale
 	await _record(3.5)                              # the cards turn one by one
+	var after := view._player_cards.values().map(func(c): return c.panel.global_position)
+	check(before.size() == after.size() and range(before.size()).all(func(i): return before[i].distance_to(after[i]) < 0.5) \
+		and view._player_grid.scale.is_equal_approx(scale_before),
+		"reveal: the cards do not move when the result line appears (%s -> %s)" % [before.slice(0, 1), after.slice(0, 1)])
 	check(view._shown_ok.size() == 13, "reveal: every card turned (%d)" % view._shown_ok.size())
 	check(view._player_cards.values().all(func(c): return is_zero_approx(c.panel.rotation) \
 		and c.panel.scale.is_equal_approx(Vector2.ONE)), "reveal: the shake / pop ended (no card tilted or scaled)")
@@ -83,7 +90,8 @@ func _ready() -> void:
 	check(RIGHT.all(func(id): return marks[id] == "✔"), "reveal: the right ones ✔")
 	check(WRONG.all(func(id): return marks[id] == "✘") and marks[11] == "✘", "reveal: wrong / no answer ✘")
 	check(SHIELDED.all(func(id): return marks[id] == "♥"), "reveal: shielded ♥")
-	check(view._slide_status.visible and view._slide_status.text.begins_with("6 VAN 13"), "reveal: '%s'" % view._slide_status.text)
+	check(view._slide_status.visible and view._slide_status.modulate.a > 0.99 and view._slide_status.text.begins_with("6 VAN 13"),
+		"reveal: '%s'" % view._slide_status.text)
 	_inside(view, [view._slide_status, view._legend], "reveal: status / legend")
 	await _shot(view, "51_13_quiz_reveal")
 

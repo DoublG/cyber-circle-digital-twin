@@ -50,7 +50,7 @@ func _ready() -> void:
 	check(cards.all(func(c): return is_zero_approx(c.rotation) and c.scale.is_equal_approx(Vector2.ONE)),
 		"reveal: no card left tilted or scaled")
 	_inside(quiz, cards + [quiz._slide_status, quiz._legend], "reveal: cards, status and legend on the screen")
-	check(quiz._slide_status.visible, "reveal: status shown: %s" % quiz._slide_status.text)
+	check(quiz._slide_status.visible and quiz._slide_status.modulate.a > 0.99, "reveal: status shown: %s" % quiz._slide_status.text)
 	await _shot("61_many_quiz_reveal")
 
 	print("--- UITSLAG with %d players" % N)

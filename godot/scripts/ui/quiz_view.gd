@@ -317,8 +317,11 @@ func _show_players_slide(phase: String, players: Array) -> void:
 		"reveal": "WIE HAD HET GOED?"}[phase]
 	_slide_title.add_theme_font_size_override("font_size", 150 if phase == "timeup" else 96)
 	_grid_room.visible = phase != "timeup"
-	_slide_status.visible = phase == "reveal"
-	_legend.visible = phase == "reveal" and players.any(func(p): return p.protected and not p.dead and p.ok == false)
+	# the result line and the shield legend keep their room from the answers on
+	# (only faded in): the cards never move when they appear
+	_slide_status.visible = phase != "timeup"
+	_legend.visible = phase != "timeup" and players.any(func(p): return p.protected and not p.dead)
+	_legend.modulate.a = 1.0 if phase == "reveal" and players.any(func(p): return p.protected and not p.dead and p.ok == false) else 0.0
 	var shown := players.filter(func(p): return not p.dead)
 	_player_grid.columns = _columns(shown.size())
 	var many := shown.size() > 10                  # (3 rows of cards: tighter, the legend stays on screen)
@@ -362,10 +365,9 @@ func _show_players_slide(phase: String, players: Array) -> void:
 		c.panel.add_theme_stylebox_override("panel", Retro.panel(fill, border, 5, 20, 22))
 		c.mark.text = mark
 		c.mark.add_theme_color_override("font_color", border if _shown_ok.has(p.id) else Retro.DIM)
-	_slide_status.visible = phase == "reveal" and _shown_ok.size() >= shown.size()
-	if phase == "reveal":
-		var right := shown.filter(func(p): return p.ok == true).size()
-		_slide_status.text = "%d VAN %d SPELERS HADDEN HET GOED" % [right, shown.size()]
+	_slide_status.modulate.a = 1.0 if phase == "reveal" and _shown_ok.size() >= shown.size() else 0.0
+	var right := shown.filter(func(p): return p.ok == true).size()
+	_slide_status.text = "%d VAN %d SPELERS HADDEN HET GOED" % [right, shown.size()]
 
 
 ## The reveal, one card after the other: the card pops, the mark (✔ / ✘ /
