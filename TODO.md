@@ -108,3 +108,16 @@ Moments that have no sound event today:
       with the real switch's numbers (`PROXY=... tests/run_replica_test.sh`),
       and keep the Pis' clocks on NTP (the slogans and invites run on the
       wall clock, in step on every screen).
+
+## The real robot (robot_firmware/)
+
+- [ ] Wire it as in docs/WIRING.md §3b; check that RPWM turns the head
+      clockwise seen from above (else `MOTOR_INVERT 1`).
+- [ ] The cable: measure how far the head may really turn each way and set
+      the window in *Tegels › Robot* (default −1.5 … +1.5 turns).
+- [ ] Before the first power-up: the head at the start (facing T01), the cable relaxed.
+- [ ] Tune `MOTOR_SPEED` / `MOTOR_SLOW` (stops on the mark without overshooting
+      it), `MARK_DEBOUNCE_US`, `MARK_TIMEOUT_MS` on the hardware.
+- [ ] The smoke machine's relay: its trigger input, and *Rook max* / pause for that machine.
+- [ ] The LED chain's order and counts (`BULBS_PER_SIDE`, `DOME_LEDS`, `EYE_LEDS`).
+

@@ -118,6 +118,40 @@ WT32-ETH01 does not break out GPIO34, and on the Olimex ESP32-POE it is the
 on-board button. It is now on **GPIO39**, which every one of these boards has
 as an ADC1 input (`SENSOR_PINS` in `config.h`, and the Wokwi `diagram.json`).
 
+## 3b. The robot – wiring (robot_firmware/)
+
+The robot is an ESP32 (WT32-ETH01, Ethernet) like the tiles. The head turns on
+a **DC motor** through an **H-bridge**; a **mark sensor** sees a mark at every
+side (13 per turn), a **home sensor** the start position (side 0, facing T01);
+FastLED drives the bulbs, the dome and the eye; a **relay** triggers the smoke
+machine. A cable runs into the head: the firmware never turns it further than
+the window set in the control UI (default −1.5 … +1.5 turns from the start).
+
+**Pin table** (`robot_firmware/include/config.h`, every pin can be changed):
+
+| what | pin | note |
+|---|---|---|
+| Motor clockwise (BTS7960 RPWM / L298N IN1) | **IO14** | 20 kHz PWM; clockwise seen from above = side 0 → 1 → 2 … (else `MOTOR_INVERT 1`) |
+| Motor counter-clockwise (LPWM / IN2) | **IO15** | both high = brake; R_EN / L_EN (BTS7960) to 3.3 V |
+| Mark sensor | **IO35** | inductive / hall / optical, active LOW, 10 kΩ pull-up to 3.3 V (input only) |
+| Home sensor | **IO39** | active LOW at the start position, together with mark 0 |
+| LED data (WS2812B chain) | **IO4** | through a 74AHCT125 (3.3 → 5 V) and 330 Ω |
+| Smoke machine relay | **IO32** | relay module / MOSFET on its remote input (active HIGH) |
+| Ethernet (LAN8720) | 0, 16, 18, 19, 21–23, 25–27 | taken by the module |
+| Flashing | USB-serial the first time, then over Ethernet (OTA) | `pio run -e ota -t upload --upload-port <IP>` |
+
+**The LED chain** (one data line, in this order): the bulbs of side 0 (3,
+bottom row first), side 1, … side 12 (39) → the dome (12) → the eye (1).
+`BULBS_PER_SIDE`, `DOME_LEDS`, `EYE_LEDS` in `config.h`.
+
+**Before the first power-up**: turn the head by hand to the start position
+(facing T01) with the cable relaxed. The robot homes at every boot, starting
+from the position it saved when it last stopped; with nothing saved (the very
+first boot) it looks for the nearest home within half a turn – the home sensor
+fires at every full turn, so it cannot tell +1 turn from the start by itself. For the same
+reason: **never turn the head by hand while the robot is off** (or put it back
+at the start before powering on) – it trusts the position it saved.
+
 ## 4. Screens, sound and lights
 
 ![Screens, sound and lights](diagrams/av_wiring.svg)

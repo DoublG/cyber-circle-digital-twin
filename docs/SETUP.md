@@ -593,6 +593,53 @@ The same over MQTT on `cybercircle/cmd`: `{"game": "start"}`, `{"game": "next"}`
 `{"game": "stop"}` – and every command listed at the top of
 `godot/scripts/arena.gd`.
 
+### The real robot (robot_firmware/)
+
+The robot in the room is an ESP32 with Ethernet, like the tiles, and talks
+MQTT like them (wiring: [WIRING.md](WIRING.md) §3b). It is slower than the one
+on the screens, so the game does not steer it: the robot NPC's events
+(`godot/scripts/robot_npc.gd`) go to it as commands on `<prefix>/robot/cmd`
+from the master, and the robot runs the physical part itself:
+
+* **Turning** to a side (the tiles have fixed places: side *k* faces tile
+  *k*+1) by counting the side marks; slow onto the last mark, brake, and a
+  head that coasted past a mark counts it once (`src/motion.cpp`, tested on the
+  PC: `pio test -e test`).
+* **The cable**: never past the window (*Tegels › Robot*: from … to … turns from
+  the start, default −1.5 … +1.5); a side the long way round when the short
+  way would leave it; an idle head unwinds towards the start after 45 s.
+* **Exterminations one at a time**, as fast as the head can: turn, charge,
+  fire, a puff of smoke, next (`{"exterminate": [3, 7]}`) – nothing else moves
+  the head meanwhile.
+* **Homing at every boot**: slowly back to the start, the way its saved
+  position says (it saves where it stops); not found: the other way; still
+  not found: it stops and waits (*Zoek de start* in the web interface).
+* **Stuck** (no mark for 4 s) or **past the window**: the motor stops, the
+  error shows in *Tegels › Robot* and *Verbindingen*.
+* **The lights** (rainbow / chase / party lamp per game phase, a side glowing
+  on a good answer, charging, the shot, hits, the overload, an extermination)
+  and **the smoke** (a relay: never longer than *Rook max*, never sooner than
+  the pause after the last puff) are timed in the robot.
+
+The web interface: *Tegels › Robot* – its state (side, turns, moving, queue,
+errors), the settings (sent retained on `<prefix>/robot/config`, kept in its
+flash), *Zoek de start*, *Stop motor*, a smoke test, turn to a side; *Spel*:
+**💨 Rook**. Topics: `robot/cmd`, `robot/config`, `robot/state`, `robot/event`,
+`robot/hello` (`robot_firmware/src/main.cpp`, `robot.cpp`).
+
+```bash
+cd robot_firmware
+pio run -t upload                                     # the first time over USB
+pio run -e ota -t upload --upload-port 192.168.1.40   # then over Ethernet (OTA_PASSWORD in config.h)
+pio test -e test                                      # the motion / homing logic on the PC
+pio run -e native && .pio/build/native/program --host 127.0.0.1 --port 1883 --web 8095 --start-turns 0.4
+                                                      # the emulator: the same firmware, a simulated head,
+                                                      # the robot from above at http://localhost:8095
+```
+
+The tiles flash over Ethernet the same way: `cd tile_firmware && pio run -e ota
+-t upload --upload-port <IP of the tile>`.
+
 ## 5. MQTT topics
 
 Prefix `cybercircle` (setting `topic_prefix` on the *Mqtt* node). Payloads are JSON.

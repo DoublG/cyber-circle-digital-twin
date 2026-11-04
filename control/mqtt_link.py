@@ -66,7 +66,8 @@ class MqttLink:
         self.connected_at = 0.0
         self.mqtt_clients = {}               # client id -> {id, ip, user, since, keepalive}: connected now (the broker's log)
         self.client_events = deque(maxlen=40)   # recent connects / leaves {time, id, event}
-        self.clients_since = time.time()     # (the list knows who connected after this: the broker has no list)
+        self.clients_since = time.time()
+        self.robot = {}                      # the real robot: {"state": robot/state, "hello": robot/hello, "seen"}     # (the list knows who connected after this: the broker has no list)
         u = urlparse(url)
         ws = u.scheme in ("ws", "wss")
         self.client_id = "cybercircle-control"
@@ -168,6 +169,10 @@ class MqttLink:
             elif topic == "texts/defaults":
                 self.text_defaults = data or {}
                 kind = "texts"
+            elif topic in ("robot/state", "robot/hello"):
+                self.robot[topic.split("/")[1]] = data if isinstance(data, dict) else {}
+                self.robot["seen"] = time.time()
+                kind = "robot"
             elif topic == "master":
                 self.master = data or {}
                 kind = "master"
@@ -269,6 +274,14 @@ class MqttLink:
         it again right away instead of at its next refresh."""
         self.client.publish(f"{self.prefix}/db", json.dumps({"changed": what, "time": time.time()}))
         self.db_notice = {"what": what, "time": time.time()}     # (the web interface: Herstel)
+
+    def robot_command(self, msg):
+        """The real robot directly (the web interface's buttons: home, stop, smoke ...)."""
+        self.client.publish(f"{self.prefix}/robot/cmd", json.dumps(msg))
+
+    def publish_robot_config(self, cfg):
+        """The robot's settings (retained: it gets them whenever it connects; it keeps them in flash)."""
+        self.client.publish(f"{self.prefix}/robot/config", json.dumps(cfg), retain=True)
 
     def command(self, msg):
         self.client.publish(f"{self.prefix}/cmd", json.dumps(msg))

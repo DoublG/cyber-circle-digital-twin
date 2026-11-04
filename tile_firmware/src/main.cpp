@@ -13,6 +13,7 @@
 #include <PubSubClient.h>
 #include "display.h"
 #include "net.h"
+#include "ota.h"
 #include "programs.h"
 #include "sensors.h"
 #include "tile.h"
@@ -137,6 +138,9 @@ void setup() {
     sensors::begin();                       // (nobody on the tile at power-up: the resting values)
     net::begin();
     deviceId = net::mac();
+    String host = "tile-" + deviceId;
+    host.replace(":", "");
+    ota::begin(host.c_str());                   // flashing over the network (pio run -e ota -t upload --upload-port <IP>)
     display::unplaced(0);
     mqtt.setServer(MQTT_HOST, MQTT_PORT);
     mqtt.setBufferSize(8192);               // (a program can be a few kB)
@@ -145,6 +149,7 @@ void setup() {
 }
 
 void loop() {
+    ota::loop();
     loops++;
     connect();
     mqtt.loop();

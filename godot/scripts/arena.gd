@@ -57,6 +57,8 @@ extends Node3D
 ##   {"robot": "bulbs", "side": 2, "color": "#ff0000"}   (side = tile - 1)
 ##   {"robot": "party", "on": true, "speed": 0.6}        (party lamp in the dome)
 ##   {"robot": "bulb_effect", "effect": "rainbow"}       (none/rainbow/chase/pulse)
+##   {"robot": "smoke", "seconds": 3}                    (the real robot's smoke machine)
+##   {"robot": "home", "dir": "cw"} / {"robot": "stop"}  (the real robot: find the start again / stop the motor)
 ##   {"game": "start"} / {"game": "next"} / {"game": "stop"}
 ##   {"game": "plan", "slot": 0, "round": "quiz", "options": {"categories": ["Computers"]}}
 ##                                                    (operator: the next round(s); "" = random)

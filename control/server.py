@@ -10,6 +10,7 @@ Gamemaster app in a browser (iPhone): http://<this pc>:8080/gm/ (the Flutter web
   game master  GET /api/questions, GET /api/players/{id}, GET /api/ranking,
                POST /api/games, POST /api/games/{id}/rounds|results|end
   displays     GET /api/master        (where the master is: the Pis connect to it)
+  robot        GET|PUT /api/robot (state; the cable window, speeds, smoke), POST /api/robot/cmd (home, stop, smoke)
   performance  GET /api/metrics       (every component: fps, frame times, CPU, memory, links; Prestaties tab)
   app          POST /api/players {name, color, age, card?} -> {id};  POST /api/players/{id}/assign {tile?, mobile?}
   website      GET /api/website (is the registration website up? --website=URL of its health endpoint,
@@ -218,6 +219,12 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
     listeners: set[asyncio.Queue] = set()
     loop: dict = {}
 
+    def robot_config():
+        try:
+            return json.loads(db.setting("robot_config", "{}"))
+        except ValueError:
+            return {}
+
     def installed():
         """The places of this installation (default: all of them)."""
         try:
@@ -231,6 +238,8 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
             link.publish_tiles(db.tiles(), installed())   # (re)connected / a tile appeared: send the layout
         if kind == "mqtt":
             link.publish_mode(db.setting("mode", "setup"))
+            if robot_config():
+                link.publish_robot_config(robot_config())
             link.publish_settings(game_settings())
             link.publish_texts(texts())
         if "loop" in loop:
@@ -321,6 +330,39 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
                 "website": {"status": w["status"], "latency_ms": w["latency_ms"], "mock": w["mock"]},
                 "streams": {str(k): v for k, v in link.streams.items()}}
 
+    # ------------------------------------------------------------ the real robot (web interface: Tegels › Robot)
+
+    ROBOT_KEYS = {"turn_min": (-5.0, 5.0), "turn_max": (-5.0, 5.0), "speed": (20, 100), "slow": (15, 100),
+                  "smoke_max_s": (0.0, 30.0), "smoke_pause_s": (0.0, 600.0), "smoke_exterminate_s": (0.0, 10.0),
+                  "brightness": (5, 255)}
+
+    @app.get("/api/robot")
+    def get_robot():
+        """The robot's state (robot/state), its hello and the settings sent to it."""
+        r = link.robot
+        return {"state": r.get("state", {}), "hello": r.get("hello", {}), "config": robot_config(),
+                "online": bool(r.get("seen")) and time.time() - r.get("seen", 0) < 30}
+
+    @app.put("/api/robot")
+    def put_robot(values: dict):
+        """{turn_min, turn_max (the cable window, in turns from the start), speed, slow (%),
+        smoke_max_s, smoke_pause_s, smoke_exterminate_s, brightness} - only what is given."""
+        cfg = robot_config()
+        for k, (lo, hi) in ROBOT_KEYS.items():
+            if isinstance(values.get(k), (int, float)):
+                cfg[k] = min(max(values[k], lo), hi)
+        if cfg.get("turn_min", -1.5) > cfg.get("turn_max", 1.5):
+            raise HTTPException(400, "turn_min must be below turn_max")
+        db.set_setting("robot_config", json.dumps(cfg))
+        link.publish_robot_config(cfg)
+        return {"config": cfg}
+
+    @app.post("/api/robot/cmd")
+    def robot_cmd(cmd: dict):
+        """The real robot directly: {"home": "cw"}, {"stop": true}, {"smoke": 3}, {"go": 5} ..."""
+        link.robot_command(cmd)
+        return {"ok": True}
+
     # ------------------------------------------------------------ connected clients (web interface: Verbindingen)
 
     def place_label(n):
@@ -358,6 +400,12 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
                     if live_master == node.get("id"):
                         name += " (master)"
                 detail = "eigen tegels (alleen lezen)" if role == "display" else ""
+            elif cid.startswith("robot-"):
+                st = link.robot.get("state", {})
+                kind, name = "robot", "Robot"
+                detail = ("zijde %s · %.2f slagen" % (st.get("side"), st.get("turns", 0)) if st.get("known")
+                          else "zoekt de start" if st.get("homing") else "positie onbekend") \
+                    + (f" · FOUT: {st['error']}" if st.get("error") else "")
             elif cid.startswith("cc-gamemaster-"):
                 kind, name = "gamemaster", "Gamemaster-app"
             out.append({**c, "kind": kind, "name": name, "detail": detail, "via": "MQTT",

@@ -49,3 +49,5 @@ godot/movie/game_tmp/
 movies/game/
 godot/movie/*_tmp/
 movies/game_*/
+robot_firmware/.pio/
+robot_flash_*.txt

@@ -38,6 +38,7 @@
   <div class="row controls">
     <button data-game="next" title="Intro overslaan / ronde beëindigen / scores overslaan">⏭ Volgende fase</button>
     <button data-game="start" title="Niet wachten op de automatische start">▶ Start ronde nu</button>
+    <button id="smoke-now" title="De rookmachine van de robot (begrensd in de robot: max duur, pauze)">💨 Rook</button>
   </div>
   <h2>Gamemasters ingelogd</h2>
   <div id="gm-online" class="gm-online"></div>
@@ -80,6 +81,23 @@
   <table id="tile-table"><thead><tr><th>Plaats</th><th>Fysieke tegel</th><th>Status</th><th>In gebruik</th></tr></thead><tbody></tbody></table>
   <h2>Niet toegewezen tegels</h2>
   <ul id="free-devices" class="events"></ul>
+  <h2>Robot <span class="hint">– de echte: draait op zijn eigen tempo binnen de kabel, extermineert één voor één</span></h2>
+  <div id="robot-state" class="hint">Nog niets van de robot gehoord.</div>
+  <div class="row robot-form">
+    <label>Draaien van <input type="number" step="0.25" id="robot-turn-min"> tot <input type="number" step="0.25" id="robot-turn-max"> slagen
+      <span class="hint">(vanaf de startpositie; de kabel naar het hoofd)</span></label>
+    <label>Snelheid <input type="number" min="20" max="100" id="robot-speed"> %</label>
+    <label>Rook bij extermineren <input type="number" step="0.5" min="0" max="10" id="robot-smoke-ext"> s</label>
+    <label>Rook max <input type="number" step="0.5" min="0" max="30" id="robot-smoke-max"> s, pauze <input type="number" step="1" min="0" max="600" id="robot-smoke-pause"> s</label>
+    <button id="robot-save">Opslaan</button>
+  </div>
+  <div class="row">
+    <button class="small" data-robot='{"home": "auto"}'>Zoek de start</button>
+    <button class="small" data-robot='{"stop": true}'>■ Stop motor</button>
+    <button class="small" data-robot='{"smoke": 2}'>💨 Rooktest (2 s)</button>
+    <label>Draai naar zijde <input type="number" min="0" max="12" id="robot-go" value="0"></label>
+    <button class="small" id="robot-go-btn">Draai</button>
+  </div>
 </section>
 
 <section id="tab-nodes" class="tab">

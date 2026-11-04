@@ -12,12 +12,27 @@ extends Node
 ## The tiles' part of a moment (the attack sweep, the hit, the block, the
 ## death) belongs to the choreography too: it is played here, not relayed.
 
+## The real robot (robot_firmware/, MQTT <prefix>/robot/cmd): the same events
+## as commands - the master's MqttBridge sends them. It is slower than the one
+## on the screens and runs the physical part itself (turning within its cable,
+## exterminations one after the other, the smoke).
+signal hardware(cmd: Dictionary)
+
 var arena: Node3D
 var robot: CyberRobot
 
 
 func _ev(method: StringName, args: Array) -> void:
 	Replica.relay("npc", method, args)
+
+
+func _hw(cmd: Dictionary) -> void:
+	if not Replica.client and not cmd.is_empty():                       # (the master: a display node only plays the choreography)
+		hardware.emit(cmd)
+
+
+static func _hex(c: Color) -> String:
+	return "#" + c.to_html(false)
 
 
 func _tile(id: int) -> CyberTile:
@@ -35,12 +50,14 @@ func _side(id: int) -> int:
 ## own tiles (MQTT) plays at once, before the master knows.
 func press(tile_id: int, color: Color) -> void:
 	_ev(&"press", [tile_id, color])
+	_hw({"look": _side(tile_id)})
 	arena.packet(tile_id, color, func(): robot.look_at_side(_side(tile_id)))
 
 
 ## A player activated their tile: it flashes in their colour, the robot greets them.
 func greet(tile_id: int, color: Color) -> void:
 	_ev(&"greet", [tile_id, color])
+	_hw({"look": _side(tile_id), "glow": {"side": _side(tile_id), "color": _hex(color), "ms": 600}})
 	var tile := _tile(tile_id)
 	tile.fill_ring(color)
 	get_tree().create_timer(0.6).timeout.connect(func():
@@ -53,6 +70,8 @@ func greet(tile_id: int, color: Color) -> void:
 ## to_robot = false, glow = false: a red packet back from the robot (a miss).
 func feedback(tile_id: int, color: Color, hold := 0.25, to_robot := true) -> void:
 	_ev(&"feedback", [tile_id, color, hold, to_robot])
+	if to_robot:
+		_hw({"glow": {"side": _side(tile_id), "color": _hex(color), "ms": int(hold * 1000) + 300}})
 	if not to_robot:
 		arena.packet(tile_id, color, Callable(), false)
 		return
@@ -68,6 +87,7 @@ func feedback(tile_id: int, color: Color, hold := 0.25, to_robot := true) -> voi
 ## their tiles, the packets to the robot, one combined hit (everyone: the overload).
 func players_attack(tile_ids: Array, everyone := false, color := Color(0.2, 1.0, 0.3)) -> void:
 	_ev(&"players_attack", [tile_ids, everyone, color])
+	_hw({"hit": {"sides": tile_ids.map(func(id): return _side(id)), "color": _hex(color), "overload": everyone}})
 	for id in tile_ids:
 		_tile(id).play_attack(color)
 	await get_tree().create_timer(0.35).timeout  # the sweeps reach the robot side
@@ -91,6 +111,7 @@ func players_attack(tile_ids: Array, everyone := false, color := Color(0.2, 1.0,
 func attack(targets: Array, color: Color, shielded: Array, on_charge := Callable(), on_fire := Callable(),
 		on_land := Callable()) -> void:
 	_ev(&"attack", [targets, color, shielded])
+	_hw({"attack": {"sides": targets.map(func(id): return _side(id)), "color": _hex(color)}})
 	if targets.size() == 1:                          # (look_at_point: also tilts the eye gun, e.g. up at a drone)
 		robot.look_at_point(_tile(targets[0]).global_position)
 		var wait := 0.0
@@ -118,11 +139,13 @@ func attack(targets: Array, color: Color, shielded: Array, on_charge := Callable
 ## The players about to be exterminated: the robot already turns to the first.
 func aim(tile_id: int) -> void:
 	_ev(&"aim", [tile_id])
+	_hw({"lock": _side(tile_id)})
 	robot.lock_on(_side(tile_id))
 
 
 func release() -> void:
 	_ev(&"release", [])
+	_hw({"idle": true})
 	robot.release_head()
 
 
@@ -131,6 +154,7 @@ func release() -> void:
 ## on_hit: the shot landed; on_done: the animation is over (the master's game).
 func doom(tile_id: int, on_hit := Callable(), on_done := Callable()) -> void:
 	_ev(&"doom", [tile_id])
+	_hw({"exterminate": [_side(tile_id)]})          # (the real one: queued, one after the other, at its own pace)
 	var tile := _tile(tile_id)
 	tile.blink_doomed()
 	robot.queue_death(_side(tile_id), tile.global_position + Vector3(0, 0.05, 0), func():
@@ -147,6 +171,7 @@ func doom(tile_id: int, on_hit := Callable(), on_done := Callable()) -> void:
 ## playing: the chase; idle: nothing (the scoreboard: celebrate).
 func mood(name: String) -> void:
 	_ev(&"mood", [name])
+	_hw({"mood": name})
 	match name:
 		"lobby":
 			robot.set_bulb_effect("rainbow")
@@ -161,6 +186,7 @@ func mood(name: String) -> void:
 ## The leader after a round: the robot turns to them, that side lit gold.
 func celebrate(tile_id: int) -> void:
 	_ev(&"celebrate", [tile_id])
+	_hw({"celebrate": _side(tile_id), "mood": "scoreboard"})
 	var side := _side(tile_id)
 	robot.set_bulb_effect("none")
 	robot.set_all_bulbs(Color.BLACK)
@@ -171,6 +197,7 @@ func celebrate(tile_id: int) -> void:
 ## The operator's direct robot commands ({"robot": "fire", ...}, Arena.apply_command).
 func command(cmd: Dictionary) -> void:
 	_ev(&"command", [cmd])
+	_hw(_hardware_command(cmd))
 	match str(cmd.get("robot", "")):
 		"head":
 			robot.turn_head_to(float(cmd.angle))
@@ -199,3 +226,33 @@ func command(cmd: Dictionary) -> void:
 				robot.set_party_spin_speed(float(cmd.speed))
 		"spin":
 			robot.idle_spin_deg = float(cmd.get("speed", robot.idle_spin_deg))
+		"smoke":
+			pass                                    # (only the real robot has a smoke machine)
+
+
+## The operator's command for the real robot.
+func _hardware_command(cmd: Dictionary) -> Dictionary:
+	match str(cmd.get("robot", "")):
+		"head":
+			return {"go": CyberRobot.nearest_side(deg_to_rad(float(cmd.angle)))}
+		"fire":
+			return {"attack": {"sides": [_side(int(cmd.tile)) if cmd.has("tile") else 0], "color": "#ff1a0d"}}
+		"release", "spin":
+			return {"idle": true}
+		"look_at_tile":
+			return {"go": _side(int(cmd.tile))}
+		"bulb_effect":
+			return {"bulb_effect": str(cmd.effect)}
+		"bulbs":
+			return {"bulbs": {"side": int(cmd.get("side", -1)), "color": str(cmd.color)}}
+		"dome":
+			return {"dome": str(cmd.color)}
+		"party":
+			return {"party": bool(cmd.get("on", true))}
+		"smoke":
+			return {"smoke": float(cmd.get("seconds", 3.0))}
+		"home":
+			return {"home": str(cmd.get("dir", "auto"))}
+		"stop":
+			return {"stop": true}
+	return {}

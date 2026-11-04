@@ -105,3 +105,8 @@ static const int SENSOR_PINS[4] = {32, 33, 39, 35};
 #ifndef HELLO_MS
 #define HELLO_MS       10000            // announce again (the control server marks a tile offline after 30 s)
 #endif
+
+// ---- flashing over the network (ArduinoOTA: pio run -e ota -t upload --upload-port <IP>)
+#ifndef OTA_PASSWORD
+#define OTA_PASSWORD    "change-me"
+#endif

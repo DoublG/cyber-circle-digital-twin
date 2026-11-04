@@ -28,7 +28,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button, .tab").forEach(e => e.classList.remove("active"));
   b.classList.add("active");
   $(`#tab-${b.dataset.tab}`).classList.add("active");
-  ({ perf: startPerf, clients: startClients, recovery: renderRecovery, mqtt: startMqttLog, website: loadWebsite, sounds: renderSounds, texts: loadTexts, gamemasters: loadGamemasters, players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: loadTiles, settings: loadSettings })[b.dataset.tab]?.();
+  ({ perf: startPerf, clients: startClients, recovery: renderRecovery, mqtt: startMqttLog, website: loadWebsite, sounds: renderSounds, texts: loadTexts, gamemasters: loadGamemasters, players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: () => { loadTiles(); loadRobot(); }, settings: loadSettings })[b.dataset.tab]?.();
 });
 
 // ---------------------------------------------------------------- live
@@ -60,7 +60,7 @@ function renderLive() {
   $("#events").innerHTML = (live.events || []).map(e =>
     `<li><span class="t">${esc(e.time)}</span><span style="color:${esc(e.color || "")}">${esc(e.text)}</span></li>`).join("");
   renderNodes();
-  if ($("#tab-tiles").classList.contains("active")) { renderTileTable(); renderLayout(); }
+  if ($("#tab-tiles").classList.contains("active")) { renderTileTable(); renderLayout(); loadRobot(); }
   if ($("#tab-recovery").classList.contains("active")) renderRecovery();
 }
 
@@ -473,9 +473,38 @@ function renderPerf(m) {
     : `Geen (de master: ${master ? master.streams ?? 0 : "–"} actief).`;
 }
 
+// ---------------------------------------------------------------- the real robot (Tegels)
+async function loadRobot() {
+  try {
+    const r = await (await fetch("/api/robot")).json();
+    const st = r.state || {}, c = r.config || {};
+    $("#robot-state").innerHTML = !r.online ? "Robot niet verbonden (MQTT robot/hello)."
+      : `${st.homing ? "<b class='warn'>zoekt de startpositie</b>" : st.known ? `zijde <b>${st.side}</b> · ${(st.turns ?? 0).toFixed(2)} slagen` : "<b class='bad'>positie onbekend</b>"}`
+        + `${st.moving ? " · draait" : ""} · venster ${Number(st.turn_min ?? 0).toFixed(2)} … ${Number(st.turn_max ?? 0).toFixed(2)} slagen`
+        + `<span class="hint"> (afgerond naar binnen op hele zijden)</span>`
+        + `${st.queue ? ` · ${st.queue} exterminatie(s) in de rij` : ""}${st.smoke ? " · 💨 rook" : ""}`
+        + `${st.error ? ` · <b class="bad">FOUT: ${esc(st.error)}</b>` : ""} · firmware ${esc(r.hello?.fw || "?")}`;
+    const set = (id, v, d) => { if (document.activeElement !== $(id)) $(id).value = v ?? d; };
+    set("#robot-turn-min", c.turn_min ?? st.turn_min, -1.5);
+    set("#robot-turn-max", c.turn_max ?? st.turn_max, 1.5);
+    set("#robot-speed", c.speed ?? st.speed, 70);
+    set("#robot-smoke-ext", c.smoke_exterminate_s ?? st.smoke_exterminate_s, 1.5);
+    set("#robot-smoke-max", c.smoke_max_s, 5);
+    set("#robot-smoke-pause", c.smoke_pause_s, 10);
+  } catch (e) { /* later */ }
+}
+$("#robot-save").onclick = () => api("PUT", "/api/robot", {
+  turn_min: Number($("#robot-turn-min").value), turn_max: Number($("#robot-turn-max").value),
+  speed: Number($("#robot-speed").value), smoke_exterminate_s: Number($("#robot-smoke-ext").value),
+  smoke_max_s: Number($("#robot-smoke-max").value), smoke_pause_s: Number($("#robot-smoke-pause").value),
+}).then(loadRobot);
+document.querySelectorAll("[data-robot]").forEach(b => b.onclick = () => api("POST", "/api/robot/cmd", JSON.parse(b.dataset.robot)));
+$("#robot-go-btn").onclick = () => api("POST", "/api/robot/cmd", { go: Number($("#robot-go").value) });
+$("#smoke-now").onclick = () => api("POST", "/api/robot/cmd", { smoke: 3 });
+
 // ---------------------------------------------------------------- Verbindingen: who is connected
 let clientsTimer = null;
-const KINDS = { tile: ["Tegel", "🟧"], game: ["Spel", "🎮"], display: ["Display", "🖥"], control: ["Controleserver", "⚙"],
+const KINDS = { robot: ["Robot", "🤖"], tile: ["Tegel", "🟧"], game: ["Spel", "🎮"], display: ["Display", "🖥"], control: ["Controleserver", "⚙"],
   gamemaster: ["Gamemaster-app", "📱"], other: ["Ander", "•"] };
 function startClients() {
   if (clientsTimer) return;

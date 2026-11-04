@@ -31,6 +31,8 @@ extends MqttClient
 ##   <prefix>/voice            game -> all    a line read out (Narrator): {"name": "question_12", "text": ...,
 ##                                            "kind": "question", "screens": [1, 2, 3, 4, 5], "file": ...}
 ##   <prefix>/stream           game -> all    a companion video started / stopped: {tile, on, encoder?, error?}
+##   <prefix>/robot/cmd        game -> robot  the real robot (robot_firmware/): the robot NPC's events as
+##                                            commands {"look": 3}, {"exterminate": [3]}, {"mood": "playing"} ...
 ##   <prefix>/sounds           game -> all    retained {"events": {"attack": ["laser1.ogg", ...], ...}}:
 ##                                            the sounds {"sound": "<event>"} on <prefix>/cmd can play
 ## Leave url empty to run without MQTT.
@@ -95,6 +97,9 @@ func setup(arena_node: Node3D) -> void:
 			{"tile": id, "player": who, "color": "#" + color.to_html(false)}))
 	arena.activated.connect(func(id, who):
 		publish_json(topic_prefix + "/activated", {"tile": id, "player": who}))
+	arena.npc.hardware.connect(func(cmd):               # the real robot follows the NPC's events
+		if online and role == "master":
+			publish_json(topic_prefix + "/robot/cmd", cmd))
 	arena.game.game_event.connect(func(text, color):
 		publish_json(topic_prefix + "/event", {"text": text, "color": "#" + color.to_html(false)}))
 	subscribe(topic_prefix + "/cmd")
