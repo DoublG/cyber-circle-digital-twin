@@ -1110,6 +1110,7 @@ func _parse_screens(text: String, mobile: bool) -> Array:
 
 func _process(delta: float) -> void:
 	clock += delta
+	Retro.game_clock = clock
 	_update_packets(delta)
 	if Replica.client:
 		return                                   # (the master decides when an invite runs out)

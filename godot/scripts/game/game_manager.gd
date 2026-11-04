@@ -440,7 +440,7 @@ func _next_round() -> void:
 	current.configure(settings.get(round_type_name(_last_type), {}))   # operator settings ...
 	current.configure(entry.get("options", {}))                         # ... this round in the plan
 	for t in current.tunables():                                        # the tempo: all times
-		if t.unit in ["s", "ms"]:
+		if t.unit in ["s", "ms"] and not t.key.begins_with("latency"):   # (a hardware delay: not a game time)
 			var v = current.get(t.key) / tempo
 			current.set(t.key, roundi(v) if current.get(t.key) is int else v)
 	current.prepare(self, arena.player_ids().filter(func(id): return not arena.tiles[id - 1].is_dead))

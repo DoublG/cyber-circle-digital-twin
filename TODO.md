@@ -106,8 +106,8 @@ Moments that have no sound event today:
       to the Pis at the same path (a display plays them itself).
 - [ ] The booth network: run the display test through the bad-network proxy
       with the real switch's numbers (`PROXY=... tests/run_replica_test.sh`),
-      and keep the Pis' clocks on NTP (the slogans and invites run on the
-      wall clock, in step on every screen).
+      (the slogans and invites run on the game's clock, which the master
+      sends to the Pis: in step on every screen without NTP).
 
 ## The real robot (robot_firmware/)
 

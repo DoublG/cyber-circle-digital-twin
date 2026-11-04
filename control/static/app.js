@@ -833,7 +833,7 @@ async function loadRanking() {
 connectLive();
 
 // ---------------------------------------------------------------- settings
-const UNITS = { s: "s", ms: "ms" };
+const UNITS = { s: "s", ms: "ms", x: "×" };
 
 async function loadSettings() {
   const { schema, values } = await api("GET", "/api/settings");
@@ -852,7 +852,24 @@ async function loadSettings() {
     }).join("") + `</fieldset>`).join("");
   $("#settings").oninput = e => e.target.classList.toggle("changed", e.target.value !== "");
   $("#settings-msg").textContent = "";
+  const tempo = Number(values.game?.tempo ?? 1);
+  document.querySelectorAll("#tempo-presets button").forEach(b =>
+    b.classList.toggle("active", Math.abs(Number(b.dataset.tempo) - tempo) < 0.001));
 }
+
+$("#tempo-presets").onclick = async e => {             // one click: the tempo, the rest unchanged
+  const b = e.target.closest("button[data-tempo]");
+  if (!b) return;
+  const { values } = await api("GET", "/api/settings");
+  const game = { ...(values.game || {}) };
+  const t = Number(b.dataset.tempo);
+  if (t === 1) delete game.tempo; else game.tempo = t;
+  values.game = game;
+  if (!Object.keys(game).length) delete values.game;
+  await api("PUT", "/api/settings", values);
+  await loadSettings();
+  $("#settings-msg").textContent = `Tempo ×${t} ✓`;
+};
 
 $("#settings-save").onclick = async () => {
   const values = {};

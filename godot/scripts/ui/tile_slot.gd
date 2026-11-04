@@ -74,7 +74,7 @@ func _wrapped(text: String, font_size: int, col: Color) -> Label:
 
 
 func _process(_delta: float) -> void:
-	_t = fmod(Time.get_unix_time_from_system(), 3600.0)   # (the wall clock: in step on every node)
+	_t = fmod(Retro.game_clock, 3600.0)   # (the game's clock: in step on every node, at the game's pace)
 	queue_redraw()
 	if _diagram:
 		_diagram.t = _t

@@ -33,6 +33,10 @@ const CALLS_TO_ACTION := [
 const BUTTON_NAMES := {&"Square": "VIERKANT", &"Triangle": "DRIEHOEK", &"Cross": "KRUIS", &"Circle": "CIRKEL"}
 
 static var _theme: Theme
+## The game's clock (s, Arena.clock): follows --fixed-fps (the movies) and is
+## the master's on every display node - UI animations that must run in step
+## everywhere and at the game's pace use it, not the wall clock.
+static var game_clock := 0.0
 
 
 ## A player's place on the screens: floor tile "T03", mobile player (drone,

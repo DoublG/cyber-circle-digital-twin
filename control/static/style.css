@@ -147,3 +147,5 @@ dialog label input, dialog label textarea, dialog label select { display: block;
 .spark line { stroke: var(--line); stroke-dasharray: 2 2; }
 .perf-two { display: flex; gap: 24px; flex-wrap: wrap; } .perf-two > div { flex: 1; min-width: 300px; }
 table.kv td:first-child { color: var(--dim); width: 45%; }
+#tempo-presets { gap: 8px; align-items: center; flex-wrap: wrap; }
+#tempo-presets button.active { color: var(--bg); background: var(--amber); border-color: var(--amber); }

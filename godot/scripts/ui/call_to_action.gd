@@ -1,8 +1,9 @@
 class_name CallToAction
 extends Label
 ## Big rotating slogan (Texts.calls(): the operator's, else Retro.CALLS_TO_ACTION): types itself out, pulses,
-## and is replaced by the next one every `interval` seconds. On the wall clock,
-## so every screen of every node (display nodes) shows the same at the same time;
+## and is replaced by the next one every `interval` seconds. On the game's clock
+## (Retro.game_clock: the master's on every display node), so every screen of
+## every node shows the same at the same time, at the game's pace;
 ## offset: another slogan than its neighbours (e.g. the tile number).
 
 var interval := 10.0                # s per slogan (time to read it on a split view)
@@ -25,7 +26,7 @@ func _init(font_size := 72) -> void:
 
 
 func _process(_delta: float) -> void:
-	var now := Time.get_unix_time_from_system()
+	var now := Retro.game_clock
 	_t = fmod(now, interval)
 	var calls := Texts.calls()
 	var i := (int(now / interval) + offset) % calls.size()
