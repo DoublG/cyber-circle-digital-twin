@@ -3,7 +3,8 @@ sends commands. Topics (prefix "cybercircle"):
   node/<id>     process -> all   retained announcement {id, role, host, port, screens, version, ...}
   metrics/<id>  process -> all   every 2 s: fps, frame times, CPU, memory, the mirror links (Prestaties tab;
                                  kept here with 5 minutes of history, not in the traffic log)
-  $SYS/broker/#  broker -> all   Mosquitto's own counters (clients, messages/s, bytes/s)
+  $SYS/broker/#  broker -> all   Mosquitto's own counters (clients, messages/s, bytes/s) and, with
+                                 log_dest topic, its log lines: who connects / leaves (the client list)
   state         master -> all    retained game state {state, round, time, players, pending, ...}
   event         master -> all    {text, color} (the overview's event feed)
   master        control -> all   retained {node, host, port}: the chosen master
@@ -19,6 +20,7 @@ sends commands. Topics (prefix "cybercircle"):
 """
 
 import json
+import re
 import threading
 import time
 from collections import deque
@@ -27,6 +29,12 @@ from urllib.parse import urlparse
 import paho.mqtt.client as mqtt
 
 NODE_TIMEOUT = 30.0                      # s without an announcement: offline
+# Mosquitto's log lines (log_dest topic: $SYS/broker/log/N), e.g.
+#   "1700000000: New client connected from 192.168.1.31:51234 as tile-0200000003 (p2, c1, k30, u'cybercircle')."
+#   "1700000000: Client tile-0200000003 closed its connection." / "... disconnected." / "Socket error on client X ..."
+LOG_CONNECT = re.compile(r"New client connected from (\S+) as (\S+) \(([^)]*)\)")
+LOG_GONE = re.compile(r"(?:Client (\S+) (closed its connection|disconnected|has exceeded timeout)|"
+                      r"Socket error on client (\S+))")
 
 
 class MqttLink:
@@ -55,9 +63,14 @@ class MqttLink:
         self.rx_msgs = 0                     # (this link's counters: the control server's own metrics)
         self.rx_bytes = 0
         self.connects = 0
+        self.connected_at = 0.0
+        self.mqtt_clients = {}               # client id -> {id, ip, user, since, keepalive}: connected now (the broker's log)
+        self.client_events = deque(maxlen=40)   # recent connects / leaves {time, id, event}
+        self.clients_since = time.time()     # (the list knows who connected after this: the broker has no list)
         u = urlparse(url)
         ws = u.scheme in ("ws", "wss")
-        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="cybercircle-control",
+        self.client_id = "cybercircle-control"
+        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=self.client_id,
                                   transport="websockets" if ws else "tcp")
         if ws:
             self.client.ws_set_options(path=u.path or "/mqtt")
@@ -87,6 +100,7 @@ class MqttLink:
         client.subscribe("$SYS/broker/#")      # the broker's counters (Mosquitto; ignored by brokers without them)
         if self.online:
             self.connects += 1
+            self.connected_at = time.time()
         self.on_change("mqtt")
 
     def _on_disconnect(self, client, userdata, flags, reason, props):
@@ -96,6 +110,9 @@ class MqttLink:
     def _on_message(self, client, userdata, msg):
         self.rx_msgs += 1
         self.rx_bytes += len(msg.payload)
+        if msg.topic.startswith("$SYS/broker/log/"):
+            self._broker_log(msg.payload.decode(errors="replace"))
+            return
         if msg.topic.startswith("$SYS/"):
             with self.lock:
                 self.broker[msg.topic[len("$SYS/broker/"):]] = msg.payload.decode(errors="replace")
@@ -174,6 +191,40 @@ class MqttLink:
         with self.lock:
             return sorted(({**d, "online": now - d.get("seen", 0) < NODE_TIMEOUT}
                            for d in self.devices.values()), key=lambda d: d["device"])
+
+    def _broker_log(self, line):
+        """A Mosquitto log line: a client connected or left (the client list)."""
+        now = time.time()
+        m = LOG_CONNECT.search(line)
+        if m:
+            addr, cid, params = m.groups()
+            user = re.search(r"u'([^']*)'", params)
+            keep = re.search(r"\bk(\d+)", params)
+            with self.lock:
+                self.mqtt_clients[cid] = {"id": cid, "ip": addr.rsplit(":", 1)[0].removeprefix("::ffff:"),
+                                          "user": user.group(1) if user else "", "since": now,
+                                          "keepalive": int(keep.group(1)) if keep else 0}
+                self.client_events.appendleft({"time": now, "id": cid, "event": "verbonden"})
+            self.on_change("clients")
+            return
+        m = LOG_GONE.search(line)
+        if m:
+            cid = m.group(1) or m.group(3)
+            why = {"closed its connection": "weg", "disconnected": "weg",
+                   "has exceeded timeout": "time-out"}.get(m.group(2) or "", "verbinding verbroken")
+            with self.lock:
+                self.mqtt_clients.pop(cid, None)
+                self.client_events.appendleft({"time": now, "id": cid, "event": why})
+            self.on_change("clients")
+
+    def client_list(self):
+        with self.lock:
+            now = dict(self.mqtt_clients)
+            events = list(self.client_events)
+        own = self.client_id
+        if self.online and own not in now:      # itself (it connects before it hears the log)
+            now[own] = {"id": own, "ip": "(deze server)", "user": "", "since": self.connected_at, "keepalive": 60}
+        return list(now.values()), events
 
     def metrics_list(self):
         """Every process's latest metrics and its history (the Prestaties tab)."""

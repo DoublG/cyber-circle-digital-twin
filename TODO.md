@@ -108,13 +108,3 @@ Moments that have no sound event today:
       with the real switch's numbers (`PROXY=... tests/run_replica_test.sh`),
       and keep the Pis' clocks on NTP (the slogans and invites run on the
       wall clock, in step on every screen).
-
-## Web interface (later)
-
-- [ ] **The connected MQTT clients** in the web interface (*Prestaties* or
-      *MQTT*): who is connected now - client id, user, IP, since when. Mosquitto's
-      `$SYS` only gives the count; the way: `log_dest topic` + `log_type notice`
-      in `mosquitto-cybercircle.conf` (the broker publishes its "New client
-      connected from IP as ID (u'user')" / "Client ID disconnected" lines on
-      `$SYS/broker/log/N`), the control server keeps the list from those (the
-      ACL already lets the installation's user read `$SYS/#`).

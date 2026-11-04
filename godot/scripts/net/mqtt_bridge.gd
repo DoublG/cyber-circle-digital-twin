@@ -66,6 +66,7 @@ func setup(arena_node: Node3D) -> void:
 	message.connect(_on_message)
 	if node_id == "":
 		node_id = "godot-" + _lan_address().replace(".", "-")
+	client_id = "cybercircle-" + node_id                # (unique: the broker drops a client whose id comes again)
 	var metrics := NodeMetrics.new()
 	metrics.name = "Metrics"
 	metrics.mqtt = self
@@ -207,6 +208,7 @@ func _process(delta: float) -> void:
 ## for its own tiles, read-only - their commands and presses, so its tiles
 ## work as its controllers even when the link to the master is down.
 func _setup_display() -> void:
+	client_id = "cybercircle-" + node_id
 	var metrics := NodeMetrics.new()
 	metrics.name = "Metrics"
 	metrics.mqtt = self

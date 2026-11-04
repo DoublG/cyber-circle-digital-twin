@@ -20,6 +20,7 @@
   <button data-tab="tiles">Tegels</button>
   <button data-tab="nodes">Processen</button>
   <button data-tab="perf">Prestaties</button>
+  <button data-tab="clients">Verbindingen</button>
   <button data-tab="recovery">Herstel</button>
   <button data-tab="players">Spelers</button>
   <button data-tab="gamemasters">Gamemasters</button>
@@ -107,6 +108,18 @@
     <th>Lus</th><th>Vrij geheugen</th><th>Herverbonden</th><th>Actief</th><th>Laatst gezien</th></tr></thead><tbody></tbody></table></div>
   <h2>Meekijkvideo's</h2>
   <div id="perf-streams" class="hint"></div>
+</section>
+
+<section id="tab-clients" class="tab">
+  <p class="hint">Wie nu verbonden is: de MQTT-clients (de tegels, het spel, de controleserver, de
+    gamemaster-apps, de displays voor hun eigen tegels), de displays via Godot multiplayer, en de
+    webpagina's. Elke 2 s ververst.</p>
+  <div id="clients-cards" class="perf-cards"></div>
+  <div class="scroll"><table id="clients-table"><thead><tr><th>Soort</th><th>Naam</th><th>Client-id</th>
+    <th>Adres</th><th>Via</th><th>Gebruiker</th><th>Verbonden</th><th>Details</th></tr></thead><tbody></tbody></table></div>
+  <p id="clients-note" class="hint"></p>
+  <h2>Laatst verbonden / weg</h2>
+  <ul id="clients-events" class="events"></ul>
 </section>
 
 <section id="tab-recovery" class="tab">

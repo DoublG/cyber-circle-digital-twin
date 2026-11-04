@@ -468,6 +468,16 @@ godot-4 --rendering-method gl_compatibility --path . -- --replica --show=1,2 --m
   voice files are played from the display's own copy – the deploy copies the
   project; a folder outside it (`--sounds`, `--voice`, a quiz video) must be on
   the Pi at the same path too.
+* **Who is connected** – the web interface's *Verbindingen*: every MQTT
+  client (the tiles with their place, firmware and signal, the game, the
+  displays for their own tiles, the control server, the gamemaster apps),
+  the displays over Godot multiplayer (screens, round trip) and the web pages.
+  Mosquitto has no list of its clients: the control server follows its log on
+  `$SYS/broker/log/...` (`log_dest topic` in `mosquitto-cybercircle.conf`), so it
+  knows who connected after it started – a client that was already there shows
+  up when it reconnects (the page says how many the broker counts). Every
+  Godot process connects as `cybercircle-<node>`: an id the broker sees twice
+  drops the older connection.
 * **The ENet link** in the web interface's *Prestaties*: round trip, jitter,
   packet loss per display (ENet's own statistics), events / snapshots, whether
   its own tiles come over MQTT.

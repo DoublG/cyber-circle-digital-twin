@@ -278,6 +278,10 @@ try:
     m = until(lambda: [n for n in call("GET", "/api/metrics")["nodes"] if n.get("role") == "master" and n.get("hist")], 10)
     check(bool(m) and m[0]["fps"] > 0 and m[0]["draw_calls"] >= 0 and "control" in call("GET", "/api/metrics"),
           "performance metrics of the game in /api/metrics (Prestaties)")
+    cl = until(lambda: [c for c in call("GET", "/api/clients")["clients"] if c["kind"] == "game"], 10)
+    kinds = {c["kind"] for c in call("GET", "/api/clients")["clients"]}
+    check(bool(cl) and cl[0]["id"].startswith("cybercircle-") and {"game", "control"} <= kinds,
+          "connected clients in /api/clients (Verbindingen): %s" % sorted(kinds))
 finally:
     for p in procs:
         p.terminate()

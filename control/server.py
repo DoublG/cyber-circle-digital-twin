@@ -321,6 +321,61 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
                 "website": {"status": w["status"], "latency_ms": w["latency_ms"], "mock": w["mock"]},
                 "streams": {str(k): v for k, v in link.streams.items()}}
 
+    # ------------------------------------------------------------ connected clients (web interface: Verbindingen)
+
+    def place_label(n):
+        return f"T{n:02d}" if n <= FLOOR_TILES else f"M{n - FLOOR_TILES}"
+
+    @app.get("/api/clients")
+    def clients():
+        """Who is connected: the MQTT clients (the broker's log lines - Mosquitto
+        with log_dest topic), the display nodes (Godot multiplayer: the master's
+        metrics), the web pages (live connections). kind: tile / game / display /
+        control / gamemaster / other."""
+        now = time.time()
+        nodes = {n.get("id"): n for n in link.node_list()}
+        places = {str(t["device"]).replace(":", "").lower(): t["number"] for t in db.tiles() if t["device"]}
+        devices = {d["device"].replace(":", "").lower(): d for d in link.device_list()}
+        mqtt_now, events = link.client_list()
+        out = []
+        for c in sorted(mqtt_now, key=lambda c: c["id"]):
+            cid = c["id"]
+            kind, name, detail = "other", cid, ""
+            if cid == "cybercircle-control":
+                kind, name = "control", "Controleserver"
+            elif cid.startswith("tile-"):
+                mac = cid[5:].lower()
+                n = places.get(mac)
+                kind, name = "tile", f"Tegel {place_label(n)}" if n else "Tegel (geen plaats)"
+                d = devices.get(mac, {})
+                detail = " · ".join(x for x in [d.get("fw", ""), f"{d['rssi']} dBm" if d.get("rssi") is not None else ""] if x)
+            elif cid.startswith("cybercircle-"):
+                node = nodes.get(cid[len("cybercircle-"):], {})
+                role = node.get("role", "")
+                kind = "display" if role == "display" else "game"
+                name = f"{'Display' if role == 'display' else 'Spel'} {cid[len('cybercircle-'):]}"
+                if live_master := (link.master or {}).get("node"):
+                    if live_master == node.get("id"):
+                        name += " (master)"
+                detail = "eigen tegels (alleen lezen)" if role == "display" else ""
+            elif cid.startswith("cc-gamemaster-"):
+                kind, name = "gamemaster", "Gamemaster-app"
+            out.append({**c, "kind": kind, "name": name, "detail": detail, "via": "MQTT",
+                        "for_s": round(now - c["since"])})
+        for m in link.metrics_list():                          # the display nodes: Godot multiplayer to the master
+            if m.get("role") != "master":
+                continue
+            for d in (m.get("replica") or {}).get("displays", []):
+                out.append({"id": d.get("node", ""), "kind": "display", "name": f"Display {d.get('node', '')}",
+                            "ip": d.get("host", ""), "user": "", "via": "Godot multiplayer (ENet)",
+                            "detail": f"schermen {', '.join(map(str, d.get('screens', [])))} · rondreis {d.get('rtt_ms', '?')} ms",
+                            "for_s": d.get("connected_s", 0)})
+        gm = online_ref[0]() if online_ref else []
+        b = link.broker_stats()
+        return {"clients": out, "events": [{**e, "ago": round(now - e["time"])} for e in events[:20]],
+                "broker_count": b.get("clients"), "known_since_s": round(now - link.clients_since),
+                "web": {"live": len(listeners), "gamemasters": [g["name"] for g in gm]}}
+
     # ------------------------------------------------------------ live (web interface)
 
     @app.get("/api/live")

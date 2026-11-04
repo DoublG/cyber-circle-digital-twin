@@ -7,7 +7,7 @@ installation.
     python3 tests/mqtt_test_broker.py [port] [--tcp PORT]   (default 9001, path ignored;
                                                              --tcp 1883: plain MQTT too)
 """
-import asyncio, base64, hashlib, struct, sys
+import asyncio, base64, hashlib, struct, sys, time
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 clients = {}      # writer -> list of topic filters
@@ -66,11 +66,41 @@ async def publish(topic, payload, retain):
                 w.close()
 
 
+names = {}                                          # writer -> client id (the $SYS log lines)
+
+
+async def sys_log(text):
+    """As Mosquitto with log_dest topic: its log lines on $SYS/broker/log/N."""
+    await publish("$SYS/broker/log/N", f"{int(time.time())}: {text}".encode(), False)
+
+
 async def handle_mqtt(writer, header, body):
     kind = header >> 4
     if kind == 1:                                   # CONNECT
         clients[writer] = []
         await send(writer, 0x20, b"\x00\x00")
+        try:                                        # the client id, keepalive, user: for the log line
+            n = struct.unpack("!H", body[:2])[0]
+            p = 2 + n
+            flags = body[p + 1]
+            keep = struct.unpack("!H", body[p + 2:p + 4])[0]
+            p += 4
+            cid_len = struct.unpack("!H", body[p:p + 2])[0]
+            cid = body[p + 2:p + 2 + cid_len].decode()
+            p += 2 + cid_len
+            if flags & 0x04:                        # will topic + message
+                for _ in range(2):
+                    p += 2 + struct.unpack("!H", body[p:p + 2])[0]
+            user = ""
+            if flags & 0x80:
+                ul = struct.unpack("!H", body[p:p + 2])[0]
+                user = body[p + 2:p + 2 + ul].decode()
+            names[writer] = cid
+            peer = writer.get_extra_info("peername") or ("?", 0)
+            await sys_log(f"New client connected from {peer[0]}:{peer[1]} as {cid} (p2, c1, k{keep}"
+                          + (f", u'{user}'" if user else "") + ").")
+        except Exception:
+            pass
     elif kind == 8:                                 # SUBSCRIBE
         pid, p, granted = body[:2], 2, b""
         while p < len(body):
@@ -149,6 +179,8 @@ async def client(reader, writer):
         pass
     clients.pop(writer, None)
     writer.close()
+    if writer in names:
+        await sys_log(f"Client {names.pop(writer)} closed its connection.")
 
 
 async def tcp_client(reader, writer):
@@ -183,6 +215,8 @@ async def tcp_client(reader, writer):
     clients.pop(writer, None)
     raw.discard(writer)
     writer.close()
+    if writer in names:
+        await sys_log(f"Client {names.pop(writer)} closed its connection.")
 
 
 async def main():

@@ -28,7 +28,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button, .tab").forEach(e => e.classList.remove("active"));
   b.classList.add("active");
   $(`#tab-${b.dataset.tab}`).classList.add("active");
-  ({ perf: startPerf, recovery: renderRecovery, mqtt: startMqttLog, website: loadWebsite, sounds: renderSounds, texts: loadTexts, gamemasters: loadGamemasters, players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: loadTiles, settings: loadSettings })[b.dataset.tab]?.();
+  ({ perf: startPerf, clients: startClients, recovery: renderRecovery, mqtt: startMqttLog, website: loadWebsite, sounds: renderSounds, texts: loadTexts, gamemasters: loadGamemasters, players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: loadTiles, settings: loadSettings })[b.dataset.tab]?.();
 });
 
 // ---------------------------------------------------------------- live
@@ -452,6 +452,46 @@ function renderPerf(m) {
   const streams = Object.entries(m.streams || {}).filter(([, s]) => s.on);
   $("#perf-streams").innerHTML = streams.length ? streams.map(([tile, s]) => `${label(Number(tile))}: ${esc(s.encoder || "")}${s.error ? span("bad", " " + esc(s.error)) : ""}`).join(" · ")
     : `Geen (de master: ${master ? master.streams ?? 0 : "–"} actief).`;
+}
+
+// ---------------------------------------------------------------- Verbindingen: who is connected
+let clientsTimer = null;
+const KINDS = { tile: ["Tegel", "🟧"], game: ["Spel", "🎮"], display: ["Display", "🖥"], control: ["Controleserver", "⚙"],
+  gamemaster: ["Gamemaster-app", "📱"], other: ["Ander", "•"] };
+function startClients() {
+  if (clientsTimer) return;
+  clientsTimer = setInterval(pollClients, 2000);
+  pollClients();
+}
+async function pollClients() {
+  if (!$("#tab-clients").classList.contains("active")) { clearInterval(clientsTimer); clientsTimer = null; return; }
+  try { renderClients(await (await fetch("/api/clients")).json()); } catch (e) { /* the next poll */ }
+}
+function renderClients(c) {
+  const list = c.clients || [];
+  const count = k => list.filter(x => x.kind === k).length;
+  const card = (cls, k, v, sub) => `<div class="card ${cls}"><div class="k">${esc(k)}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
+  const tiles = count("tile"), mqtt = list.filter(x => x.via === "MQTT").length;
+  $("#clients-cards").innerHTML = [
+    card(mqtt ? "good" : "off", "MQTT-clients", String(mqtt), c.broker_count != null ? `de broker telt er ${c.broker_count}` : "geen $SYS-tellers"),
+    card(tiles ? "good" : "off", "Tegels", String(tiles), "verbonden met de broker"),
+    card(count("game") ? "good" : "bad", "Spel", String(count("game")), "Godot-processen"),
+    card(count("display") ? "good" : "off", "Displays", String(new Set(list.filter(x => x.kind === "display").map(x => x.name)).size),
+      "Pi's (multiplayer + eigen tegels)"),
+    card(count("gamemaster") + (c.web?.gamemasters?.length || 0) ? "good" : "off", "Gamemaster-apps",
+      String(count("gamemaster") + (c.web?.gamemasters?.length || 0)), `${count("gamemaster")} MQTT · ${(c.web?.gamemasters || []).length} web`),
+    card("good", "Webpagina's", String(c.web?.live ?? 0), "live verbindingen (beheer, toegankelijk)"),
+  ].join("");
+  $("#clients-table tbody").innerHTML = list.map(x => `<tr><td>${KINDS[x.kind]?.[1] || ""} ${esc(KINDS[x.kind]?.[0] || x.kind)}</td>
+    <td><b>${esc(x.name)}</b></td><td class="hint">${esc(x.id)}</td><td>${esc(x.ip || "–")}</td><td>${esc(x.via)}</td>
+    <td>${esc(x.user || "–")}</td><td>${dur(x.for_s)}</td><td class="hint">${esc(x.detail || "")}</td></tr>`).join("")
+    || `<tr><td colspan="8" class="hint">Nog niemand gezien (de broker meldt verbindingen vanaf de start van de controleserver: Mosquitto met log_dest topic).</td></tr>`;
+  const missing = c.broker_count != null ? c.broker_count - mqtt : 0;
+  $("#clients-note").textContent = missing > 0
+    ? `De broker telt ${c.broker_count} MQTT-clients, hier staan er ${mqtt}: wie verbond vóór de controleserver startte (${dur(c.known_since_s)} geleden), verschijnt pas als die opnieuw verbindt.`
+    : `Bijgehouden sinds ${dur(c.known_since_s)} (de start van de controleserver).`;
+  $("#clients-events").innerHTML = (c.events || []).map(e => `<li><span class="hint">${dur(e.ago)} geleden</span> ${esc(e.id)}
+    <span class="${e.event === "verbonden" ? "good" : "warn"}">${esc(e.event)}</span></li>`).join("") || `<li class="hint">Nog niets.</li>`;
 }
 
 // ---------------------------------------------------------------- MQTT traffic
