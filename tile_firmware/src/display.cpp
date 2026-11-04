@@ -45,7 +45,7 @@ void effect(const char *name, CRGB color) {
     fxStart = millis();
 }
 
-void identify(uint32_t ms) { identifyUntil = millis() + ms; }
+void identify(uint32_t ms) { identifyUntil = millis() + ms | 1; }   // (0 = none)
 
 void unplaced(int n) {
     number = n;
@@ -186,7 +186,8 @@ void draw(bool programOwnsRing) {
     }
     hearts();
     if (fx.length() && !effects(t)) fx = "";
-    if (t < identifyUntil) {                // identify: a white light chasing round, everything else off
+    if (identifyUntil && (int32_t)(t - identifyUntil) >= 0) identifyUntil = 0;   // (wrap-safe)
+    if (identifyUntil) {                    // identify: a white light chasing round, everything else off
         fillRing(CRGB::Black);
         for (int k = 0; k < 6; k++) ring(t / 30 + k) = CRGB(255, 255, 255).nscale8(255 - k * 40);
         for (int k = 0; k < 4; k++) icon(k) = (t / 250) % 2 ? CRGB::White : CRGB::Black;

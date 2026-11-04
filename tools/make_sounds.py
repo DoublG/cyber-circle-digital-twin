@@ -2,11 +2,13 @@
 godot/data/sounds/<event>/<name>.ogg. Every .ogg / .wav in such a folder is
 used (a random one each time), so real recordings can be added or replace these.
 
-  python3 tools/make_sounds.py        (needs numpy and ffmpeg)
+  python3 tools/make_sounds.py                 (needs numpy and ffmpeg)
+  python3 tools/make_sounds.py boot off ...    (only those events)
 """
 
 import os
 import subprocess
+import sys
 import tempfile
 import wave
 
@@ -15,6 +17,7 @@ import numpy as np
 RATE = 44100
 OUT = os.path.join(os.path.dirname(__file__), "..", "godot", "data", "sounds")
 rng = np.random.default_rng(7)
+ONLY = set(sys.argv[1:])
 
 
 def t(seconds):
@@ -73,6 +76,8 @@ def tone(f, seconds, shape=np.sin, decay=None):
 
 
 def save(event, name, x, gain=0.8):
+    if ONLY and event not in ONLY:
+        return
     x = x / (np.max(np.abs(x)) + 1e-9) * gain
     os.makedirs(os.path.join(OUT, event), exist_ok=True)
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
@@ -151,3 +156,48 @@ carrier = np.sin(2 * np.pi * np.cumsum(140 + 60 * np.sin(2 * np.pi * 3.3 * tt)) 
 save("random", "voice", carrier * np.sin(2 * np.pi * 30 * tt) * env(tt.size, 0.05), 0.5)
 x = sweep(300, 900, 0.5, saw)          # servo whir up and down
 save("random", "servo", lowpass(np.concatenate([x, x[::-1]]), 30) * env(x.size * 2, 0.05), 0.4)
+
+# ---- the robot's shows (GameManager._power): coming to life, shut down
+srng = np.random.default_rng(13)       # (its own: the sounds above stay the same)
+
+
+def clicks(seconds, rate, length=300):
+    n = int(seconds * RATE)
+    c = srng.uniform(-1, 1, n) * (srng.random(n) < rate / RATE).astype(float)
+    return np.convolve(c, np.exp(-np.arange(length) / (length / 5)), mode="same")
+
+
+# boot: a power hum rising out of nothing (with hesitant clicks), ~13 s
+tt = t(13.0)
+f = 40 + 80 * (tt / tt[-1]) ** 2
+hum = saw(2 * np.pi * np.cumsum(f) / RATE) * 0.5 + np.sin(2 * np.pi * np.cumsum(f * 2) / RATE) * 0.3
+hum *= np.clip(tt / 9.0, 0, 1) ** 1.5 * (0.8 + 0.2 * np.sin(2 * np.pi * 6 * tt))
+stutter = np.ones(tt.size)
+for a in (0.6, 1.4, 2.3, 3.1):         # the first flickers: the hum catches and drops
+    i = int(a * RATE)
+    stutter[i:i + int(0.12 * RATE)] = 4.0
+x = lowpass(hum * stutter, 8) + clicks(13.0, 6) * 0.8
+save("boot", "power_up", x * env(tt.size, 0.3))
+
+# awake: a big power chord with a whoosh, ~3 s
+tt = t(3.0)
+chord = sum(saw(2 * np.pi * f0 * tt) * a for f0, a in [(55, 1), (82.5, .7), (110, .6), (165, .4), (220, .3)])
+x = mix(lowpass(chord, 6) * env(tt.size, 0.01, 1.2), lowpass(noise(1.2), 20) * env(int(1.2 * RATE), 0.2, 0.3) * 1.5,
+        tone(880, 0.25, square) * 0.3)
+save("boot_done", "online", x)
+
+# shutdown: the players' attack - a rising zap from every side, ~2 s
+x = mix(sweep(300, 2400, 1.6, saw) * 0.6, clicks(2.0, 60) * 2.0, lowpass(noise(2.0), 3) * 0.3)
+save("shutdown", "attack", lowpass(x, 2) * env(int(2.0 * RATE), 0.05))
+
+# dying: a falling power-down whine, the hum fading, ~5 s
+tt = t(5.0)
+f = np.geomspace(900, 35, tt.size)
+x = saw(2 * np.pi * np.cumsum(f) / RATE) * 0.6 + np.sin(2 * np.pi * np.cumsum(f * 0.5) / RATE) * 0.6
+x *= np.clip(1.0 - tt / 5.0, 0, 1) ** 0.7
+save("power_down", "power_down", lowpass(x, 10) + clicks(5.0, 3) * 0.6)
+
+# off: a last spark
+x = mix(lowpass(noise(0.35), 2) * env(int(0.35 * RATE), 0.001, 0.05), tone(2500, 0.08, square, decay=0.02) * 0.4)
+save("off", "spark", x, 0.6)
+

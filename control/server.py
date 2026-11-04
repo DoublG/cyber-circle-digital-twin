@@ -467,7 +467,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
 
     @app.post("/api/game/{action}")
     def game(action: str):
-        if action not in ("start", "next", "stop"):
+        if action not in ("start", "next", "stop", "boot", "shutdown"):   # boot / shutdown: the robot's show (a test)
             raise HTTPException(404, "unknown action")
         link.command({"game": action})
         return {"ok": True}

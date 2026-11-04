@@ -82,6 +82,53 @@ func finish() -> void:
 	pass
 
 
+# ---------------------------------------------------------------- the tiles' clock
+# For a round the game judges itself where the moment of a press matters
+# (Ritme, Zwarte Piet): the tiles run a "clock" program (nothing on the ring,
+# only the time since its one "start", sent with ours) and stamp every press
+# with it. press_time() is the press's moment on the round's clock: the
+# stamp when there is one (no network jitter; crystal drift over a round
+# ~1 ms), else the moment it arrived.
+
+var tile_clock := {}                 # {"game": "clock", "id": ...} while it runs
+var stamped := 0                     # presses timed by their stamp (the rest: on arrival)
+
+
+func start_tile_clock() -> void:
+	tile_clock = {"game": "clock", "id": "%s-%d" % [title.to_lower().replace(" ", "-"), Time.get_ticks_usec()],
+		"length": roundi(duration * 1000.0)}
+	for id in players:                   # the program and its start together: their clocks start with ours
+		if not tile(id).is_dead:
+			game.arena.send_to_tile(id, {"program": tile_clock})
+			game.arena.send_to_tile(id, {"start": tile_clock.id})
+
+
+func stop_tile_clock() -> void:
+	if tile_clock.is_empty():
+		return
+	for id in players:
+		game.arena.send_to_tile(id, {"stop": true})
+	tile_clock = {}
+
+
+## The press being handled now: when it happened (s on the round's clock).
+## `arrived`: the round's clock now (the fallback).
+func press_time(arrived: float) -> float:
+	var stamp: Dictionary = game.arena.press_stamp()
+	if tile_clock.is_empty() or stamp.get("program", "") != tile_clock.id or not stamp.has("t"):
+		return arrived
+	var t := float(stamp.t) / 1000.0
+	if absf(t - arrived) >= 1.0:         # (not sane: a tile that missed a pause or restarted)
+		return arrived
+	stamped += 1
+	return t
+
+
+## The press being handled now carries a stamp of this round's clock.
+func press_stamped() -> bool:
+	return not tile_clock.is_empty() and game.arena.press_stamp().get("program", "") == tile_clock.id
+
+
 ## Personal rounds: extra info drawn on top of a player's view (or null).
 func make_player_overlay(_tile_id: int) -> Control:
 	return null

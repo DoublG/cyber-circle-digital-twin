@@ -57,6 +57,12 @@ var _dome_mat: ShaderMaterial
 var _party_time := 0.0
 var _effect_time := 0.0
 var _anim: AnimationPlayer
+## The moments of a boot / shutdown, for the game's sounds and lights:
+## awake, booted (boot); electrocuted, dying, off (shutdown).
+signal power_moment(name: StringName)
+
+var powered := true                     # off: dark and still (the game is closed: the players beat it)
+var _power_show := 0                    # a boot / shutdown running (its number: a newer one stops it)
 
 
 func _ready() -> void:
@@ -449,6 +455,191 @@ func _flash_dome(color: Color) -> void:
 	_dome_light.light_color = color
 	_dome_light.light_energy = 5.0
 	create_tween().tween_property(_dome_light, "light_energy", energy, 0.5)
+
+
+# ---------------------------------------------------------------- power: coming to life, shutting down
+
+## Off at once (dark, still) or on (back to the lobby colours): no show.
+func set_powered(on: bool) -> void:
+	_power_show += 1                    # (stops a show that runs)
+	powered = on
+	if on:
+		_head_locked = false
+		set_party_lamp(true)
+		set_bulb_effect("rainbow")
+		_muzzle_light.light_energy = 0.0
+		release_head()
+	else:
+		_dark()
+
+
+func _dark() -> void:
+	_head_locked = true                 # (no idle spin)
+	set_bulb_effect("none")
+	set_all_bulbs(Color.BLACK)
+	set_party_lamp(false)
+	_dome_light.light_energy = 0.0
+	_muzzle_light.light_energy = 0.0
+	for k in SIDE_COUNT:
+		set_side_glow(k, Color.BLACK)
+
+
+func _wait(s: float) -> bool:           # false: another show took over (stop)
+	var n := _power_show
+	await get_tree().create_timer(s).timeout
+	return n == _power_show and is_inside_tree()
+
+
+## A part of a show on the game's time (not frame counts: the same at 30 fps
+## in a movie and on a slow Pi): `step` is called every frame with the seconds
+## since the part began, until `seconds`. false: another show took over.
+func _part(seconds: float, step: Callable) -> bool:
+	var n := _power_show
+	var e := 0.0
+	while e < seconds:
+		step.call(e)
+		await get_tree().process_frame
+		if n != _power_show or not is_inside_tree():
+			return false
+		e += get_process_delta_time()
+	return true
+
+
+## Coming to life (~17.5 s): dark, hesitant flickers, a systems check side by
+## side, a stiff scan around, the eye snaps on - awake, then the lobby colours.
+func play_boot() -> void:
+	_power_show += 1
+	var me := _power_show
+	powered = false
+	_dark()
+	_target_pitch = deg_to_rad(eye_pitch_min_deg)    # (sagging, as it was left)
+	if not await _wait(1.5): return
+	var flick := [-1]                                # first power: hesitant flickers (6, ~1.6 a second)
+	if not await _part(3.4, func(e):
+		var k := int(e / 0.57)
+		var on := fmod(e, 0.57) < 0.12
+		if k * 2 + int(on) != flick[0]:
+			flick[0] = k * 2 + int(on)
+			_dome_light.light_color = Color(0.6, 0.8, 1.0)
+			_dome_light.light_energy = randf_range(0.6, 2.0) if on else 0.0
+			_muzzle_light.light_energy = randf_range(0.2, 0.8) if on and k % 2 == 0 else 0.0):
+		return
+	_dome_light.light_energy = 0.0
+	_muzzle_light.light_energy = 0.0
+	_target_pitch = 0.0                              # the eye lifts
+	var lit := [-1]                                  # systems check: side by side
+	if not await _part(13 * 0.32, func(e):
+		var k := mini(int(e / 0.32), SIDE_COUNT - 1)
+		if k != lit[0]:
+			if lit[0] >= 0:
+				set_side_glow(lit[0], Color.BLACK)
+			lit[0] = k
+			set_side_bulbs(k, Color(0.25, 0.65, 1.0))
+			set_side_glow(k, Color(0.25, 0.65, 1.0), 0.6)):
+		return
+	set_side_glow(lit[0], Color.BLACK)
+	for side in SIDE_COUNT:
+		set_side_bulbs(side, Color(0.1, 0.25, 0.4))
+	var from := head.rotation.y                      # a stiff scan: once around, stop and go
+	var at := [-1]
+	if not await _part(13 * 0.34, func(e):
+		var k := mini(int(e / 0.34), SIDE_COUNT - 1)
+		if k != at[0]:
+			at[0] = k
+			create_tween().tween_property(head, "rotation:y", from + TAU * (k + 1) / SIDE_COUNT, 0.18) \
+				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			set_side_bulbs(posmod(nearest_side(from + TAU * (k + 1) / SIDE_COUNT), SIDE_COUNT), Color(0.5, 0.85, 1.0))):
+		return
+	if not await _wait(0.4): return
+	head.rotation.y = wrapf(head.rotation.y, -PI, PI)
+	power_moment.emit(&"awake")
+	_muzzle_light.light_color = Color(1.0, 0.3, 0.1)  # awake: the eye snaps on, the dome flares
+	_muzzle_light.light_energy = 4.0
+	create_tween().tween_property(_muzzle_light, "light_energy", 1.0, 1.2)
+	set_all_bulbs(Color.WHITE)
+	_flash_dome(Color.WHITE)
+	if not await _wait(0.3): return
+	set_party_lamp(true)
+	set_bulb_effect("rainbow")
+	_head_locked = false
+	hold_after_target = 0.6
+	for side in [9, 3, 0]:                           # a menacing look around
+		look_at_side(side)
+		if not await _wait(1.1): return
+	hold_after_target = 2.0
+	if me == _power_show:
+		powered = true
+		_muzzle_light.light_energy = 0.0
+		release_head()
+		power_moment.emit(&"booted")
+
+
+## Shutting down (~18 s): the players won. Their last attack from every side,
+## electrocuted (stuttering colours, the head twitching), the sides go dark one
+## by one, the eye fades as the head sags back to the start, a last spark - off.
+func play_shutdown() -> void:
+	_power_show += 1
+	_head_locked = true
+	_has_target = false
+	set_bulb_effect("none")
+	var green := Color(0.2, 1.0, 0.3)
+	var wave := [-1]                                 # the last attack: green waves from all sides
+	if not await _part(1.6, func(e):
+		var k := int(e / 0.04)
+		if k != wave[0]:
+			wave[0] = k
+			var side := k % SIDE_COUNT
+			set_side_bulbs(side, green)
+			set_side_bulbs(posmod(side - 4, SIDE_COUNT), Color.BLACK)
+			set_side_glow(side, green, 1.5)
+			set_side_glow(posmod(side - 2, SIDE_COUNT), Color.BLACK)):
+		return
+	power_moment.emit(&"electrocuted")
+	var next := [0.0, 0.0]                           # electrocuted: [next change, next dome flash (max 3/s)]
+	if not await _part(7.0, func(e):
+		if e < next[0]:
+			return
+		next[0] = e + randf_range(0.04, 0.11)
+		for k in 4:
+			set_side_bulbs(randi() % SIDE_COUNT, Color.from_hsv(randf(), 0.8, 1.0) if randf() < 0.7 else Color.BLACK)
+		set_side_glow(randi() % SIDE_COUNT, Color(0.6, 0.9, 1.0) if randf() < 0.5 else Color.BLACK, 3.0)
+		if e >= next[1]:
+			next[1] = e + randf_range(0.34, 0.6)
+			_flash_dome(Color(0.7, 0.9, 1.0) if randf() < 0.6 else Color.from_hsv(randf(), 0.7, 1.0))
+			create_tween().tween_property(head, "rotation:y", head.rotation.y + randf_range(-0.45, 0.45), 0.07)
+			_target_pitch = deg_to_rad(randf_range(eye_pitch_min_deg, 20.0))):
+		return
+	for k in SIDE_COUNT:
+		set_side_glow(k, Color.BLACK)
+	var order := range(SIDE_COUNT)                   # damage: the sides die one by one, the rest flickers red
+	order.shuffle()
+	var dead := [-1]
+	if not await _part(13 * 0.34, func(e):
+		var i := mini(int(e / 0.34), SIDE_COUNT - 1)
+		if i == dead[0]:
+			return
+		dead[0] = i
+		for j in order.size():
+			set_side_bulbs(order[j], Color.BLACK if j <= i else (Color(1.0, 0.1, 0.05) if randf() < 0.6 else Color(0.25, 0.0, 0.0)))
+		_dome_light.light_color = Color(1.0, 0.1, 0.05)
+		_dome_light.light_energy = randf_range(0.2, 1.5)):
+		return
+	power_moment.emit(&"dying")
+	_muzzle_light.light_color = Color(1.0, 0.3, 0.1)  # dying: the eye fades, the head sags back
+	_muzzle_light.light_energy = 2.0
+	create_tween().tween_property(_muzzle_light, "light_energy", 0.0, 4.5)
+	create_tween().tween_property(_dome_light, "light_energy", 0.0, 3.0)
+	var back := head.rotation.y - wrapf(head.rotation.y, -PI, PI)   # (to the start, the short way)
+	create_tween().tween_property(head, "rotation:y", back, 4.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_target_pitch = deg_to_rad(eye_pitch_min_deg)
+	if not await _wait(5.0): return
+	head.rotation.y = 0.0
+	_flash_dome(Color.WHITE)                         # a last spark
+	set_side_bulbs(randi() % SIDE_COUNT, Color(0.8, 0.9, 1.0))
+	if not await _wait(0.12): return
+	powered = false
+	_dark()
+	power_moment.emit(&"off")
 
 
 # ---------------------------------------------------------------- death

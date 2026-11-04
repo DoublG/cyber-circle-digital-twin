@@ -60,6 +60,7 @@ extends Node3D
 ##   {"robot": "smoke", "seconds": 3}                    (the real robot's smoke machine)
 ##   {"robot": "home", "dir": "cw"} / {"robot": "stop"}  (the real robot: find the start again / stop the motor)
 ##   {"game": "start"} / {"game": "next"} / {"game": "stop"}
+##   {"game": "boot"} / {"game": "shutdown"}       (the robot's show, the mode stays)
 ##   {"game": "plan", "slot": 0, "round": "quiz", "options": {"categories": ["Computers"]}}
 ##                                                    (operator: the next round(s); "" = random)
 ##   {"game": "plan_random"}                          (plan the next rounds at random again)
@@ -261,7 +262,8 @@ func replica_fields() -> Dictionary:
 		"texts": Texts.values,
 		"sound": {"volume": sound.volume, "enabled": sound.enabled},
 		"voice": {"enabled": narrator.enabled, "output": narrator.output, "volume": narrator.volume},
-		"lights": {"brightness": lights.brightness, "flashes": lights.flashes}}
+		"lights": {"brightness": lights.brightness, "flashes": lights.flashes},
+		"robot_on": robot.powered or game.power_show == "boot"}   # (a show: the NPC event plays it)
 	f.merge(game.replica_fields(), true)
 	return f
 
@@ -293,6 +295,8 @@ func apply_replica(f: Dictionary, full: bool) -> void:
 			tiles[i].apply_replica_state(f.tiles[i])
 	if f.has("texts"):
 		Texts.apply(f.texts)
+	if f.has("robot_on") and full and bool(f.robot_on) != robot.powered:
+		robot.set_powered(bool(f.robot_on))      # (joined while it is off / on: no show)
 	if f.has("sound"):
 		sound.volume = int(f.sound.volume)
 	if f.has("voice"):
@@ -529,6 +533,10 @@ func player_ids() -> Array:
 	var ids := _players.keys()
 	ids.sort()
 	return ids
+
+
+func pending_count() -> int:
+	return _pending.size()
 
 
 func is_pending(tile_id: int) -> bool:
@@ -827,6 +835,16 @@ func give_life(tile_id: int) -> void:
 
 
 ## Send a message to a tile's own controller (programs, start, stop).
+## The press being handled now came from a tile with a time stamp
+## ({"t": ms since the program's start, "program": id}); {} = none (a simulated
+## tile, an old firmware): the round uses the moment it arrived.
+func press_stamp() -> Dictionary:
+	return _press_stamp
+
+
+var _press_stamp := {}
+
+
 func send_to_tile(tile_id: int, msg: Dictionary) -> void:
 	Replica.relay("arena", &"replica_tile_msg", [tile_id, msg])   # (the display nodes run the tile logic too: it shows)
 	tile_message.emit(tile_id, msg)
@@ -1356,7 +1374,9 @@ func apply_command(cmd: Dictionary) -> void:
 		if cmd.has("led"):
 			rt(tile).set_ring_led(int(cmd.led), Color(cmd.color))
 		if cmd.has("press"):
+			_press_stamp = cmd if cmd.has("t") else {}    # (a real tile's time stamp: the round reads it now)
 			rt(tile).press_button(StringName(cmd.press))
+			_press_stamp = {}
 		if cmd.has("pressure"):
 			for b in cmd.pressure:
 				tile.set_pressure(StringName(b), float(cmd.pressure[b]))
@@ -1369,6 +1389,8 @@ func apply_command(cmd: Dictionary) -> void:
 			game.start_game()
 		"next":
 			game.skip()
+		"boot", "shutdown":                      # the robot's show, without changing the mode (a test)
+			game.play_power_show(str(cmd.game))
 		"stop":
 			game.stop_game()
 		"plan":                     # {"game": "plan", "slot": 0, "round": "simon"} ("" = random)

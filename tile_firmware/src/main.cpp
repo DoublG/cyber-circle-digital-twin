@@ -7,6 +7,7 @@
 //   then, as tile n     tile/<n>/state  (retained) what to show - display.cpp
 //                       tile/<n>/cmd    programs, effects - programs.cpp, display.cpp
 //                       tile/<n>/event  -> {"press": "Cross"}, {"result": {...}}
+//                                          (a program running: "t" = ms since its start, "program" = its id)
 // Settings: include/config.h. The protocol's reference: the game's
 // godot/scripts/net/mqtt_bridge.gd and godot/scripts/tile_firmware.gd.
 #include <WiFi.h>                           // (WiFiClient: a TCP socket - over Ethernet too)
@@ -163,6 +164,12 @@ void loop() {
         if (display::sendsPresses()) {
             JsonDocument ev;
             ev["press"] = ICON_NAMES[pressed];
+            String program;
+            uint32_t ms;
+            if (programs::clockNow(program, ms)) {      // the press's time in the round (Ritme scores on it)
+                ev["t"] = ms;
+                ev["program"] = program;
+            }
             sendEvent(ev);
         }
     }

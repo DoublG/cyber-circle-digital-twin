@@ -120,4 +120,7 @@ Moments that have no sound event today:
       it), `MARK_DEBOUNCE_US`, `MARK_TIMEOUT_MS` on the hardware.
 - [ ] The smoke machine's relay: its trigger input, and *Rook max* / pause for that machine.
 - [ ] The LED chain's order and counts (`BULBS_PER_SIDE`, `DOME_LEDS`, `EYE_LEDS`).
+- [ ] The boot / shutdown shows on the real robot: the scan speed, the twitches
+      (a mark either way) and the smoke timing (*Rook max* / pause allow the
+      boot's and the shutdown's puff on the same day; minutes apart in practice).
 

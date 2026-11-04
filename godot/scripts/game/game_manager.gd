@@ -62,6 +62,9 @@ const ROUND_TYPES := [preload("res://scripts/game/cyclone_round.gd"),
 
 ## Game settings the operator can change (see settings_schema); every round
 ## type has its own (GameRound.tunables). tempo > 1: every time shorter.
+## Round settings that are network / hardware delays, not game times: the tempo leaves them alone.
+const NETWORK_TIMES := ["latency_ms", "late_grace"]
+
 const GAME_TUNABLES := [
 	{"key": "tempo", "label": "Tempo (x, alle tijden)", "min": 0.5, "max": 2.0, "step": 0.05, "unit": ""},
 	{"key": "intro_time", "label": "Uitleg voor een ronde", "min": 2, "max": 30, "step": 1, "unit": "s"},
@@ -150,6 +153,13 @@ var _pending_lives := {}               # end of a round: the lives about to chan
 var _target_lives := {}                # ... and once given / taken: what they become (shots still flying)
 var view := {}                         # what the screens show (show_view): a display node builds the same
 var _view_seq := 0
+## The robot's shows: it comes to life when the game opens (CLOSED / SETUP ->
+## OPEN) and is shut down - the players won - when it closes (-> CLOSED).
+## Closing during a round waits for its end (its scoreboard): _close_pending.
+var power_show := ""                 # "boot" / "shutdown" while one plays
+var _close_pending := false
+var _closing_now := false            # (the round is over: close for real)
+var _mode_set := false               # (the first mode from the control server: no show, just on / off)
 var _replica_round := 0                # a display node: the master's round it has (instance id there)
 
 
@@ -180,6 +190,10 @@ func _build_view() -> void:
 			screen_wall.show_players(f, bool(v.get("look_down", false)))
 		"message":
 			screen_wall.show_shared(func(): return MessageView.new())
+		"power":
+			var kind := str(v.get("show", "boot"))
+			var at := float(v.get("at", 0.0))
+			screen_wall.show_shared(func(): return PowerView.new(kind, at))
 		"round":
 			if current:
 				screen_wall.show_shared(current.make_shared_view)
@@ -277,6 +291,7 @@ func setup(arena_node: Node3D) -> void:
 	for t in arena.narrator.tunables():
 		_voice_defaults[t.key] = arena.narrator.get(t.key)
 	screen_wall = arena.screen_wall
+	arena.robot.power_moment.connect(_on_power_moment)
 	if control_url != "":
 		use_control_server(control_url)
 	else:
@@ -350,6 +365,9 @@ func _process(delta: float) -> void:
 		return                           # frozen: no timers, no rounds
 	match state:
 		State.LOBBY:
+			if _close_pending:
+				_close_now()
+				return
 			if _lobby_timer >= 0.0:
 				_lobby_timer -= delta
 				screen_wall.set_timer("Start over %d" % ceili(_lobby_timer))
@@ -423,6 +441,9 @@ func stop_game() -> void:
 
 
 func _next_round() -> void:
+	if _close_pending:                   # closing after this round: now
+		_close_now()
+		return
 	if arena.player_ids().is_empty():    # the last player is gone: back to the lobby
 		_finish_game()
 		return
@@ -440,7 +461,7 @@ func _next_round() -> void:
 	current.configure(settings.get(round_type_name(_last_type), {}))   # operator settings ...
 	current.configure(entry.get("options", {}))                         # ... this round in the plan
 	for t in current.tunables():                                        # the tempo: all times
-		if t.unit in ["s", "ms"] and not t.key.begins_with("latency"):   # (a hardware delay: not a game time)
+		if t.unit in ["s", "ms"] and not t.key in NETWORK_TIMES:          # (network delays: not game times)
 			var v = current.get(t.key) / tempo
 			current.set(t.key, roundi(v) if current.get(t.key) is int else v)
 	current.prepare(self, arena.player_ids().filter(func(id): return not arena.tiles[id - 1].is_dead))
@@ -671,6 +692,7 @@ func status() -> Dictionary:
 				"player_id": p.get("player_id", 0)})
 	return {"state": State.keys()[state], "mode": mode_name(), "round": current.title if current else "",
 		"round_number": round_number, "game_id": game_id,
+		"closing": _close_pending, "power_show": power_show,
 		"uitslag": _result_left > 0.0,              # SCOREBOARD: still the round's places (UITSLAG)
 		"ranked": current.ranked if current else false,   # the round has points and places (not the quiz)
 		"floor_tiles": Retro.FLOOR_TILES, "tile_count": arena.tiles.size(),
@@ -895,6 +917,9 @@ func on_result(tile_id: int, data: Dictionary) -> void:
 ## Called by the arena after a join or leave.
 func on_players_changed() -> void:
 	_plan_rounds()                       # e.g. fewer players: no planned personal rounds
+	if power_show == "boot" and view.get("kind", "") == "power" and not Replica.client \
+			and (not arena.player_ids().is_empty() or arena.pending_count() > 0):
+		show_view({"kind": "players"})   # someone came in during the boot: their invite (the robot boots on)
 	match state:
 		State.LOBBY:
 			if mode == Mode.OPEN and auto_start_delay > 0.0 and not arena.player_ids().is_empty() and _lobby_timer < 0.0:
@@ -924,9 +949,28 @@ func on_players_changed() -> void:
 ## Adds points (the total never goes below 0); returns the change actually applied.
 ## Operator: change the operating mode (see Mode).
 func set_mode(m: Mode) -> void:
+	var first := not _mode_set
+	_mode_set = true
+	if m == Mode.OPEN and _close_pending:          # (closing after the round: called off)
+		_close_pending = false
+		log_event("SLUITEN GEANNULEERD", Retro.AMBER)
 	if m == mode:
+		if first and m == Mode.CLOSED:
+			arena.npc.power(false)
 		return
 	var was := mode
+	if m == Mode.CLOSED and was == Mode.OPEN and not first and not _closing_now \
+			and state in [State.PLAYING, State.SCOREBOARD]:
+		if _close_pending:
+			return                                 # (the same again: the retained mode, a reconnect)
+		_close_pending = true                      # the round first: closed (and the robot shut down) after it
+		for id in range(1, arena.tiles.size() + 1):
+			if arena.is_pending(id):
+				arena.leave(id)                    # (no new players meanwhile)
+		log_event("SPEL SLUIT NA DEZE RONDE", Retro.AMBER)
+		mode_changed.emit(mode)
+		return
+	_close_pending = false
 	mode = m
 	match m:
 		Mode.SETUP, Mode.CLOSED:
@@ -949,6 +993,76 @@ func set_mode(m: Mode) -> void:
 	screen_wall.refresh_all()
 	mode_changed.emit(m)
 	on_players_changed()
+	if first:                                      # (the game starting: the robot as the mode says, no show)
+		arena.npc.power(m != Mode.CLOSED)
+	elif m == Mode.OPEN and was in [Mode.CLOSED, Mode.SETUP]:
+		_power("boot")
+	elif m == Mode.CLOSED and was in [Mode.OPEN, Mode.PAUSED]:
+		_power("shutdown")
+	elif m == Mode.SETUP and not arena.robot.powered:
+		arena.npc.power(true)                      # (setting up: the robot on, to test it)
+
+
+## The robot's show (also from the web interface: {"game": "boot" | "shutdown"},
+## without changing the mode). The screens show it (PowerView); the sounds and
+## the light cues follow the robot's moments (CyberRobot.power_moment).
+func _power(kind: String) -> void:
+	power_show = kind
+	show_view({"kind": "power", "show": kind, "at": arena.clock})
+	if kind == "boot":
+		arena.npc.boot()
+		arena.cue(&"boot")
+	else:
+		arena.npc.shutdown()
+		arena.cue(&"shutdown")
+
+
+func _on_power_moment(name: StringName) -> void:
+	if Replica.client:
+		return
+	match name:
+		&"awake":
+			arena.cue(&"boot_done")
+		&"electrocuted":
+			for i in 5:                                # zaps all over the room while it shakes
+				get_tree().create_timer(i * 1.3 + randf() * 0.4).timeout.connect(func():
+					if power_show == "shutdown":
+						arena.cue(&"zap", randi_range(1, arena.tiles.size())))
+		&"dying":
+			arena.cue(&"power_down")
+		&"booted", &"off":
+			if name == &"off":
+				arena.cue(&"off")
+				await get_tree().create_timer(7.0).timeout   # (GEWONNEN on the screens a while)
+				if power_show != "shutdown":
+					return
+			power_show = ""
+			if view.get("kind", "") == "power":
+				show_view({"kind": "players"})
+			screen_wall.refresh_all()
+
+
+## The web interface's test buttons: the show, the mode stays (after a test
+## shutdown the robot comes back on by itself when the game is open).
+func play_power_show(kind: String) -> void:
+	if power_show != "" or state != State.LOBBY:
+		return                                     # (not during a round or another show)
+	_power(kind)
+	if kind == "shutdown" and mode != Mode.CLOSED:
+		await arena.robot.power_moment
+		while power_show != "":
+			await get_tree().process_frame
+		await get_tree().create_timer(3.0).timeout
+		if mode != Mode.CLOSED and not arena.robot.powered and power_show == "":
+			_power("boot")
+
+
+## A close was asked during a round: now it is over.
+func _close_now() -> void:
+	_close_pending = false
+	_closing_now = true
+	set_mode(Mode.CLOSED)
+	_closing_now = false
 
 
 func mode_name() -> String:
@@ -957,7 +1071,7 @@ func mode_name() -> String:
 
 ## Players can register and join only while the game is open.
 func accepting_players() -> bool:
-	return mode == Mode.OPEN
+	return mode == Mode.OPEN and not _close_pending
 
 
 func _tiles_paused(on: bool) -> void:

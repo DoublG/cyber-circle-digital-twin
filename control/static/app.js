@@ -41,7 +41,10 @@ function connectLive() {
 function renderLive() {
   const s = live.state || {};
   const st = s.state === "SCOREBOARD" && s.uitslag ? "UITSLAG" : STATE_NAMES[s.state] || (s.state ? s.state : "GEEN MASTER");
-  $("#status").textContent = s.round && s.state !== "LOBBY" ? `${st}: ${String(s.round).toUpperCase()}` : st;
+  $("#status").textContent = (s.power_show === "boot" ? "ROBOT START OP"
+    : s.power_show === "shutdown" ? "ROBOT WORDT UITGESCHAKELD"
+    : s.round && s.state !== "LOBBY" ? `${st}: ${String(s.round).toUpperCase()}` : st)
+    + (s.closing ? " · SLUIT NA DEZE RONDE" : "");
   $("#timer").textContent = s.timer || "";
   const master = live.master?.node ? `master: ${live.master.node}` : "geen master gekozen";
   const w = live.website || {};

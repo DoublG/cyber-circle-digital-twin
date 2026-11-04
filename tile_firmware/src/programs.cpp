@@ -300,9 +300,11 @@ void receive(JsonObjectConst msg) {
         game = prog["game"] | "reaction";
         id = prog["id"] | "";
         running = false;
-        armed = true;
-        pFill(CRGB(38, 38, 38));            // armed: dim white ring
-        pIconsOnly(-1, CRGB::Black);
+        armed = game != "clock";            // (the clock program shows nothing)
+        if (armed) {
+            pFill(CRGB(38, 38, 38));        // armed: dim white ring
+            pIconsOnly(-1, CRGB::Black);
+        }
     }
     if (!msg["start"].isNull() && id == String((const char *)(msg["start"] | ""))) {
         running = true;
@@ -313,7 +315,7 @@ void receive(JsonObjectConst msg) {
         n = 0;
         streak = 0;
         best = 0;
-        pFill(CRGB::Black);
+        if (game != "clock") pFill(CRGB::Black);
         if (game == "simon") {
             level = prog["start_level"];
             simonPause();
@@ -353,17 +355,18 @@ void update(uint32_t dtMs) {
             pRing[i] = behind < 6 ? CRGB(pietColor).nscale8(255 - behind * 42) : CRGB::Black;
         }
     }
-    if (blinkIcon >= 0 && millis() > blinkUntil) {
+    if (blinkIcon >= 0 && (int32_t)(millis() - blinkUntil) > 0) {   // (wrap-safe: millis() wraps after 49.7 days)
         if (phase == "repeat") pIcons[blinkIcon] = REPEAT_ICON;
         blinkIcon = -1;
     }
-    if (flashUntil && millis() > flashUntil) {
+    if (flashUntil && (int32_t)(millis() - flashUntil) > 0) {
         flashUntil = 0;
         if (game == "reaction" && openStep < 0) pFill(CRGB::Black);
         if (game == "simon" && phase == "repeat") progress();
     }
     if (!running || paused) return;
     clockMs += dtMs;
+    if (game == "clock") return;            // (only the time)
     if (game == "simon") simonUpdate();
     else if (game == "cyclone") cycloneUpdate(dtMs);
     else reactionUpdate();
@@ -371,12 +374,20 @@ void update(uint32_t dtMs) {
 
 void press(int icon) {
     if (!running) return;
+    if (game == "clock") return;
     if (game == "simon") simonPress(icon);
     else if (game == "cyclone") cyclonePress();
     else if (openStep >= 0) close(icon);
 }
 
-bool ownsRing() { return piet || running || armed || flashUntil; }
+bool ownsRing() { return piet || (running && game != "clock") || armed || flashUntil; }
+
+bool clockNow(String &programId, uint32_t &ms) {
+    if (!running) return false;
+    programId = id;
+    ms = (uint32_t)clockMs;
+    return true;
+}
 
 void draw() {
     for (int i = 0; i < RING_COUNT; i++) ring(i) = pRing[i];

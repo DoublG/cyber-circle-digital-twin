@@ -616,6 +616,13 @@ from the master, and the robot runs the physical part itself:
   not found: it stops and waits (*Zoek de start* in the web interface).
 * **Stuck** (no mark for 4 s) or **past the window**: the motor stops, the
   error shows in *Tegels › Robot* and *Verbindingen*.
+* **Coming to life / shutting down** (`{"boot": true}`, `{"shutdown": true}`,
+  from the game when it opens / closes; `{"mood": "off"}`: dark at once): the
+  boot scans once around within the cable window and puffs smoke when awake;
+  the shutdown twitches the head a mark either way, puffs smoke (if the smoke
+  pause allows), turns back to the start – the cable unwound for the next day –
+  and stays dark. Nothing else moves the head during a show; *Stop motor* ends
+  it. Events: `booted`, `off`.
 * **The lights** (rainbow / chase / party lamp per game phase, a side glowing
   on a good answer, charging, the shot, hits, the overload, an extermination)
   and **the smoke** (a relay: never longer than *Rook max*, never sooner than
@@ -654,7 +661,7 @@ Prefix `cybercircle` (setting `topic_prefix` on the *Mqtt* node). Payloads are J
 | `cybercircle/sounds` | master → all | retained `{"events": {"attack": ["laser1.ogg", …], …}}`: the sounds `{"sound": …}` can play |
 | `cybercircle/tile/<n>/cmd` | game → tile | `{"program": {...}}`, `{"start": "<id>"}`, `{"stop": true}`, `{"pause": true}`, `{"piet": {"on": true, "speed": 20, "color": "#ff2a00"}}`, effects `{"fx": "attack" \| "hit" \| "block" \| "life" \| "doomed" \| "death", "color": "#rrggbb"}` |
 | `cybercircle/tile/<n>/state` | game → tile | retained: what the tile shows – `{"mode": "off" \| "setup" \| "pending" \| "idle" \| "dead" \| "playing", "number": n, "color": "#…" (pending), "lives", "max_lives", "shield", "buttons": {"Square": "#…" \| "", …}}` |
-| `cybercircle/tile/<n>/event` | tile → game | `{"press": "Cross"}`, `{"pressure": {...}}`, `{"result": {...}}` |
+| `cybercircle/tile/<n>/event` | tile → game | `{"press": "Cross"}` (a program running: `+ "t": ms since its start, "program": id`), `{"pressure": {...}}`, `{"result": {...}}` |
 | `cybercircle/registered` | game → app | `{"tile": 3, "player": "Erik", "color": "#ff8800"}` |
 | `cybercircle/activated` | game → app | `{"tile": 3, "player": "Erik"}` |
 | `cybercircle/status` | game → all | `online` / `offline` (retained) |
@@ -722,6 +729,11 @@ angle.
 | `zap` | tile, angle | the tile is electrocuted (1 s) … |
 | `explosion` | tile, angle | … then explodes |
 | `scoreboard` | – | the scoreboard comes up |
+| `boot` | – | the game opens: the robot comes to life – the room dark, light returns over ~13 s |
+| `boot_done` | – | … it is awake: one flash (~14 s in) |
+| `shutdown` | – | the game closes: the players' last attack on the robot (lightning from every side) |
+| `power_down` | – | … the robot dies: the room goes dark with it (~4 s) |
+| `off` | – | … a last spark; the closed look comes back slowly |
 
 Keep flashing to at most 3 flashes a second (the photosensitive epilepsy
 guideline; visitors include children), and none when `flashes` is false. In
@@ -751,6 +763,16 @@ MAC address (`device/<mac>/hello`, every 10 s: also its IP and the link, e.g.
 and then shows `tile/<n>/state`, plays the effects and runs the tile programs –
 Reactie, Simon, Cyclone and Zwarte Piet, a 1:1 port of
 `godot/scripts/tile_firmware.gd` – and sends `{"press": …}` and the results.
+**Timing**: a tile measures everything relative to the one `start` of a
+round, on its own clock (crystal drift: about 1 ms per round), so the network
+never decides a result. Reaction, Simon and Cyclone measure on the tile; for
+the games the game judges itself – Ritme and Zwarte Piet – the tiles run a
+`clock` program and stamp every press with its time in the round (`"t"`), and
+the game scores the press at that moment: Ritme on the line however late it
+arrives, Zwarte Piet waits *Wachten op late schop* (0.3 s) at the end of a
+countdown for a kick stamped before it. Without a stamp (simulated tiles, an
+older firmware) a press counts when it arrives (Ritme: minus *Vertraging tegel
+→ spel*). Deadlines are wrap-safe (`millis()` wraps after 49.7 days).
 In SETUP the hearts show its place number in binary and a pressed icon flashes
 (the sensor test); `identify` makes it light up. The status LED: blue =
 network, amber = MQTT but no place yet, green = ready, red = no network (cable,
@@ -1042,6 +1064,23 @@ pattern (`scripts/ui/test_pattern.gd`) over the tile numbers:
 The CRT effect is off in SETUP so lines and colours are exact. Still images of
 the patterns are in `docs/test_screens/` (to test a monitor without the game);
 `tests/test_setup_shot.tscn` regenerates them in `tests/shots/`.
+
+**The robot's shows.** Opening the game (GESLOTEN or SETUP → OPEN) brings the
+robot to life (~18 s): the room dark, hesitant flickers, a systems check side
+by side, a stiff scan once around, the eye snaps on, a puff of smoke – SYSTEEM
+ONLINE on every screen. Players may register meanwhile (their invite takes
+over the screens). Closing it (OPEN / PAUZE → GESLOTEN) shuts the robot down:
+the players won (~25 s) – their last attack from every side, electrocuted
+(stuttering lights, twitching head, smoke), the sides die one by one, the eye
+fades while the head sags back to the start, a last spark – GEWONNEN on the
+screens, then dark until it opens again. **Closing during a round waits for
+the round** (and its scoreboard): the top bar says *SLUIT NA DEZE RONDE*, no
+new players come in, and *Start spel* calls it off. *Spel › ⚡ Opstarten /
+💀 Uitschakelen* play a show as a test (in the lobby; the mode stays – after
+a test shutdown in an open game the robot boots again by itself). The flashing
+stays within 3 flashes a second, the full screens never flash. The pieces:
+`robot.gd` (`play_boot`, `play_shutdown`), `GameManager._power`,
+`ui/power_view.gd`, the real robot `robot_firmware/src/robot.cpp` + `leds.cpp`.
 
 **Stop spel** ends the game: everyone leaves (their results are saved), the
 game is closed again. The mode is kept in the database, so a restarted game

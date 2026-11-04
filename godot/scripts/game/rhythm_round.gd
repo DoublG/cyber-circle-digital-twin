@@ -13,8 +13,11 @@ extends GameRound
 ## last places lose one.
 ##
 ## Unlike the other tile games the game judges the presses (the symbols are
-## on the screen, not on the tile): a press counts at the moment it arrives,
-## minus `latency_ms` (the tile -> game delay of the real installation). The
+## on the screen, not on the tile). The tiles run a "clock" program (nothing on
+## the ring, only the round's time since the one "start") and stamp every press
+## with it: the press counts at that moment, whatever the network did on the
+## way. Without a stamp (a simulated tile, an older firmware) it counts when it
+## arrives, minus `latency_ms` (the tile -> game delay of the installation). The
 ## band and the line are a part of the fall: the faster the symbols, the less
 ## time you have. Every player gets the same chart.
 
@@ -68,13 +71,14 @@ func tunables() -> Array:
 		setting("points_line", "Punten op de lijn", 0, 20, 1),
 		setting("points_band", "Punten in de gele band", 0, 20, 1),
 		setting("points_wrong", "Punten zomaar gedrukt", -20, 0, 1),
-		setting("latency_ms", "Vertraging tegel -> spel", 0, 500, 10, "ms"),
+		setting("latency_ms", "Vertraging tegel -> spel (zonder tijdstempel)", 0, 500, 10, "ms"),
 	]
 
 
 func _start() -> void:
 	clock = 0.0
 	notes = make_chart()
+	start_tile_clock()
 	for id in players:
 		state[id] = {"judged": {}, "combo": 0, "best_combo": 0, "lines": 0, "last": [{}, {}, {}, {}]}
 
@@ -126,7 +130,7 @@ func button(id: int, b: StringName) -> void:
 	var lane := CyberTile.BUTTONS.find(b)
 	if lane < 0 or not state.has(id):
 		return
-	var at := clock - latency_ms / 1000.0
+	var at := press_time(clock - latency_ms / 1000.0)   # (the tile's stamp; none: on arrival)
 	var st: Dictionary = state[id]
 	var best := -1
 	var best_d := INF
@@ -168,6 +172,7 @@ func _flash(id: int, color: Color) -> void:
 
 ## The longest combo of the round in the event feed.
 func finish() -> void:
+	stop_tile_clock()
 	var best := 0
 	var names := []
 	for id in state:

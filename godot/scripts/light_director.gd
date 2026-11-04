@@ -58,6 +58,9 @@ var _base := Color.BLACK               # the base colour now (fading to the scen
 var _base_level := 0.0
 var _flash := []                       # [{angle (or -1: everywhere), width, color, level, decay, hold, flicker}]
 var _dim := 0.0                        # 0..1: the room dimmed (an extermination)
+var _dark := 0.0                       # 0..1: the room dark (the robot powering up / down) ...
+var _dark_target := 0.0                # ... going there
+var _dark_rate := 1.0                  # per second
 var _time := 0.0
 var _ring_default := Color(0.7, 0.85, 1.0)
 var _bolts := []                       # [{a, b, color, life, age, width, points, next, delay}]
@@ -135,6 +138,30 @@ func on_cue(event: StringName, data: Dictionary) -> void:
 					_bolt(_pillar_point(k, PILLAR_TOP), _pillar_point((k + 1) % PILLARS, PILLAR_TOP), c, 0.25, 0.04, k * 0.06)
 		&"countdown":
 			_add(-1.0, 0.0, color, 0.5, 4.0)
+		&"boot":                                 # the robot comes to life: dark, then power from the ceiling
+			_dark = 1.0
+			_dark_target = 0.0
+			_dark_rate = 1.0 / 13.0
+			for i in 6:
+				var a := randf() * TAU
+				_bolt(_ring_centre + Vector3(cos(a), 0, sin(a)) * RING_R, _robot_top(), Color(0.5, 0.8, 1.0), 0.5, 0.05, 1.5 + i * 0.6)
+		&"boot_done":                            # awake: a flash, an arc around the room
+			_dark_target = 0.0
+			_dark_rate = 2.0
+			_add(-1.0, 0.0, Color(0.6, 0.85, 1.0), 1.0 if flashes else 0.5, 1.5)
+			for k in PILLARS:
+				_bolt(_pillar_point(k, PILLAR_TOP), _pillar_point((k + 1) % PILLARS, PILLAR_TOP), Color(0.6, 0.85, 1.0), 0.3, 0.05, k * 0.04)
+		&"shutdown":                             # the players' last attack: lightning from every pillar
+			for k in PILLARS:
+				_bolt(_pillar_point(k, 1.5), _robot_top(), Color(0.3, 1.0, 0.4), 0.8, 0.06, k * 0.08)
+			_add(-1.0, 0.0, Color(0.3, 1.0, 0.4), 1.0 if flashes else 0.4, 0.8, 1.0, flashes == 1)
+		&"power_down":                           # dying: the room goes dark with it
+			_dark_target = 0.85
+			_dark_rate = 1.0 / 4.0
+		&"off":                                  # a last spark; then the closed look comes back slowly
+			_bolt(_robot_top(), _robot_top() + Vector3(0.6, 0.8, 0.2), Color(0.9, 0.95, 1.0), 0.25, 0.03)
+			_dark_target = 0.0
+			_dark_rate = 1.0 / 6.0
 
 
 func _add(angle: float, width: float, color: Color, level: float, decay: float, hold := 0.0, flicker := false) -> void:
@@ -207,7 +234,9 @@ static func _jag(a: Vector3, b: Vector3) -> PackedVector3Array:
 
 func _draw_arcs(delta: float) -> void:
 	_arc_mesh.clear_surfaces()
-	if _bolts.is_empty():
+	if not _bolts.any(func(b): return b.age + delta >= 0.0):   # (none yet: only delayed ones)
+		for b in _bolts:
+			b.age += delta
 		return
 	_arc_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
 	for bolt in _bolts:
@@ -338,6 +367,7 @@ func _process(delta: float) -> void:
 	_base = _base.lerp(_scene_color(), fade)
 	_base_level = lerpf(_base_level, look[1], fade)
 	_dim = maxf(_dim - delta / 3.0, 0.0)
+	_dark = move_toward(_dark, _dark_target, _dark_rate * delta)
 	for f in _flash:
 		if f.hold > 0.0:
 			f.hold -= delta
@@ -365,10 +395,10 @@ func _process(delta: float) -> void:
 			elif k == 0:
 				global += f.color * w
 			c += f.color * w
-		_wash.multimesh.set_instance_color(k, c * gain)
+		_wash.multimesh.set_instance_color(k, c * gain * (1.0 - _dark))
 	_crackle(delta)
 	_draw_arcs(delta)
-	arena.room.set_ring_color((_ring_default.lerp(_base, 0.3) * (1.0 - 0.6 * _dim) + global * 0.5).clamp())
+	arena.room.set_ring_color(((_ring_default.lerp(_base, 0.3) * (1.0 - 0.6 * _dim) + global * 0.5) * (1.0 - _dark)).clamp())
 
 
 static func angle_diff(a: float, b: float) -> float:

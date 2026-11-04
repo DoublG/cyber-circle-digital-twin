@@ -18,6 +18,13 @@
 //   {"go": 5}                          (operator) turn to a side, whatever the game does
 //   {"home": "cw" | "ccw" | true}      find the start position again; {"set_position": 0}: it is here
 //   {"stop": true}                     stop the motor, forget the queue
+//   {"boot": true}                     the game opens: it comes to life (~17 s) - dark,
+//                                      flickers, a systems check, a scan within the
+//                                      cable, awake (a puff of smoke), a look around
+//   {"shutdown": true}                 the game closes, the players won (~18 s): their
+//                                      attack, electrocuted (twitches, smoke), the sides
+//                                      die, the head sags back to the start - dark
+//   {"mood": "off"}                    dark and still at once (the game is closed)
 // Events (<prefix>/robot/event): {"arrived": side}, {"exterminated": side},
 // {"error": "stalled" | "cable limit" | "home not found"}, {"smoke": seconds}.
 #include "robot.h"
@@ -47,6 +54,13 @@ static uint32_t stepAt = 0;
 static uint32_t fireAt = 0;
 static CRGB fireColor;
 static const char *lastError = "";
+// the shows (boot / shutdown): the lights in leds.cpp, the head and the smoke here
+enum ShowKind { NO_SHOW, BOOT, SHUTDOWN };
+static ShowKind showKind = NO_SHOW;
+static uint32_t showAt = 0;
+static int showStep = 0;
+static int twitchFrom = 0;
+static bool powered = true;             // off: dark and still until the next boot
 static bool wasMoving = false;
 
 static CRGB color(const char *hex, CRGB fallback) {
@@ -71,7 +85,84 @@ static void event(const char *key, int value) {
     emit(doc);
 }
 
-static bool busy() { return step != EXT_NONE || qLen > 0; }
+static bool busy() { return step != EXT_NONE || qLen > 0 || showKind != NO_SHOW || !powered; }
+
+static void startShow(ShowKind k) {
+    showKind = k;
+    showAt = millis();
+    showStep = 0;
+    qLen = 0;                           // (no exterminations any more)
+    step = EXT_NONE;
+    locked = -1;
+    fireAt = 0;
+    head::stop();
+    twitchFrom = head::position();
+    if (k == BOOT) powered = false;     // (on when it is awake)
+    leds::show(k == BOOT ? leds::SHOW_BOOT : leds::SHOW_SHUTDOWN);
+    Serial.printf("robot: %s\n", k == BOOT ? "coming to life" : "shutting down");
+}
+
+static int clampWindow(int p) {
+    return constrain(p, head::planner.cfg.minPos, head::planner.cfg.maxPos);
+}
+
+// The head and the smoke during a show (the lights run by themselves).
+static void runShow() {
+    if (showKind == NO_SHOW) return;
+    uint32_t t = millis() - showAt;
+    bool can = head::known() && !head::homingNow();
+    if (showKind == BOOT) {
+        if (showStep == 0 && t >= 9200) {              // the scan: once around, within the cable
+            showStep = 1;
+            int p = head::position();
+            int to = p + SIDES <= head::planner.cfg.maxPos ? p + SIDES
+                   : p - SIDES >= head::planner.cfg.minPos ? p - SIDES : clampWindow(p + SIDES);
+            if (can) head::goAbs(to);
+        }
+        if (showStep == 1 && t >= leds::BOOT_MS - 300) {   // awake: a puff
+            showStep = 2;
+            if (smoke::puff(smokeExterminate > 0 ? smokeExterminate : 1.0f)) event("smoke", 1);
+        }
+        if (showStep == 2 && t >= leds::BOOT_MS + 400) {   // a look around
+            showStep = 3;
+            if (can && !head::moving()) head::goSide(9);
+        }
+        if (showStep == 3 && t >= leds::BOOT_MS + 2200) {
+            showStep = 4;
+            powered = true;
+            showKind = NO_SHOW;
+            mood = LOBBY;
+            leds::setEffect(leds::RAINBOW);
+            idleSince = millis();
+            event("booted", 1);
+        }
+        return;
+    }
+    // SHUTDOWN
+    if (showStep == 0 && t >= 1700) {                  // electrocuted: smoke, twitches
+        showStep = 1;
+        if (smoke::puff(2.5f)) event("smoke", 2);
+    }
+    if (showStep == 1 && t < 8600 && can && !head::moving()) {
+        static uint32_t nextTwitch = 0;                // a mark either way, now and then
+        if ((int32_t)(millis() - nextTwitch) >= 0) {
+            int to = clampWindow(twitchFrom + (random(2) ? 1 : -1));
+            if (to != head::position()) head::goAbs(to);
+            nextTwitch = millis() + 300 + random(500);
+        }
+    }
+    if (showStep == 1 && t >= 13000) {                 // dying: the head sags back to the start
+        showStep = 2;
+        head::stop();
+        if (can) head::goAbs(0);                       // (the cable unwound for the next day)
+    }
+    if (showStep == 2 && t >= leds::SHUTDOWN_MS) {
+        showStep = 3;
+        powered = false;
+        showKind = NO_SHOW;
+        event("off", 1);
+    }
+}
 
 static void look(int side, bool force = false) {
     if (busy()) return;                                     // (an extermination turns the head: nothing else may)
@@ -107,12 +198,20 @@ void configure(JsonObjectConst c) {
 }
 
 void command(JsonObjectConst m) {
+    if (m["stop"].is<bool>() && m["stop"].as<bool>() && showKind != NO_SHOW) {   // (the operator: also a show)
+        showKind = NO_SHOW;
+        powered = true;
+        leds::show(leds::SHOW_NONE);
+    }
     if (m["look"].is<int>()) look(m["look"]);
     if (m["lock"].is<int>()) {
         locked = m["lock"];
         head::goSide(locked);
     }
     if (m["idle"].is<bool>() || m["release"].is<bool>()) locked = -1;
+    if (m["boot"].is<bool>()) startShow(BOOT);
+    if (m["shutdown"].is<bool>()) startShow(SHUTDOWN);
+    if (showKind != NO_SHOW) return;                        // (a show: nothing else meanwhile; "stop" ends it)
     if (m["glow"].is<JsonObjectConst>()) {
         JsonObjectConst g = m["glow"];
         leds::glow(g["side"] | -1, color(g["color"], CRGB::White), g["ms"] | 250);
@@ -140,6 +239,16 @@ void command(JsonObjectConst m) {
     }
     if (m["mood"].is<const char *>()) {
         String md = m["mood"].as<const char *>();
+        if (md == "off") {                                  // the game closed: dark and still
+            powered = false;
+            head::stop();
+            qLen = 0;
+            step = EXT_NONE;
+            leds::show(leds::SHOW_OFF);
+        } else if (!powered) {                              // (on again without a show)
+            powered = true;
+            leds::show(leds::SHOW_NONE);
+        }
         if (md == "lobby") { mood = LOBBY; leds::setEffect(leds::RAINBOW); leds::setParty(false); locked = -1; }
         else if (md == "intro") { mood = INTRO; leds::setEffect(leds::RAINBOW); leds::setParty(true); }
         else if (md == "playing") { mood = PLAYING; leds::setEffect(leds::CHASE); leds::setParty(false); }
@@ -217,6 +326,7 @@ static void exterminations() {
 
 void loop() {
     uint32_t now = millis();
+    runShow();
     exterminations();
     if (fireAt && (int32_t)(now - fireAt) >= 0) {
         leds::shot(fireColor);
@@ -258,6 +368,8 @@ void describe(JsonDocument &doc) {
     doc["smoke_exterminate_s"] = smokeExterminate;
     const char *moods[] = {"lobby", "intro", "playing", "scoreboard"};
     doc["mood"] = moods[mood];
+    doc["powered"] = powered;
+    doc["show"] = showKind == BOOT ? "boot" : showKind == SHUTDOWN ? "shutdown" : "";
 }
 
 }  // namespace robot

@@ -183,6 +183,29 @@ func mood(name: String) -> void:
 			robot.set_bulb_effect("chase")
 
 
+## The game opens: the robot comes to life (robot.play_boot, ~18 s; the real
+## robot its own version: lights, a scan within its cable, a puff of smoke).
+func boot() -> void:
+	_ev(&"boot", [])
+	_hw({"boot": true})
+	robot.play_boot()
+
+
+## The game closes: the players won - electrocuted, damaged, shut down (~22 s;
+## the real robot: twitches within its cable, smoke, back to the start, dark).
+func shutdown() -> void:
+	_ev(&"shutdown", [])
+	_hw({"shutdown": true})
+	robot.play_shutdown()
+
+
+## On or off at once, no show (a display node joining, the game starting closed).
+func power(on: bool) -> void:
+	_ev(&"power", [on])
+	_hw({"mood": "lobby" if on else "off"})
+	robot.set_powered(on)
+
+
 ## The leader after a round: the robot turns to them, that side lit gold.
 func celebrate(tile_id: int) -> void:
 	_ev(&"celebrate", [tile_id])

@@ -8,6 +8,10 @@ extends Node
 ## With the real installation connected (arena.simulate_firmware = false) the
 ## same messages go to the tiles and their results come back via apply_command.
 ##
+## Clock ("game": "clock", Ritme): nothing on the ring, only the round's time;
+## the real tile stamps every press with it ({"press": .., "t": ms since the
+## start, "program": id}) and the game scores the press at that moment.
+##
 ## Messages to the tile (arena.send_to_tile):
 ##   {"program": {"game": "reaction", "id": "...", "length": ms,
 ##       "windows": [1400, 1300, ..., 700],   # ms to react; every success one step
@@ -111,8 +115,9 @@ func receive(msg: Dictionary) -> void:
 	if msg.has("program"):
 		_program = msg.program
 		_running = false
-		tile.fill_ring(Color(0.15, 0.15, 0.15))     # armed: dim white ring
-		_icons(&"")
+		if _program.get("game", "") != "clock":       # (clock - Ritme: only the time, nothing shown)
+			tile.fill_ring(Color(0.15, 0.15, 0.15))  # armed: dim white ring
+			_icons(&"")
 	if msg.has("start") and str(msg.start) == str(_program.get("id", "")):
 		_running = true
 		_clock = 0.0
@@ -120,7 +125,8 @@ func receive(msg: Dictionary) -> void:
 		_open = -1
 		_n = 0
 		_streak = 0
-		tile.clear_ring()
+		if _program.get("game", "") != "clock":
+			tile.clear_ring()
 		match _program.get("game", ""):
 			"simon":
 				_level = int(_program.start_level)
@@ -144,8 +150,11 @@ func receive(msg: Dictionary) -> void:
 	if msg.has("pause"):
 		_paused = bool(msg.pause)
 	if msg.has("stop"):
+		var shown: bool = _program.get("game", "") != "clock"   # (the clock showed nothing: leave the tile as it is)
 		_running = false
 		_open = -1
+		if not shown:
+			return
 		tile.clear_ring()
 		for b in CyberTile.BUTTONS:
 			tile.set_button_led(b, CyberTile.BUTTON_COLORS[b])
@@ -163,6 +172,8 @@ func _process(delta: float) -> void:
 		return
 	_clock += delta * 1000.0
 	match _program.get("game", ""):
+		"clock":
+			return
 		"simon":
 			_simon_process()
 			return
@@ -194,7 +205,7 @@ func _show(index: int) -> void:
 
 
 func _on_press(_id: int, button: StringName) -> void:
-	if not _running:
+	if not _running or _program.get("game", "") == "clock":
 		return
 	if _is_simon():
 		_simon_press(button)

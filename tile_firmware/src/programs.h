@@ -8,6 +8,10 @@
 //   cyclone   a green light runs round; press on the red LED (yellow counts too)
 //   piet      (Zwarte Piet, run by the game) a light with a tail runs round
 //             while this tile has it; presses go to the game as usual
+//   clock     (Ritme) nothing on the ring: only the round's clock, so every
+//             press carries its time since the start ({"press": .., "t": ms,
+//             "program": id}) - the game scores it at that moment, not when it
+//             arrives (no network jitter; crystal drift over a round: ~1 ms)
 #pragma once
 #include <ArduinoJson.h>
 #include <FastLED.h>
@@ -19,5 +23,7 @@ void receive(JsonObjectConst msg);
 void update(uint32_t dtMs);                 // every loop
 void press(int icon);
 bool ownsRing();                            // a program or Zwarte Piet is on the ring and icons
+// A program is running: its id and the ms since its start (for a press's time stamp).
+bool clockNow(String &programId, uint32_t &ms);
 void draw();                                // its ring and icons into the LEDs
 }
