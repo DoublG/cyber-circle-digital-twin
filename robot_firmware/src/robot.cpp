@@ -364,6 +364,7 @@ void describe(JsonDocument &doc) {
     doc["queue"] = qLen + (step != EXT_NONE ? 1 : 0);
     doc["locked"] = locked;
     doc["smoke"] = smoke::on();
+    doc["star"] = leds::starLight();
     doc["smoke_ready_s"] = smoke::secondsUntilReady();
     doc["smoke_exterminate_s"] = smokeExterminate;
     const char *moods[] = {"lobby", "intro", "playing", "scoreboard"};

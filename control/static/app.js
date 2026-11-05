@@ -629,9 +629,9 @@ function renderSounds() {
       zonder body of met <code>{"file": "gong2.ogg", "volume": 60}</code>.
       Stoppen: <code>POST ${esc(base)}/api/sounds/stop</code>. De lijst: <code>GET ${esc(base)}/api/sounds</code>.</p>
     <pre>curl -X POST ${esc(base)}/api/sound/attack
-curl -X POST ${esc(base)}/api/sound/attack -H 'Content-Type: application/json' -d '{"file": "laser2.ogg", "volume": 60}'</pre>
+curl -X POST ${esc(base)}/api/sound/attack -H 'Content-Type: application/json' -d '{"file": "laser6.ogg", "volume": 60}'</pre>
     <p><b>MQTT</b>: publiceer op <code>cybercircle/cmd</code>: <code>{"sound": "attack"}</code>,
-      <code>{"sound": "attack", "file": "laser2.ogg", "volume": 60}</code>, <code>{"sound_stop": true}</code>.
+      <code>{"sound": "attack", "file": "laser6.ogg", "volume": 60}</code>, <code>{"sound_stop": true}</code>.
       De lijst staat (retained) op <code>cybercircle/sounds</code>.</p>`;
 }
 

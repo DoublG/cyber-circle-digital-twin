@@ -1,5 +1,6 @@
 // The robot's lights (FastLED, one WS2812B chain): the bulbs of the 13 sides,
-// the dome, the eye. A base effect (rainbow / chase / pulse / none, or fixed
+// the dome (DOME_LEDS, none on the real robot), the eye - and the star light,
+// a 230 V lamp in the dome on a relay (STAR_PIN) that follows the party lamp. A base effect (rainbow / chase / pulse / none, or fixed
 // bulb colours), on top of it per side a glow or a charge, and short
 // whole-robot moments (a shot, a hit, the overload, an extermination) - all
 // timed here, never blocking (as robot.gd does in the game).
@@ -16,6 +17,13 @@ static CRGB bulbs[SIDES];               // fixed colours (effect "none")
 static Effect effect = RAINBOW;
 static CRGB domeColor = CRGB(255, 140, 40);
 static bool party = false;
+static bool starOn = false;
+
+static void star(bool v) {              // the star light's relay (only on a change)
+    if (v == starOn) return;
+    starOn = v;
+    digitalWrite(STAR_PIN, v ? STAR_ACTIVE : !STAR_ACTIVE);
+}
 struct Over { CRGB color; uint32_t from, until; bool charge; };
 static Over side[SIDES];
 struct Flash { CRGB color; uint32_t from, until; int kind; int sideOf; };   // kind: 0 shot, 1 hit, 2 overload, 3 death
@@ -32,6 +40,9 @@ static CRGB &dome(int i) { return px[SIDE_LEDS + i]; }
 static CRGB &eye(int i) { return px[SIDE_LEDS + DOME_LEDS + i]; }
 
 void begin() {
+    pinMode(STAR_PIN, OUTPUT);
+    digitalWrite(STAR_PIN, !STAR_ACTIVE);   // (off at power-up)
+    starOn = false;
     FastLED.addLeds<WS2812B, LED_PIN, GRB>(px, LED_TOTAL);
     FastLED.setBrightness(LED_BRIGHTNESS);
     FastLED.clear(true);
@@ -41,6 +52,7 @@ void setBrightness(int b) { FastLED.setBrightness(constrain(b, 5, 255)); }
 void setEffect(Effect e) { effect = e; }
 void setParty(bool on) { party = on; }
 void setDome(CRGB c) { domeColor = c; }
+bool starLight() { return starOn; }
 
 void setBulbs(int s, CRGB c) {
     effect = NONE;
@@ -187,6 +199,7 @@ void loop() {
     if (t - last < 16) return;          // ~60 fps
     last = t;
     if (showNow != SHOW_NONE) {             // a show: it draws everything
+        star(false);                        // (the star light stays off during a show / dark)
         if (drawShow(t - showAt)) {
             FastLED.show();
             return;
@@ -210,9 +223,10 @@ void loop() {
             bulb(s, r) = c;
         }
     }
+    star(party);
     CRGB d = party ? CHSV((uint8_t)(t / 12), 255, 220) : domeColor;
     for (int i = 0; i < DOME_LEDS; i++)
-        dome(i) = party ? CRGB(CHSV((uint8_t)(t / 12 + i * 255 / DOME_LEDS), 255, 220)) : d;
+        dome(i) = party ? CRGB(CHSV((uint8_t)(t / 12 + i * 255 / (DOME_LEDS > 0 ? DOME_LEDS : 1)), 255, 220)) : d;
     for (int i = 0; i < EYE_LEDS; i++) eye(i) = CRGB(40, 0, 0);
     if (flash.until && (int32_t)(t - flash.until) >= 0) flash.until = 0;
     if (flash.until) {                      // the robot-wide moments over everything

@@ -62,6 +62,7 @@ var _video: VideoStreamPlayer      # one decoder; every screen shows its texture
 var _image: Texture2D              # the question's picture (or null)
 var _answers := {}                 # tile_id -> answer index
 var _wrong := {}                   # tile_id -> wrong / no answers (not counting shielded ones)
+var _tick := 0                     # the countdown's last whole second (a sound + light cue for each of the last 5)
 var _streak_bonus := {}            # tile_id -> true: reached a streak milestone this round
 var _done := false
 
@@ -255,6 +256,11 @@ func _update(delta: float) -> void:
 	if _done:
 		return
 	_phase_left -= delta
+	if _phase == "question":             # the last seconds: a tick each (sound, light cue)
+		var left := ceili(_phase_left)
+		if left != _tick and left >= 1 and left <= 5:
+			game.arena.cue(&"countdown", 0, {"seconds": left})
+		_tick = left
 	if _phase == "video":
 		if _video == null or not _video.is_playing():
 			_stop_video()
@@ -265,6 +271,7 @@ func _update(delta: float) -> void:
 		_phase = "timeup"
 		_phase_left = timeup_time
 		game.arena.narrator.say("time_up", "Tijd om!", "time_up", {}, true)
+		game.arena.sound.play(&"time_up")
 	elif _phase == "timeup" and _phase_left <= 0.0:
 		_phase = "answers"               # everyone's answer icon
 		_phase_left = answers_time
@@ -381,9 +388,14 @@ func _reveal() -> void:
 ## Shielded players are shot at too, but the shield blocks it. The robot's shot
 ## only shows the answer was wrong: lives change at the end of the round.
 func _attacks(right: Array[int], wrong: Array[int], shielded: Array[int]) -> void:
-	game.arena.players_attack(right, wrong.is_empty() and shielded.is_empty())
-	if not right.is_empty() and not (wrong.is_empty() and shielded.is_empty()):
+	var any_wrong := not (wrong.is_empty() and shielded.is_empty())
+	if not right.is_empty():
+		game.arena.sound.play(&"quiz_right")
+	game.arena.players_attack(right, not any_wrong)
+	if not right.is_empty() and any_wrong:
 		await game.get_tree().create_timer(1.6).timeout
+	if any_wrong:
+		game.arena.sound.play(&"quiz_wrong")
 	game.arena.robot_attack(wrong, Color(1.0, 0.1, 0.05), shielded, false)
 
 

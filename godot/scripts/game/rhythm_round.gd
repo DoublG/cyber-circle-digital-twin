@@ -20,6 +20,9 @@ extends GameRound
 ## arrives, minus `latency_ms` (the tile -> game delay of the installation). The
 ## band and the line are a part of the fall: the faster the symbols, the less
 ## time you have. Every player gets the same chart.
+## With music (SoundBoard music_ritme, from the round's first moment) the
+## symbols land on its beats: music_bpm (0: free timing, no grid) puts every
+## symbol on the nearest half beat.
 
 var fall_start := 2.6            # s from the top to the line at the start ...
 var fall_end := 1.3              # ... and at the end of the round
@@ -33,6 +36,7 @@ var points_line := 3
 var points_band := 1
 var points_wrong := -1
 var latency_ms := 0.0
+var music_bpm := 120.0           # the Ritme music's tempo (0: no beat grid)
 
 var notes := []                  # {t: hit time (s since the start), lane: 0..3, fall: s}
 var clock := 0.0                 # s since the round started (stops when paused)
@@ -72,6 +76,7 @@ func tunables() -> Array:
 		setting("points_band", "Punten in de gele band", 0, 20, 1),
 		setting("points_wrong", "Punten zomaar gedrukt", -20, 0, 1),
 		setting("latency_ms", "Vertraging tegel -> spel (zonder tijdstempel)", 0, 500, 10, "ms"),
+		setting("music_bpm", "Muziek: tempo (0 = geen beat)", 0, 240, 1, "bpm"),
 	]
 
 
@@ -89,6 +94,8 @@ func make_chart() -> Array:
 	var out := []
 	var t := fall_start + 1.0              # the first symbol falls the whole way
 	var last_lane := -1
+	var step := 30.0 / music_bpm if music_bpm > 0.0 else 0.0   # half a beat
+	var last_t := -1.0
 	while t < duration - 0.6:
 		var p := t / duration
 		var fall := lerpf(fall_start, fall_end, p)
@@ -101,8 +108,14 @@ func make_chart() -> Array:
 			var chance := parallel_chance * clampf((p - parallel_from) / (1.0 - parallel_from) * 1.5, 0.0, 1.0)
 			if randf() < chance:
 				count = 2
+		var at := t
+		if step > 0.0:                     # on the music's grid, never two moments on one half beat
+			at = maxf(roundf(t / step) * step, last_t + step)
+			if at >= duration - 0.6:
+				break
+		last_t = at
 		for k in count:
-			out.append({"t": t, "lane": lanes[k], "fall": fall})
+			out.append({"t": at, "lane": lanes[k], "fall": fall})
 		last_lane = lanes[0]
 		t += lerpf(gap_start, gap_end, pow(p, 0.8)) * (1.4 if count > 1 else 1.0)
 	return out

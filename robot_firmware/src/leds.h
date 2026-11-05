@@ -11,7 +11,8 @@ void setBrightness(int b);
 void setEffect(Effect e);
 void setBulbs(int side, CRGB c);                // -1: every side (and the effect off)
 void setDome(CRGB c);
-void setParty(bool on);
+void setParty(bool on);                         // the party lamp: the dome's colours + the star light
+bool starLight();                               // the star light's relay is on
 void glow(int side, CRGB c, uint32_t ms);
 void charge(uint32_t sides, CRGB c, uint32_t ms);   // sides: a bit per side
 void shot(CRGB c);

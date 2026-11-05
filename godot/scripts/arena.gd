@@ -260,7 +260,7 @@ func replica_fields() -> Dictionary:
 	var f := {"players": _players, "pending": pending, "disabled": _disabled, "not_installed": _not_installed,
 		"dying": dying.keys(), "clip_waiting": clip_waiting, "clip_started": clip_started, "tiles": t,
 		"texts": Texts.values,
-		"sound": {"volume": sound.volume, "enabled": sound.enabled},
+		"sound": {"volume": sound.volume, "music_volume": sound.music_volume, "enabled": sound.enabled},
 		"voice": {"enabled": narrator.enabled, "output": narrator.output, "volume": narrator.volume},
 		"lights": {"brightness": lights.brightness, "flashes": lights.flashes},
 		"robot_on": robot.powered or game.power_show == "boot"}   # (a show: the NPC event plays it)
@@ -299,6 +299,7 @@ func apply_replica(f: Dictionary, full: bool) -> void:
 		robot.set_powered(bool(f.robot_on))      # (joined while it is off / on: no show)
 	if f.has("sound"):
 		sound.volume = int(f.sound.volume)
+		sound.music_volume = int(f.sound.get("music_volume", sound.music_volume))
 	if f.has("voice"):
 		narrator.enabled = int(f.voice.enabled)
 		narrator.output = int(f.voice.output)

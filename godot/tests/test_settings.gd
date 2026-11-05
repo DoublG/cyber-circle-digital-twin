@@ -56,9 +56,10 @@ func _ready() -> void:
 	check(is_equal_approx(float(cyc.program.levels[0].speed), 21.0), "cyclone: light 1.5x as fast in the program")
 
 	var events := [&"charge", &"attack", &"hit", &"shield", &"death", &"zap", &"explosion", &"life",
-		&"round_start", &"scoreboard", &"join", &"random"]
+		&"round_start", &"scoreboard", &"join", &"random", &"quiz_right", &"quiz_wrong", &"countdown", &"time_up",
+		&"ranking", &"drone_hum", &"music_lobby", &"music_ritme"]
 	check(events.all(func(e): return arena.sound.has_sounds(e)), "sounds for every event (data/sounds/)")
-	check(arena.sound._sounds[&"random"].size() == 5, "5 random sounds")
+	check(arena.sound._sounds[&"random"].size() >= 5, "5+ random sounds (%d)" % arena.sound._sounds[&"random"].size())
 	game.apply_settings({"sound": {"volume": 30, "random_min": 1, "random_max": 2}})
 	check(arena.sound.volume == 30 and arena.sound.random_min == 5.0, "sound settings (clamped: min 5 s)")
 	game.apply_settings({})

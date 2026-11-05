@@ -1,12 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="910" viewBox="0 0 1400 910" font-family="Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="920" viewBox="0 0 1400 920" font-family="Helvetica, Arial, sans-serif">
 <rect width="100%" height="100%" fill="#ffffff"/>
 <text x="24" y="38" font-size="24" text-anchor="start" font-weight="700" fill="#24292f">Screens, sound and lights – wiring</text>
-<text x="24" y="62" font-size="13" text-anchor="start" font-weight="400" fill="#57606a">The server drives the overview and the sound; 4 Raspberry Pi 5 drive the 7 split screens (Pi 4 at the mobile station); DMX via your lighting system</text>
+<text x="24" y="62" font-size="13" text-anchor="start" font-weight="400" fill="#57606a">The server drives the overview; 4 Raspberry Pi 5 drive the 7 split screens and play the sound (Pi 4 at the mobile station); DMX via your lighting system</text>
 <rect x="40" y="100" width="330" height="110" rx="8" fill="#ddf4ff" stroke="#57606a" stroke-width="1.5"/>
 <text x="52" y="122" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Server (control + overview)</text>
 <text x="52" y="151.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">HDMI / DP → overview screen</text>
-<text x="52" y="167.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">5.1 sound card: front L/R = effects,</text>
-<text x="52" y="183.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">centre = read-aloud voice (voice output 2)</text>
+<text x="52" y="167.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">sound card: only the fallback (no Pis,</text>
+<text x="52" y="183.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">or Geluid op = master / beide)</text>
 <rect x="560" y="100" width="230" height="46" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
 <text x="572" y="122" font-size="13" text-anchor="start" font-weight="700" fill="#24292f">Overview</text>
 <text x="780" y="121" font-size="11" text-anchor="end" font-weight="400" fill="#57606a">visitors, the whole room</text>
@@ -44,8 +44,8 @@
 <text x="378" y="118" font-size="10" text-anchor="start" font-weight="600" fill="#8250df">HDMI / DP</text>
 <rect x="40" y="230" width="330" height="68" rx="8" fill="#fbefff" stroke="#57606a" stroke-width="1.5"/>
 <text x="52" y="252" font-size="13" text-anchor="start" font-weight="700" fill="#24292f">Pi 1  ·  Pi 5, inside the robot</text>
-<text x="52" y="279.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Godot display node · USB-C 27 W</text>
-<text x="52" y="294.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Ethernet · active cooler</text>
+<text x="52" y="279.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">display node · USB-C 27 W · Ethernet · cooler</text>
+<text x="52" y="294.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">sound: its 3.5 mm jack / HDMI → speakers</text>
 <polyline points="370,248 450,248 480,179 560,179" fill="none" stroke="#8250df" stroke-width="1.8" stroke-linejoin="round"/>
 <polygon points="560.0,179.0 550.9,183.1 550.9,174.9" fill="#8250df"/>
 <text x="378" y="244" font-size="10" text-anchor="start" font-weight="600" fill="#8250df">micro-HDMI 0</text>
@@ -54,8 +54,8 @@
 <text x="378" y="274" font-size="10" text-anchor="start" font-weight="600" fill="#8250df">micro-HDMI 1</text>
 <rect x="40" y="310" width="330" height="68" rx="8" fill="#fbefff" stroke="#57606a" stroke-width="1.5"/>
 <text x="52" y="332" font-size="13" text-anchor="start" font-weight="700" fill="#24292f">Pi 2  ·  Pi 5, inside the robot</text>
-<text x="52" y="359.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Godot display node · USB-C 27 W</text>
-<text x="52" y="374.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Ethernet · active cooler</text>
+<text x="52" y="359.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">display node · USB-C 27 W · Ethernet · cooler</text>
+<text x="52" y="374.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">sound: its 3.5 mm jack / HDMI → speakers</text>
 <polyline points="370,328 450,328 480,291 560,291" fill="none" stroke="#8250df" stroke-width="1.8" stroke-linejoin="round"/>
 <polygon points="560.0,291.0 550.9,295.1 550.9,286.9" fill="#8250df"/>
 <text x="378" y="324" font-size="10" text-anchor="start" font-weight="600" fill="#8250df">micro-HDMI 0</text>
@@ -64,16 +64,16 @@
 <text x="378" y="354" font-size="10" text-anchor="start" font-weight="600" fill="#8250df">micro-HDMI 1</text>
 <rect x="40" y="390" width="330" height="68" rx="8" fill="#fbefff" stroke="#57606a" stroke-width="1.5"/>
 <text x="52" y="412" font-size="13" text-anchor="start" font-weight="700" fill="#24292f">Pi 3  ·  Pi 5, inside the robot</text>
-<text x="52" y="439.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Godot display node · USB-C 27 W</text>
-<text x="52" y="454.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Ethernet · active cooler</text>
+<text x="52" y="439.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">display node · USB-C 27 W · Ethernet · cooler</text>
+<text x="52" y="454.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">sound: its 3.5 mm jack / HDMI → speakers</text>
 <polyline points="370,408 450,408 480,403 560,403" fill="none" stroke="#8250df" stroke-width="1.8" stroke-linejoin="round"/>
 <polygon points="560.0,403.0 550.9,407.1 550.9,398.9" fill="#8250df"/>
 <text x="378" y="404" font-size="10" text-anchor="start" font-weight="600" fill="#8250df">micro-HDMI 0</text>
 <text x="378" y="440" font-size="10" text-anchor="start" font-weight="400" fill="#57606a">HDMI 1: spare</text>
 <rect x="40" y="470" width="330" height="68" rx="8" fill="#fbefff" stroke="#57606a" stroke-width="1.5"/>
 <text x="52" y="492" font-size="13" text-anchor="start" font-weight="700" fill="#24292f">Pi 4  ·  Pi 5, at the mobile station</text>
-<text x="52" y="519.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Godot display node · USB-C 27 W</text>
-<text x="52" y="534.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Ethernet · active cooler</text>
+<text x="52" y="519.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">display node · USB-C 27 W · Ethernet · cooler</text>
+<text x="52" y="534.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">sound: its 3.5 mm jack / HDMI → speakers</text>
 <polyline points="370,488 450,488 480,459 560,459" fill="none" stroke="#8250df" stroke-width="1.8" stroke-linejoin="round"/>
 <polygon points="560.0,459.0 550.9,463.1 550.9,454.9" fill="#8250df"/>
 <text x="378" y="484" font-size="10" text-anchor="start" font-weight="600" fill="#8250df">micro-HDMI 0</text>
@@ -82,39 +82,24 @@
 <text x="378" y="514" font-size="10" text-anchor="start" font-weight="600" fill="#8250df">micro-HDMI 1</text>
 <text x="675" y="565" font-size="11" text-anchor="middle" font-weight="600" fill="#8250df">micro-HDMI → HDMI: passive ≤ 3–5 m; from the robot to a wall screen further away: active / optical HDMI</text>
 <text x="675" y="581" font-size="11" text-anchor="middle" font-weight="400" fill="#57606a">monitor: scaling 1:1 (the SETUP test pattern shows it), sleep off · which tiles a screen shows: GAME_SCREENS</text>
-<rect x="870" y="100" width="230" height="80" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
-<text x="882" y="122" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Amplifier (stereo)</text>
-<text x="882" y="151.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">line in ← front L/R</text>
-<text x="882" y="167.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">→ room speakers</text>
-<rect x="1140" y="100" width="220" height="80" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
-<text x="1152" y="122" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Room speakers</text>
-<text x="1152" y="151.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">sound effects, music</text>
-<text x="1152" y="167.5" font-size="12" text-anchor="start" font-weight="400" fill="#57606a">(left / right of the robot)</text>
-<rect x="870" y="210" width="230" height="80" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
-<text x="882" y="232" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Voice: active speaker</text>
-<text x="882" y="261.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">or a headphone amplifier</text>
-<text x="882" y="277.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">← centre (3.5 mm jack)</text>
-<rect x="1140" y="210" width="220" height="80" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
-<text x="1152" y="232" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Headphones / speaker</text>
-<text x="1152" y="261.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">near the mobile station:</text>
-<text x="1152" y="277.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">the read-aloud track only</text>
-<polyline points="345,100 345,88 830,88 830,140 870,140" fill="none" stroke="#1a7f37" stroke-width="2.2" stroke-linejoin="round"/>
-<polygon points="870.0,140.0 860.9,144.1 860.9,135.9" fill="#1a7f37"/>
-<polyline points="320,100 320,78 845,78 845,250 870,250" fill="none" stroke="#1a7f37" stroke-width="2.2" stroke-linejoin="round"/>
-<polygon points="870.0,250.0 860.9,254.1 860.9,245.9" fill="#1a7f37"/>
-<text x="853" y="76" font-size="10.5" text-anchor="start" font-weight="700" fill="#1a7f37">centre</text>
-<text x="822" y="104" font-size="10.5" text-anchor="end" font-weight="700" fill="#1a7f37" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">front L/R</text>
-<polyline points="1100,140 1140,140" fill="none" stroke="#1a7f37" stroke-width="2.2" stroke-linejoin="round"/>
-<polygon points="1140.0,140.0 1130.9,144.1 1130.9,135.9" fill="#1a7f37"/>
-<polyline points="1100,250 1140,250" fill="none" stroke="#1a7f37" stroke-width="2.2" stroke-linejoin="round"/>
-<polygon points="1140.0,250.0 1130.9,254.1 1130.9,245.9" fill="#1a7f37"/>
-<rect x="870" y="320" width="240" height="104.0" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
-<text x="882" y="340" font-size="12.5" text-anchor="start" font-weight="700" fill="#24292f">Voice per screen (option)</text>
-<text x="882" y="362" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">A Pi per screen pair can also</text>
-<text x="882" y="378.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">play its own screens&#x27; voice lines</text>
-<text x="882" y="395.0" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">(USB audio: the lines carry the</text>
-<text x="882" y="411.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">screens they belong to).</text>
-<rect x="20" y="650" width="1360" height="240" rx="14" fill="#fff1e5" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
+<rect x="870" y="100" width="490" height="70" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="882" y="122" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Server sound card  –  the fallback</text>
+<text x="882" y="150.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">no Pis connected, or Geluid op = master / beide: 5.1, front L/R = the</text>
+<text x="882" y="165.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">effects, centre = the voice (its own jack: a speaker or headphones)</text>
+<polyline points="345,100 345,88 845,88 845,135 870,135" fill="none" stroke="#1a7f37" stroke-width="2.2" stroke-linejoin="round" stroke-dasharray="5 4"/>
+<polygon points="870.0,135.0 860.9,139.1 860.9,130.9" fill="#1a7f37"/>
+<text x="853" y="82" font-size="10.5" text-anchor="start" font-weight="700" fill="#1a7f37">fallback</text>
+<rect x="870" y="195" width="490" height="170.0" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
+<text x="882" y="215" font-size="12.5" text-anchor="start" font-weight="700" fill="#24292f">Sound – on the Pis (default)</text>
+<text x="882" y="237" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">Each Pi plays the sound itself, on its 3.5 mm jack or HDMI:</text>
+<text x="882" y="253.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">every sound effect (the master picks the file, all play the same)</text>
+<text x="882" y="270.0" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">+ the read-aloud lines of its own screens (a question on every Pi,</text>
+<text x="882" y="286.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">an invite only on the Pi with that tile&#x27;s screen).</text>
+<text x="882" y="303.0" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">Pi 1–3 (in the robot): active speakers on the jack, or the monitors&#x27;</text>
+<text x="882" y="319.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">own speakers over HDMI. Pi 4: a speaker / headphones at the station.</text>
+<text x="882" y="336.0" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">Instellingen › Geluid: automatisch = on the Pis when any are connected.</text>
+<text x="882" y="352.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">Voorlezen (the narrator) has its own on / off – off by default.</text>
+<rect x="20" y="650" width="1360" height="250" rx="14" fill="#fff1e5" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
 <text x="34" y="670" font-size="13" text-anchor="start" font-weight="700" fill="#57606a">LIGHTS  (your lighting system – the game only sends MQTT)</text>
 <rect x="40" y="690" width="250" height="90" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
 <text x="52" y="712" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Server / broker</text>
@@ -164,16 +149,17 @@
 <text x="40" y="820" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">DMX512: one daisy chain (bus), 120 Ω DMX cable (not microphone cable), XLR 3- or 5-pin, max 32 fixtures and ~300 m</text>
 <text x="40" y="838" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">per chain, a 120 Ω terminator in the last fixture&#x27;s DMX out. More fixtures / long runs: a DMX splitter (opto-isolated).</text>
 <text x="40" y="860" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">Map fixtures by tile number or by angle (T01 = 0°, clockwise ≈ 27.7° per tile) – the events carry both.  Flashes: at most 3 per second, none when flashes = false.</text>
-<rect x="1130" y="330" width="250" height="130" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
-<text x="1142" y="350" font-size="12" text-anchor="start" font-weight="700" fill="#24292f">Legend</text>
-<polyline points="1144,366 1190,366" fill="none" stroke="#8250df" stroke-width="2.2" stroke-linejoin="round"/>
-<text x="1202" y="370" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">HDMI / DisplayPort</text>
-<polyline points="1144,386 1190,386" fill="none" stroke="#1a7f37" stroke-width="2.2" stroke-linejoin="round"/>
-<text x="1202" y="390" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">analogue audio</text>
-<polyline points="1144,406 1190,406" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
-<text x="1202" y="410" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">MQTT</text>
-<polyline points="1144,426 1190,426" fill="none" stroke="#6e7781" stroke-width="2.2" stroke-linejoin="round"/>
-<text x="1202" y="430" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">USB</text>
-<polyline points="1144,446 1190,446" fill="none" stroke="#d4730b" stroke-width="2.2" stroke-linejoin="round"/>
-<text x="1202" y="450" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">DMX512</text>
+<text x="40" y="880" font-size="11.5" text-anchor="start" font-weight="400" fill="#57606a">The robot&#x27;s own lights and smoke are not DMX: its ESP32 runs them (robot/cmd, robot_wiring.svg).</text>
+<rect x="870" y="400" width="250" height="130" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
+<text x="882" y="420" font-size="12" text-anchor="start" font-weight="700" fill="#24292f">Legend</text>
+<polyline points="884,436 930,436" fill="none" stroke="#8250df" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="942" y="440" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">HDMI / DisplayPort</text>
+<polyline points="884,456 930,456" fill="none" stroke="#1a7f37" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="942" y="460" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">analogue audio</text>
+<polyline points="884,476 930,476" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="942" y="480" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">MQTT</text>
+<polyline points="884,496 930,496" fill="none" stroke="#6e7781" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="942" y="500" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">USB</text>
+<polyline points="884,516 930,516" fill="none" stroke="#d4730b" stroke-width="2.2" stroke-linejoin="round"/>
+<text x="942" y="520" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">DMX512</text>
 </svg>

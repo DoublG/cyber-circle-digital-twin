@@ -1226,6 +1226,7 @@ func _show_round_ranking(changes: Dictionary) -> void:
 	screen_wall.set_timer("")
 	show_view({"kind": "ranking", "title": title, "label": label, "rows": rows})
 	ranking_shown.emit(title, label, rows)
+	arena.sound.play(&"ranking")
 	for r in rows:                                    # each player: their own place (accessible page)
 		var change := " Je krijgt er een leven bij." if r.change > 0 else (" Je verliest een leven." if r.change < 0 else "")
 		arena.narrator.say_to(r.tile, "place", "Je bent %de met %s %s.%s" % [r.place, str(r.score), label.to_lower(), change])

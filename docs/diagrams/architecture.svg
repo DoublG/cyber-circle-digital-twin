@@ -9,7 +9,7 @@
 <rect x="20" y="610" width="300" height="250" rx="14" fill="#fff1e5" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
 <text x="34" y="630" font-size="13" text-anchor="start" font-weight="700" fill="#57606a">LIGHTING  (your system)</text>
 <rect x="350" y="610" width="470" height="160" rx="14" fill="#dafbe1" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
-<text x="364" y="630" font-size="13" text-anchor="start" font-weight="700" fill="#57606a">INSTALLATION FLOOR</text>
+<text x="364" y="630" font-size="13" text-anchor="start" font-weight="700" fill="#57606a">INSTALLATION FLOOR  +  THE ROBOT</text>
 <rect x="860" y="640" width="520" height="230" rx="14" fill="#fbefff" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
 <text x="874" y="660" font-size="13" text-anchor="start" font-weight="700" fill="#57606a">SCREEN PIS  (Pi 5 · Pi 1–3 inside the robot, Pi 4 at the station)</text>
 <rect x="40" y="110" width="260" height="80" rx="8" fill="#f6f8fa" stroke="#57606a" stroke-width="1.5"/>
@@ -65,9 +65,10 @@
 <text x="1152" y="431.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">1920×1080, HDMI / DP</text>
 <text x="1152" y="447.5" font-size="12" text-anchor="start" font-weight="400" fill="#57606a">(visitors, the whole room)</text>
 <rect x="1140" y="480" width="210" height="85" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
-<text x="1152" y="502" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Sound card (5.1)</text>
-<text x="1152" y="531.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">front L/R: sound effects</text>
-<text x="1152" y="547.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">centre: read-aloud voice</text>
+<text x="1152" y="502" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Sound card (fallback)</text>
+<text x="1152" y="530.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">only without Pis, or with</text>
+<text x="1152" y="545.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Geluid op = master / beide</text>
+<text x="1152" y="560.5" font-size="11" text-anchor="start" font-weight="400" fill="#57606a">(5.1: centre = the voice)</text>
 <rect x="880" y="680" width="112" height="96" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
 <text x="892" y="702" font-size="13" text-anchor="start" font-weight="700" fill="#24292f">Pi 1</text>
 <text x="892" y="728.5" font-size="10" text-anchor="start" font-weight="400" fill="#24292f">Godot display</text>
@@ -93,8 +94,9 @@
 <text x="1264" y="756.5" font-size="10" text-anchor="start" font-weight="400" fill="#24292f">Mobile A</text>
 <text x="1264" y="770.5" font-size="10" text-anchor="start" font-weight="400" fill="#24292f">Mobile B</text>
 <text x="1120" y="800" font-size="10.5" text-anchor="middle" font-weight="400" fill="#24292f">each: the game&#x27;s scene without its logic, following the master&#x27;s state (ENet UDP 7350)</text>
-<text x="1120" y="815" font-size="10.5" text-anchor="middle" font-weight="400" fill="#24292f">renders its 2 screens on its micro-HDMI outputs, plays the sound; reads its own tiles (MQTT)</text>
-<text x="1120" y="838" font-size="10.5" text-anchor="middle" font-weight="400" fill="#57606a" font-style="italic">(or one game PC renders every screen itself: GAME_REMOTE_SCREENS empty)</text>
+<text x="1120" y="814" font-size="10.5" text-anchor="middle" font-weight="400" fill="#24292f">renders its 2 screens, plays the sound (every effect + its screens&#x27; voice lines)</text>
+<text x="1120" y="828" font-size="10.5" text-anchor="middle" font-weight="400" fill="#24292f">on its HDMI / jack · reads its own tiles (MQTT, read-only)</text>
+<text x="1120" y="848" font-size="10.5" text-anchor="middle" font-weight="400" fill="#57606a" font-style="italic">(or one game PC renders every screen itself: GAME_REMOTE_SCREENS empty)</text>
 <polyline points="300,140 380,140" fill="none" stroke="#57606a" stroke-width="2.2" stroke-linejoin="round"/>
 <polygon points="380.0,140.0 370.9,144.1 370.9,135.9" fill="#57606a"/>
 <text x="340.0" y="134.0" font-size="11" text-anchor="middle" font-weight="600" fill="#57606a" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">HTTPS</text>
@@ -152,22 +154,33 @@
 <polyline points="1184,776 1184,790" fill="none" stroke="#8250df" stroke-width="2.2" stroke-linejoin="round"/>
 <polyline points="1308,776 1308,790" fill="none" stroke="#8250df" stroke-width="2.2" stroke-linejoin="round"/>
 <text x="870" y="892" font-size="11" text-anchor="start" font-weight="700" fill="#8250df">→ HDMI to the 7 split screens (av_wiring.svg) · Pi 4 stands at the mobile station</text>
-<polyline points="585,565 585,640" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
-<polygon points="585.0,640.0 580.9,630.9 589.1,630.9" fill="#0a7d6f"/>
-<polygon points="585.0,565.0 589.1,574.1 580.9,574.1" fill="#0a7d6f"/>
-<text x="593" y="580" font-size="10.5" text-anchor="start" font-weight="700" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">MQTT :1883</text>
-<text x="593" y="594" font-size="10.5" text-anchor="start" font-weight="600" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">tile/&lt;n&gt;/…, device/&lt;mac&gt;/…</text>
+<polyline points="500,565 500,640" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="500.0,640.0 495.9,630.9 504.1,630.9" fill="#0a7d6f"/>
+<polygon points="500.0,565.0 504.1,574.1 495.9,574.1" fill="#0a7d6f"/>
+<text x="508" y="584" font-size="10.5" text-anchor="start" font-weight="700" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">MQTT :1883 · tile/&lt;n&gt;/…,</text>
+<text x="508" y="598" font-size="10.5" text-anchor="start" font-weight="600" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">device/&lt;mac&gt;/…</text>
+<polyline points="717,565 717,640" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
+<polygon points="717.0,640.0 712.9,630.9 721.1,630.9" fill="#0a7d6f"/>
+<polygon points="717.0,565.0 721.1,574.1 712.9,574.1" fill="#0a7d6f"/>
+<text x="711" y="598" font-size="10.5" text-anchor="end" font-weight="700" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">robot/…</text>
 <polyline points="450,565 450,590 170,590 170,640" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
 <polygon points="170.0,640.0 165.9,630.9 174.1,630.9" fill="#0a7d6f"/>
 <text x="300" y="584" font-size="11" text-anchor="middle" font-weight="600" fill="#0a7d6f" stroke="#ffffff" stroke-width="4" stroke-linejoin="round" paint-order="stroke">light/scene, light/event</text>
 <polyline points="170,730 170,770" fill="none" stroke="#d4730b" stroke-width="2.2" stroke-linejoin="round"/>
 <polygon points="170.0,770.0 165.9,760.9 174.1,760.9" fill="#d4730b"/>
 <text x="178" y="755" font-size="10.5" text-anchor="start" font-weight="700" fill="#d4730b">DMX512</text>
-<rect x="380" y="640" width="410" height="110" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
-<text x="392" y="662" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Tiles  T01–T13  +  mobile tiles  M1–M5</text>
-<text x="392" y="691.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">ESP32 + Ethernet (WT32-ETH01): 58 WS2812B LEDs,</text>
-<text x="392" y="707.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">4 pressure sensors (the icons). Runs the tile games</text>
-<text x="392" y="723.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">itself (Reactie, Simon, Cyclone, Zwarte Piet).</text>
+<rect x="380" y="640" width="255" height="110" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="392" y="662" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Tiles  T01–T13 + M1–M5</text>
+<text x="392" y="690.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">ESP32 + Ethernet (WT32-ETH01),</text>
+<text x="392" y="705.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">58 WS2812B LEDs, 4 pressure sensors.</text>
+<text x="392" y="720.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Runs the tile games itself (Reactie,</text>
+<text x="392" y="735.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Simon, Cyclone, Zwarte Piet).</text>
+<rect x="645" y="640" width="145" height="110" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<text x="657" y="662" font-size="13" text-anchor="start" font-weight="700" fill="#24292f">Robot (ESP32)</text>
+<text x="657" y="689.0" font-size="10.5" text-anchor="start" font-weight="400" fill="#24292f">head motor, marks,</text>
+<text x="657" y="703.5" font-size="10.5" text-anchor="start" font-weight="400" fill="#24292f">LEDs, star light,</text>
+<text x="657" y="718.0" font-size="10.5" text-anchor="start" font-weight="400" fill="#24292f">smoke; follows the</text>
+<text x="657" y="732.5" font-size="10.5" text-anchor="start" font-weight="400" fill="#24292f">NPC (robot/cmd)</text>
 <rect x="40" y="640" width="260" height="90" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
 <text x="52" y="662" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">DMX bridge / lighting desk</text>
 <text x="52" y="691.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">MQTT in → looks → DMX / Art-Net</text>
@@ -183,7 +196,7 @@
 <polyline points="364,856 410,856" fill="none" stroke="#0a7d6f" stroke-width="2.2" stroke-linejoin="round"/>
 <text x="422" y="860" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">MQTT (topics in SETUP.md §5)</text>
 <polyline points="364,876 410,876" fill="none" stroke="#bf3989" stroke-width="2.2" stroke-linejoin="round"/>
-<text x="422" y="880" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">video / game state (RTSP, WebRTC, ENet)</text>
+<text x="422" y="880" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">RTSP / WebRTC video, ENet</text>
 <polyline points="364,896 410,896" fill="none" stroke="#8250df" stroke-width="2.2" stroke-linejoin="round"/>
 <text x="422" y="900" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">HDMI / DisplayPort</text>
 <polyline points="364,916 410,916" fill="none" stroke="#1a7f37" stroke-width="2.2" stroke-linejoin="round"/>
@@ -194,7 +207,7 @@
 <text x="622" y="820" font-size="12.5" text-anchor="start" font-weight="700" fill="#24292f">Good to know</text>
 <text x="622" y="842" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">The game never speaks DMX:</text>
 <text x="622" y="858.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">it puts the moments on MQTT.</text>
-<text x="622" y="875.0" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">Tiles and Pis are MQTT clients:</text>
+<text x="622" y="875.0" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">Tiles, robot, Pis: MQTT clients –</text>
 <text x="622" y="891.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">swap one while the game runs.</text>
 <text x="622" y="908.0" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">No accessible page open = no</text>
 <text x="622" y="924.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">video, no encoder, MediaMTX idles.</text>

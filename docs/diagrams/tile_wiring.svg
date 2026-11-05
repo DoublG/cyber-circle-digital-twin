@@ -5,15 +5,15 @@
 <rect x="20" y="90" width="330" height="400" rx="14" fill="#ffebe9" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
 <text x="34" y="110" font-size="13" text-anchor="start" font-weight="700" fill="#57606a">POWER</text>
 <rect x="40" y="120" width="290" height="70" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
-<text x="52" y="142" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">24 V DC in  (from the central PSU)</text>
-<text x="52" y="171.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">2-core 1.5 mm², fuse 2 A per tile</text>
+<text x="52" y="142" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">12 V DC in  (the ATX in the robot)</text>
+<text x="52" y="170.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">its 12 V rail · 2-core 1.5 mm², fuse 2 A per tile</text>
 <rect x="40" y="230" width="290" height="80" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
-<text x="52" y="252" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">DC-DC buck 24 V → 5 V, 5 A</text>
+<text x="52" y="252" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">DC-DC buck 12 V → 5 V, 5 A</text>
 <text x="52" y="281.5" font-size="12" text-anchor="start" font-weight="400" fill="#57606a">(or a local 5 V / 5 A supply)</text>
 <text x="52" y="297.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">set to 5.1 V before connecting</text>
 <polyline points="120,190 120,230" fill="none" stroke="#a40e26" stroke-width="2.2" stroke-linejoin="round"/>
 <polygon points="120.0,230.0 115.9,220.9 124.1,220.9" fill="#a40e26"/>
-<text x="128" y="214" font-size="11" text-anchor="start" font-weight="700" fill="#a40e26">+24 V</text>
+<text x="128" y="214" font-size="11" text-anchor="start" font-weight="700" fill="#a40e26">+12 V</text>
 <polyline points="240,190 240,230" fill="none" stroke="#24292f" stroke-width="2.2" stroke-linejoin="round"/>
 <polygon points="240.0,230.0 235.9,220.9 244.1,220.9" fill="#24292f"/>
 <text x="248" y="214" font-size="11" text-anchor="start" font-weight="700" fill="#24292f">GND</text>
@@ -167,13 +167,15 @@
 <polyline points="512,328 455,328 455,528" fill="none" stroke="#e16f24" stroke-width="2.2" stroke-linejoin="round"/>
 <polygon points="455.0,528.0 450.9,518.9 459.1,518.9" fill="#e16f24"/>
 <text x="449" y="500" font-size="10.5" text-anchor="end" font-weight="700" fill="#e16f24">3V3 → top of each FSR</text>
-<rect x="840" y="300" width="280" height="150" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
+<rect x="840" y="300" width="280" height="160" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
 <text x="852" y="322" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Flashing (USB-serial, 3.3 V)</text>
 <text x="852" y="350.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">adapter TX → RXD0 (IO3)</text>
 <text x="852" y="365.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">adapter RX → TXD0 (IO1)</text>
 <text x="852" y="380.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">GND → GND (adapter: 3.3 V levels!)</text>
 <text x="852" y="395.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">IO0 → GND while EN is pulsed = boot mode</text>
 <text x="852" y="410.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">then: deploy/install/flash_tiles.sh</text>
+<text x="852" y="425.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">later over Ethernet (OTA): pio run -e ota</text>
+<text x="852" y="440.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">  -t upload --upload-port &lt;IP&gt;</text>
 <polyline points="788,328 840,328" fill="none" stroke="#6e7781" stroke-width="1.4" stroke-linejoin="round"/>
 <polygon points="788.0,328.0 797.1,323.9 797.1,332.1" fill="#6e7781"/>
 <polyline points="788,372 840,372" fill="none" stroke="#6e7781" stroke-width="1.4" stroke-linejoin="round"/>
@@ -183,16 +185,16 @@
 <rect x="520" y="620" width="600" height="153.5" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
 <text x="532" y="640" font-size="12.5" text-anchor="start" font-weight="700" fill="#24292f">Power budget &amp; choices</text>
 <text x="532" y="662" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">LEDs: 58 × 60 mA = 3.5 A at full white; BRIGHTNESS 160 → ≤ 2.2 A  ⇒  5 V / 5 A buck</text>
-<text x="532" y="678.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">ESP32 + Ethernet: ~250 mA. One tile ≈ 12 W max; 13 tiles + reserve ⇒ 24 V / 10 A (240 W) PSU</text>
-<text x="532" y="695.0" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">Why 24 V: 5 V over 10 m of cable loses volts; 24 V to each tile, 5 V made at the tile</text>
+<text x="532" y="678.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">ESP32 + Ethernet: ~250 mA. One tile ≈ 12 W max (≈ 1.1 A at 12 V); 13 tiles ≈ 15 A on 12 V</text>
+<text x="532" y="695.0" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">Why 12 V: 5 V over 10 m of cable loses volts; the ATX 12 V rail to each tile, 5 V made there</text>
 <text x="532" y="711.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">Level shifter: WS2812B at 5 V wants ≥ 3.5 V data; 3.3 V often works, not always</text>
 <text x="532" y="728.0" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">Other modules: Olimex ESP32-POE (ETH addr 0, power 12, clock GPIO17 out: config.h) – PoE</text>
-<text x="532" y="744.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">802.3af gives only ~13 W: lower BRIGHTNESS to ≤ 100 or keep the 24 V feed for the LEDs</text>
+<text x="532" y="744.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">802.3af gives only ~13 W: lower BRIGHTNESS to ≤ 100 or keep the 12 V feed for the LEDs</text>
 <text x="532" y="761.0" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">A bare ESP32 DevKit: same pins, wifi instead of Ethernet (pio env esp32dev-wifi)</text>
 <rect x="1150" y="760" width="250" height="170" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
 <text x="1162" y="780" font-size="12" text-anchor="start" font-weight="700" fill="#24292f">Legend</text>
 <polyline points="1164,796 1210,796" fill="none" stroke="#a40e26" stroke-width="2.2" stroke-linejoin="round"/>
-<text x="1222" y="800" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">24 V</text>
+<text x="1222" y="800" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">12 V (ATX)</text>
 <polyline points="1164,816 1210,816" fill="none" stroke="#cf222e" stroke-width="2.2" stroke-linejoin="round"/>
 <text x="1222" y="820" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">5 V</text>
 <polyline points="1164,836 1210,836" fill="none" stroke="#e16f24" stroke-width="2.2" stroke-linejoin="round"/>

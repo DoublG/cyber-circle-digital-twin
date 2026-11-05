@@ -361,13 +361,16 @@ static std::string stateJson() {
     for (int i = 0; ledBuf && i < DOME_LEDS; i++) {
         dr += ledBuf[SIDE_LEDS + i].r; dg += ledBuf[SIDE_LEDS + i].g; db += ledBuf[SIDE_LEDS + i].b;
     }
-    doc["dome"] = hex(CRGB(dr / DOME_LEDS, dg / DOME_LEDS, db / DOME_LEDS)).c_str();
+    if (DOME_LEDS > 0) doc["dome"] = hex(CRGB(dr / (DOME_LEDS > 0 ? DOME_LEDS : 1), dg / (DOME_LEDS > 0 ? DOME_LEDS : 1),
+                                         db / (DOME_LEDS > 0 ? DOME_LEDS : 1))).c_str();
+    else doc["dome"] = pinOut[STAR_PIN] == STAR_ACTIVE ? "#ffe9a8" : "#000000";   // the star light (a lamp)
     doc["eye"] = hex(ledBuf ? ledBuf[SIDE_LEDS + DOME_LEDS] : CRGB()).c_str();
     doc["angle"] = angle;
     doc["turns"] = angle / 360.0;
     doc["mark"] = markActive();
     doc["home"] = homeActive();
     doc["smoke"] = pinOut[SMOKE_PIN] == SMOKE_ACTIVE;
+    doc["star"] = pinOut[STAR_PIN] == STAR_ACTIVE;
     doc["blocked"] = blocked;
     JsonDocument rb;
     robot::describe(rb);

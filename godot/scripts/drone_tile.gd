@@ -87,6 +87,11 @@ func _process(delta: float) -> void:
 	_place(delta)
 
 
+## In the air in the ring (or on its way): a player, not crashed (the hum: SoundBoard).
+func is_flying() -> bool:
+	return installed and visible and (not idle or pending) and not _gone
+
+
 ## Position on the way between the park and the ring, facing the robot.
 func _place(_delta: float) -> void:
 	var t: float = arena.clock if arena else 0.0

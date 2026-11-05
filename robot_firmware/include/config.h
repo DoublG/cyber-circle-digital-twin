@@ -108,8 +108,9 @@
 #endif
 
 // ---- LEDs (WS2812B, one chain): the bulbs of every side (SIDES x
-// BULBS_PER_SIDE, side by side from side 0, bottom row first), the dome, the
-// eye (the plunger's muzzle). Change the order to match the wiring.
+// BULBS_PER_SIDE, side by side from side 0, bottom row first), the dome (none
+// on the real robot: its light is the star light below), the eye (the
+// plunger's muzzle). Change the order to match the wiring.
 #ifndef LED_PIN
 #define LED_PIN         4
 #endif
@@ -117,7 +118,7 @@
 #define BULBS_PER_SIDE  3
 #endif
 #ifndef DOME_LEDS
-#define DOME_LEDS       12
+#define DOME_LEDS       0
 #endif
 #ifndef EYE_LEDS
 #define EYE_LEDS        1
@@ -128,7 +129,17 @@
 #define LED_BRIGHTNESS  160
 #endif
 
-// ---- the smoke machine: a relay (or MOSFET) on its trigger / remote input
+// ---- the star light: a 230 V lamp in the dome on a relay (rated for mains),
+// on with the party lamp ({"party": true}, the intro), off during the boot /
+// shutdown shows and when the game is closed
+#ifndef STAR_PIN
+#define STAR_PIN        33
+#endif
+#ifndef STAR_ACTIVE
+#define STAR_ACTIVE     HIGH
+#endif
+
+// ---- the smoke machine (on 230 V mains itself): a relay (or MOSFET) on its trigger / remote input
 #ifndef SMOKE_PIN
 #define SMOKE_PIN       32
 #endif

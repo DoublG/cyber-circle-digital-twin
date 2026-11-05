@@ -4,6 +4,11 @@ used (a random one each time), so real recordings can be added or replace these.
 
   python3 tools/make_sounds.py                 (needs numpy and ffmpeg)
   python3 tools/make_sounds.py boot off ...    (only those events)
+  python3 tools/make_sounds.py --force ...     (also where real sounds are)
+
+Every placeholder carries the tag comment=MARK. An event folder with any other
+sound in it (a real recording, a sound from CREDITS.md) is left alone: the
+placeholders never replace real sounds unless --force.
 """
 
 import os
@@ -17,7 +22,25 @@ import numpy as np
 RATE = 44100
 OUT = os.path.join(os.path.dirname(__file__), "..", "godot", "data", "sounds")
 rng = np.random.default_rng(7)
-ONLY = set(sys.argv[1:])
+FORCE = "--force" in sys.argv
+ONLY = set(a for a in sys.argv[1:] if a != "--force")
+MARK = "placeholder: tools/make_sounds.py"
+_skip = {}                             # event -> True: it has real sounds
+
+
+def has_real_sounds(event):
+    """Any sound in the folder that is not one of our placeholders?"""
+    if event not in _skip:
+        folder = os.path.join(OUT, event)
+        files = [f for f in os.listdir(folder) if f.rsplit(".", 1)[-1].lower() in ("ogg", "wav", "mp3")] \
+            if os.path.isdir(folder) else []
+        tags = [subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format_tags=comment:stream_tags=comment",
+                                "-of", "csv=p=0", os.path.join(folder, f)], capture_output=True, text=True).stdout
+                for f in files]
+        _skip[event] = any(MARK not in t for t in tags)
+        if _skip[event] and not FORCE:
+            print(f"   {event}/: real sounds there - left alone (--force to overwrite)")
+    return _skip[event]
 
 
 def t(seconds):
@@ -78,6 +101,8 @@ def tone(f, seconds, shape=np.sin, decay=None):
 def save(event, name, x, gain=0.8):
     if ONLY and event not in ONLY:
         return
+    if not FORCE and has_real_sounds(event):
+        return
     x = x / (np.max(np.abs(x)) + 1e-9) * gain
     os.makedirs(os.path.join(OUT, event), exist_ok=True)
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
@@ -88,7 +113,7 @@ def save(event, name, x, gain=0.8):
         w.setframerate(RATE)
         w.writeframes((x * 32767).astype(np.int16).tobytes())
     target = os.path.join(OUT, event, name + ".ogg")
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", path, "-c:a", "libvorbis", "-q:a", "5", target],
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", path, "-c:a", "libvorbis", "-q:a", "5", "-metadata", "comment=" + MARK, target],
                    check=True)
     os.remove(path)
     print("  ", os.path.relpath(target, OUT))
@@ -201,3 +226,78 @@ save("power_down", "power_down", lowpass(x, 10) + clicks(5.0, 3) * 0.6)
 x = mix(lowpass(noise(0.35), 2) * env(int(0.35 * RATE), 0.001, 0.05), tone(2500, 0.08, square, decay=0.02) * 0.4)
 save("off", "spark", x, 0.6)
 
+
+# ---- the quiz, the timers, the UITSLAG
+qrng = np.random.default_rng(21)       # (its own: the sounds above stay the same)
+
+# someone was right: a bright rising two-note chime
+x = np.concatenate([tone(784, 0.12, decay=0.1), tone(1175, 0.45, decay=0.22)])
+x = mix(x, np.concatenate([np.zeros(int(0.12 * RATE)), tone(1568, 0.45, decay=0.15) * 0.4]))
+save("quiz_right", "chime", x, 0.7)
+
+# someone was wrong: a low falling buzz
+x = sweep(220, 110, 0.6, square) * 0.6 + sweep(233, 116, 0.6, saw) * 0.4
+save("quiz_wrong", "buzz", lowpass(x, 10) * env(int(0.6 * RATE), 0.005), 0.6)
+
+# a timer's last seconds: a short tick (one per second)
+x = mix(tone(1600, 0.05, square, decay=0.012) * 0.6, tone(800, 0.05, decay=0.02))
+save("countdown", "tick", lowpass(x, 3), 0.6)
+
+# TIJD OM: three falling beeps
+x = np.concatenate([np.concatenate([tone(f, 0.14, square), np.zeros(int(0.04 * RATE))]) for f in (880, 698, 523)])
+save("time_up", "beeps", lowpass(x, 6), 0.6)
+
+# the UITSLAG: a snare roll into a chord
+n = int(1.0 * RATE)
+roll = lowpass(qrng.uniform(-1, 1, n), 3) * (0.5 + 0.5 * (np.arange(n) % int(RATE / 24) < 600)) * np.linspace(0.3, 1, n)
+chord = sum(tone(f, 1.0, square, decay=0.5) for f in (523, 659, 784)) / 3
+save("ranking", "roll", np.concatenate([roll, lowpass(chord, 6)]), 0.7)
+
+# ---- loops: whole cycles of every partial over the loop, no fades (seamless)
+
+
+def cyc(f, seconds):
+    """A frequency rounded to whole cycles in `seconds`."""
+    return round(f * seconds) / seconds
+
+
+# the drones' rotors: a 2 s hum (blade buzz, slowly beating rotors)
+L = 2.0
+tt = t(L)
+x = sum(saw(2 * np.pi * cyc(f, L) * tt) * a for f, a in [(118, 1), (121, .8), (236, .3)])
+x *= 0.75 + 0.25 * np.sin(2 * np.pi * cyc(31, L) * tt)
+save("drone_hum", "rotors", lowpass(x, 14), 0.4)
+
+
+def music(bpm, bars, chords, seed, drums=True):
+    beat = 60 / bpm
+    n = int(round(bars * 4 * beat * RATE))
+    out = np.zeros(n)
+    r = np.random.default_rng(seed)
+
+    def put(x, at):
+        i = int(round(at * RATE))
+        if i < n:
+            out[i:i + x.size] += x[:n - i]
+
+    for b in range(bars):
+        root = chords[b % len(chords)]
+        for k in range(4):                                         # bass on the beats
+            put(tone(root / 2, beat * 0.9, square, decay=beat * 0.5) * 0.35, (b * 4 + k) * beat)
+        for k in range(8):                                         # arpeggio on the eighths
+            f = root * [1, 1.25, 1.5, 2][(k + b) % 4]
+            put(tone(f, beat * 0.45, square, decay=beat * 0.2) * 0.18, (b * 4 + k / 2) * beat)
+        if drums:
+            for k in range(4):                                     # kick on every beat (beat 1 at 0 s)
+                kick = np.sin(2 * np.pi * np.cumsum(np.geomspace(140, 45, int(0.15 * RATE))) / RATE)
+                put(kick * env(kick.size, 0.001, 0.05) * 0.9, (b * 4 + k) * beat)
+            for k in range(4):                                     # hi-hat on the off-beats
+                hat = np.diff(r.uniform(-1, 1, int(0.04 * RATE) + 1)) * env(int(0.04 * RATE), 0.001, 0.01)
+                put(hat * 0.25, (b * 4 + k + 0.5) * beat)
+    return lowpass(out, 3)
+
+
+# the lobby: a calm 19 s chiptune loop (8 bars at 100 bpm, no drums)
+save("music_lobby", "lobby", music(100, 8, [220.0, 174.6, 261.6, 196.0], 3, drums=False), 0.6)
+# Ritme: 120 bpm (RhythmRound music_bpm), 48 s - longer than the 45 s round, beat 1 at 0 s
+save("music_ritme", "ritme_120", music(120, 24, [220.0, 220.0, 174.6, 196.0], 5), 0.7)

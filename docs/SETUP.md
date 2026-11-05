@@ -12,6 +12,10 @@ digital_twin/
     tests/          automatic tests and screenshot scenes
     movie/          the two scripted demo movies
   control/          the control server: database owner, web interface, HTTP API (Python)
+  tile_firmware/    the tiles' ESP32 firmware (PlatformIO)
+  robot_firmware/   the real robot's ESP32 firmware (PlatformIO, with a PC emulator)
+  gamemaster_app/   the gamemaster app (Flutter)
+  deploy/           install scripts, the env file, the broker's access list
   blender/          model sources (build_models.py) and the light bake (bake_models.py)
   tools/            cybercircle_db.py (database), convert_video.sh (videos)
   movies/           rendered demo movies (MP4)
@@ -20,20 +24,22 @@ digital_twin/
 
 ## 1. How it fits together
 
-Diagrams (architecture, network, tile wiring, screens / sound / DMX, floor
+Diagrams (architecture, network, tile and robot wiring, screens / sound / DMX, floor
 plan, sequences): [WIRING.md](WIRING.md).
 
 ```
- operator (browser) ─▶ CONTROL SERVER (overview PC, Python) ── owns ──▶ MySQL database
- Android app ──HTTP─▶   web interface + HTTP API                          (players, questions,
-                          │ MQTT                ▲ HTTP                      scores, tiles, mode)
+ operator (browser) ─▶ CONTROL SERVER (server box, Python) ── owns ──▶ MySQL database
+ gamemaster app ─HTTP─▶  web interface + HTTP API                       (players, questions,
+                          │ MQTT                ▲ HTTP                  scores, tiles, mode)
                           ▼                     │
-                     MQTT broker ◀──────▶ GODOT MASTER (game logic) ──▶ screens
-                          ▲                (questions, scores via HTTP)
- 13 tiles ◀───────────────┘ programs, start/stop, results
+                     MQTT BROKER ◀──────▶ GODOT MASTER (game logic) ──▶ overview screen
+ tiles T01–T13, M1–M5 ◀───┤   │                 │ ENet UDP 7350
+ robot (ESP32)        ◀───┤   │ own tiles       │ (game state, events)
+ lighting → DMX       ◀───┘   │ (read only)     ▼
+                              └──────▶ DISPLAY NODES (Pi 1–4) ──▶ 7 split screens + sound
 ```
 
-* **The control server** (Python, on the overview PC) is the only owner of the
+* **The control server** (Python, on the server box) is the only owner of the
   MySQL database (SQLAlchemy). It serves the **web interface** for the operator and an
   **HTTP API** for the game and the app, and follows / steers the game over
   MQTT. See §10.
@@ -48,6 +54,9 @@ plan, sequences): [WIRING.md](WIRING.md).
 * **The tiles** run their own logic for the tile games (Cyclone, Reaction,
   Simon): the game uploads a program during the round intro, sends `start`,
   and the tile reports results. Message formats: `godot/scripts/tile_firmware.gd`.
+* **The robot** (`robot_firmware/`, an ESP32 with Ethernet like the tiles)
+  turns its head, lights up and puffs smoke on the robot NPC's events, which
+  the master sends on `robot/cmd` (§4 *The real robot*).
 * **The app** creates a player through the control server
   (`POST /api/players`), then assigns them (`POST /api/players/<id>/assign`,
   or publishes `cybercircle/cmd {"assign": <id>, "tile": 3}` itself). The game
@@ -290,10 +299,20 @@ always a fresh start.
 `godot/data/sounds/<event>/` (`.ogg`, `.wav` or `.mp3`): `charge` (the robot
 charges), `attack` (the shot), `hit`, `shield`, `death` (a player is
 exterminated), `zap` (the tile's electrocution), `explosion`, `life` (+1),
-`round_start`, `scoreboard`, `join`, and `random` (now and then while the game
-is open, every 20–60 s). The current files are synthesised placeholders
-(`python3 tools/make_sounds.py`); drop real recordings (e.g. a robot voice) in
-those folders – or in a folder outside the project with `--sounds=DIR`, no
+`round_start`, `scoreboard`, `join`, `random` (now and then while the game
+is open, every 20–60 s), `quiz_right` / `quiz_wrong` (the quiz's reveal),
+`countdown` (each of a timer's last 5 s), `time_up` (TIJD OM), `ranking` (the
+UITSLAG). **Loops** play while their moment lasts: `music_lobby` (the lobby),
+`music_ritme` (the Ritme round, from its first moment: *Ritme › Muziek: tempo*
+puts the symbols on its beats, 0 = free) and `drone_hum` (while a drone flies);
+the music has its own volume (*Muziek volume*). A display that connects late
+picks up a playing loop where it is. TODO.md lists every event with its
+length; [CREDITS.md](../CREDITS.md) where to find free sounds, and the licence
+and credit of every file that is not our own. The current files are free CC0 sounds and music
+from OpenGameArt ([CREDITS.md](../CREDITS.md)); only the robot's show (`boot`,
+`shutdown`, `power_down`, `off`) has synthesised placeholders
+(`python3 tools/make_sounds.py`, which never overwrites a folder with real
+sounds in it). Drop other or own recordings (e.g. a robot voice) in those folders – or in a folder outside the project with `--sounds=DIR`, no
 re-export needed. Volume and the random interval are in *Instellingen*. Sound
 comes from where *Instellingen › Geluid › Geluid op* says: 0 automatic (on
 the display nodes when any are connected – every Pi plays every sound, the
@@ -626,7 +645,10 @@ from the master, and the robot runs the physical part itself:
 * **The lights** (rainbow / chase / party lamp per game phase, a side glowing
   on a good answer, charging, the shot, hits, the overload, an extermination)
   and **the smoke** (a relay: never longer than *Rook max*, never sooner than
-  the pause after the last puff) are timed in the robot.
+  the pause after the last puff) are timed in the robot. The party lamp on the
+  real robot is the **star light**, a 230 V lamp in the dome on a relay (IO33):
+  on with the party lamp, off during the shows and when the game is closed
+  (`robot/state`: `star`).
 
 The web interface: *Tegels › Robot* – its state (side, turns, moving, queue,
 errors), the settings (sent retained on `<prefix>/robot/config`, kept in its
@@ -653,7 +675,7 @@ Prefix `cybercircle` (setting `topic_prefix` on the *Mqtt* node). Payloads are J
 
 | topic | direction | |
 |---|---|---|
-| `cybercircle/cmd` | app/operator → game | `{"assign": 42, "tile": 3}`, `{"game": "start"}`, `{"sound": "attack", "file"?: "laser2.ogg", "volume"?: 60}`, `{"sound_stop": true}`, `{"sound_reload": true}`, … |
+| `cybercircle/cmd` | app/operator → game | `{"assign": 42, "tile": 3}`, `{"game": "start"}`, `{"sound": "attack", "file"?: "laser6.ogg", "volume"?: 60}`, `{"sound_stop": true}`, `{"sound_reload": true}`, … |
 | `cybercircle/light/event` | game → lighting | a game moment for the real lights, see *Lights* below |
 | `cybercircle/light/scene` | game → lighting | retained: the base look, see *Lights* below |
 | `cybercircle/stream` | game → control | a companion video started / stopped `{tile, on, encoder?, error?}` (§14) |
@@ -868,6 +890,7 @@ godot-4 --headless --path . --fixed-fps 60 res://tests/test_db.tscn     # databa
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_piet.tscn   # Zwarte Piet
 godot-4 --path . --disable-vsync res://tests/test_rhythm_shot.tscn      # Ritme (chart, judging, screenshot)
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_settings.tscn  # settings, tempo, sounds
+godot-4 --headless --path . --script res://tests/check_sound_triggers.gd   # sound triggers, loops, the Ritme beat grid
 godot-4 --path . --disable-vsync --fixed-fps 30 res://tests/test_drones.tscn       # mobile players (video frames)
 godot-4 --path . --disable-vsync --fixed-fps 30 res://tests/test_13_players.tscn   # end-of-round screens, 13 players
 godot-4 --path . --disable-vsync --fixed-fps 30 res://tests/test_many_players.tscn # the same views with 24

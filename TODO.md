@@ -1,8 +1,13 @@
 # TODO – movies and sound effects to provide
 
-The game ships with placeholders: synthesised beeps (`tools/make_sounds.py`)
-and a 4 s test clip. These are the files to make or buy. Replacing a file
+The game ships with free CC0 sounds and music (8-bit / sci-fi, from
+OpenGameArt: [CREDITS.md](CREDITS.md)); only the robot's show (`boot`,
+`shutdown`, `power_down`, `off`) still has synthesised placeholders
+(`tools/make_sounds.py`), and the movies a 4 s test clip. Better or own
+recordings can replace any of them. These are the files to make or buy. Replacing a file
 needs no code change; see `docs/SETUP.md` §4 *Sound* and §6 *Videos*.
+Where to find free sounds and music, and what their licences allow: add a
+row to [CREDITS.md](CREDITS.md) for every file that is not our own.
 
 ## Sound effects
 
@@ -15,24 +20,36 @@ same layout given as `--sounds=DIR` (no re-export needed).
 * No silence at the start: the sound plays at the moment of the event.
 * The files should all be about equally loud. One volume for everything is
   in the web interface: *Instellingen › Geluid*.
-* The sound comes from the computer running the game (the master); up to 8
-  sounds play at once. The same event within 0.08 s plays once, so 13 tiles
-  hit together make one `hit` sound.
+* The sound plays on the Pis (every Pi the same sound, on its HDMI / jack)
+  or on the master (*Instellingen › Geluid › Geluid op*); up to 8 sounds play
+  at once. The same event within 0.08 s plays once, so 13 tiles hit together
+  make one `hit` sound.
+* **Loops** (`drone_hum`, `music_lobby`, `music_ritme`) play over and over
+  while their moment lasts: make them loop seamlessly (end where they start).
+  The music has its own volume (*Muziek volume*).
 
-| ☐ | event (folder) | when it plays | how often | length | placeholder now |
+| ☐ | event (folder) | when it plays | how often | length | now (CREDITS.md) |
 |---|---|---|---|---|---|
-| ☐ | `charge` | the robot charges its gun: its side lights up from bottom to top, then it fires | every attack | ~0.5–1 s (the charge takes 0.5 s) | `charge.ogg` 0.9 s |
-| ☐ | `attack` | the robot's shot: bolts fly to the tiles (they land 1–2 s later) | every attack | 0.3–1 s | `laser1/2.ogg` 0.35–0.45 s |
-| ☐ | `hit` | a bolt hits a tile or drone | every attack | 0.3–0.6 s | `hit.ogg` 0.4 s |
-| ☐ | `shield` | a shield blocks the shot (young players, shield bonus) | often | 0.5–1.2 s | `shield.ogg` 1.2 s |
-| ☐ | `death` | a player is exterminated: the robot turns to their tile (a robot voice line fits here) | a few times per session | 1.5–3 s | `doom.ogg` 2.2 s |
-| ☐ | `zap` | the tile is electrocuted | with every `death` | ~1 s (`explosion` starts 1.0 s after it) | `zap.ogg` 1.1 s |
-| ☐ | `explosion` | the tile or drone explodes | with every `death` | 1.5–2.5 s | `explosion.ogg` 1.8 s |
-| ☐ | `life` | a player gets +1 life on the scoreboard | after many rounds | ~1 s | `life.ogg` 0.84 s |
-| ☐ | `round_start` | a new round begins (its intro) | every round | 1–2 s | `fanfare.ogg` 0.77 s |
-| ☐ | `scoreboard` | the scoreboard comes up after a round | every round | ~1 s | `jingle.ogg` 0.86 s |
-| ☐ | `join` | a player activates their tile (presses the 4 icons) | ~500× a day: keep it short and pleasant, make several | 0.2–0.5 s | `blip.ogg` 0.18 s |
-| ☐ | `random` | now and then while the game is open (not on the scoreboard): robot chatter, beeps, servos, voice lines | every 20–60 s (*Instellingen*) | 0.5–3 s each; **5–10+ files** so it does not repeat | 5 files: beeps, servo, voice |
+| ☐ | `charge` | the robot charges its gun: its side lights up from bottom to top, then it fires | every attack | ~0.5–1 s (the charge takes 0.5 s) | 2 files: rising lasers |
+| ☐ | `attack` | the robot's shot: bolts fly to the tiles (they land 1–2 s later) | every attack | 0.3–1 s | 4 retro lasers |
+| ☐ | `hit` | a bolt hits a tile or drone | every attack | 0.3–0.6 s | 3 impacts |
+| ☐ | `shield` | a shield blocks the shot (young players, shield bonus) | often | 0.5–1.2 s | 3 metallic pings |
+| ☐ | `death` | a player is exterminated: the robot turns to their tile (a robot voice line fits here) | a few times per session | 1.5–3 s | 2 falling doom sounds |
+| ☐ | `zap` | the tile is electrocuted | with every `death` | ~1 s (`explosion` starts 1.0 s after it) | 3 electric zaps |
+| ☐ | `explosion` | the tile or drone explodes | with every `death` | 1.5–2.5 s | 4 explosions |
+| ☐ | `life` | a player gets +1 life on the scoreboard | after many rounds | ~1 s | 3 power-ups |
+| ☐ | `round_start` | a new round begins (its intro) | every round | 1–2 s | 3 short fanfares (0.3–0.5 s: a longer one would be better) |
+| ☐ | `scoreboard` | the scoreboard comes up after a round | every round | ~1 s | 2 jingles |
+| ☐ | `join` | a player activates their tile (presses the 4 icons) | ~500× a day: keep it short and pleasant, make several | 0.2–0.5 s | 5 short blips |
+| ☐ | `random` | now and then while the game is open (not on the scoreboard): robot chatter, beeps, servos, voice lines | every 20–60 s (*Instellingen*) | 0.5–3 s each; **5–10+ files** so it does not repeat | 13 files: terminals, beeps, machines |
+| ☐ | `quiz_right` | the quiz: who was right is shown (someone was right) | every question | 0.3–1 s | 2 power-ups |
+| ☐ | `quiz_wrong` | the quiz: someone was wrong (with the robot's counter-attack) | every question | 0.3–1 s | 3 error sounds |
+| ☐ | `countdown` | each of a timer's last 5 seconds (the quiz, the personal rounds) | 5× per question / round | ≤ 0.2 s (a tick) | 1 blip |
+| ☐ | `time_up` | the quiz's TIJD OM | every question | 0.5–1.2 s (TIJD OM lasts 1.2 s) | 2 alarms |
+| ☐ | `ranking` | the UITSLAG: the round's places come up | every round | 1–2.5 s | 2 coin tallies |
+| ☐ | `drone_hum` | **loop**: while a mobile player's drone flies | whenever mobile players play | 1–4 s, seamless | a 3.2 s machine loop |
+| ☐ | `music_lobby` | **loop**: the lobby (the game open, no round running) | most of the day: make it pleasant, several files | 30 s–3 min, seamless | 2 NES-style loops (40 s, 22 s) |
+| ☐ | `music_ritme` | **loop**: the Ritme round, from its first moment; the symbols land on its beats | every Ritme round | **≥ 45 s** (the round), the first beat at 0 s, a steady tempo: set it in *Ritme › Muziek: tempo* (bpm) | NES-style "Boss", 120 bpm, 66 s |
 
 ## Read-aloud voice (`godot/data/voice/`, docs/SETUP.md §4 *Generating the voice*)
 
@@ -83,13 +100,10 @@ question's `afbeelding` column). Now there is only the example `usb.svg`.
 
 ## Not in the game yet (these would need code first)
 
-Moments that have no sound event today:
+Every moment listed before has a sound event now (the table above). Still open:
 
-* ☐ quiz: an answer right / wrong, the countdown's last seconds, TIJD OM
-* ☐ the UITSLAG (the round's places)
-* ☐ the drones' rotor hum
-* ☐ music for **Ritme** (the dance game has no music now: the falling icons
-  would have to follow the beat), and background music in the lobby
+* ☐ the Ritme music's tempo is one number for the round: a track with tempo
+  changes needs a beat map (a list of beat times) instead of `music_bpm`
 
 ## Display nodes (Raspberry Pi per 2 screens)
 
