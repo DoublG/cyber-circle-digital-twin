@@ -13,6 +13,7 @@ const SKILL := 0.7                 # chance a bot answers / reacts right
 var players := 6                   # 0: nobody plays, the game idles
 var join_interval := 4.0
 var answer_quiz := true            # false: the quiz answers are given by someone else (a movie script)
+var protected_wrong := false       # shielded players answer wrong: the shield blocks the robot's shot (the movies)
 var arena: Node3D
 var _t := 0.0
 var _next_join := 0.0
@@ -41,6 +42,8 @@ func _process(delta: float) -> void:
 			if answer_quiz and round._phase == "question" and not round._answers.has(id) and randf() < delta * 0.5:
 				var right := int(round._questions[round._index].correct)
 				var answer := right if randf() < SKILL else randi() % 4
+				if protected_wrong and round.is_protected(id):
+					answer = (right + 1 + randi() % 3) % 4
 				arena.tiles[id - 1].press_button(QuizRound.ANSWER_BUTTONS[answer])
 		elif round is ZwartePietRound:
 			if round.holder == id and round._clock - round._got_at > randf_range(0.3, 1.5):

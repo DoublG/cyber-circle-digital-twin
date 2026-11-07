@@ -9,7 +9,7 @@ extends Control
 ## screen of every node, and in the movies).
 
 const BOOT_LINES := [
-	[2.0, "CYBER CIRCLE OS  v4.7"],
+	[2.0, "CYBER CIRCLE CHALLENGE  OS v4.7"],
 	[3.2, "GEHEUGEN ............ OK"],
 	[4.4, "STROOM .............. OK"],
 	[5.6, "13 SENSOREN ......... OK"],

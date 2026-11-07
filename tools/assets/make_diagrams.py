@@ -290,8 +290,8 @@ def network():
     d.text(700, 700, "13 × Cat6 (one per tile, ≤ 100 m) – the tile gets its address by DHCP and announces its MAC", 11.5,
            anchor="middle", color=COL["eth"], weight="600", halo=True)
 
-    d.box(1030, 530, 330, 130, "Mobile station  (elsewhere in the booth)", ["hand-held tiles M1–M5 + Pi 4 (Mobile A + B):", "a small switch there, one Cat6 to the core", "switch – or the tiles on wifi", "(firmware env esp32dev-wifi)"], fill=FILL["floor"])
-    d.line([(1195, 490), (1195, 530)], "wifi", None, start=True)
+    d.box(1030, 530, 330, 130, "Mobile station  (elsewhere in the booth)", ["hand-held tiles M1–M5 + Pi 4 (Mobile A + B):", "a small switch there, one Cat6 to the core", "switch – every tile on a cable"], fill=FILL["floor"])
+    d.line([(1195, 490), (1195, 530)], "eth", None, start=True)
 
     d.legend(40, 90, [("eth", "Ethernet (Cat6)"), ("wifi", "wifi")])
     d.note(40, 170, 360, [
@@ -443,7 +443,7 @@ def tile():
         "Level shifter: WS2812B at 5 V wants ≥ 3.5 V data; 3.3 V often works, not always",
         "Other modules: Olimex ESP32-POE (ETH addr 0, power 12, clock GPIO17 out: config.h) – PoE",
         "802.3af gives only ~13 W: lower BRIGHTNESS to ≤ 100 or keep the 12 V feed for the LEDs",
-        "!A bare ESP32 DevKit: same pins, wifi instead of Ethernet (pio env esp32dev-wifi)"],
+        "!Always wired: every tile on Ethernet (there is no wifi build)"],
         title="Power budget & choices", size=11.5)
     d.legend(1150, 760, [("p24", "12 V (ATX)"), ("p5", "5 V"), ("p33", "3.3 V"), ("gnd", "ground"), ("sig", "signal"),
                          ("usb", "serial (flashing)"), ("eth", "Ethernet")])
@@ -715,7 +715,7 @@ def floor():
         "a table at the wall with up to 5 hand-held tiles",
         "(wheelchair users, blind players, a tablet):",
         "Cat6 + 5 V from a small switch / PSU at the",
-        "station, or wifi; their screens Mobile A / B on",
+        "station (always wired); their screens Mobile A / B on",
         "Pi 4, which stands at the station.",
         "Accessible page: the player's own phone."], fill=FILL["floor"])
     d.save("floor_plan.svg")

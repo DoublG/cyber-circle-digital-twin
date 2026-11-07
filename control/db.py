@@ -51,9 +51,16 @@ questions = Table(
     Column("image", String(255), nullable=False, server_default=""),
     Column("time", Float, nullable=False, server_default="0"),  # seconds to answer, 0 = game default
     Column("active", Integer, nullable=False, server_default="1"))
+events = Table(                                                # an event (a fair, a festival: 1-2 days)
+    "events", meta,                                            # the ranking is per event; old ones are kept
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("name", String(255), nullable=False),
+    Column("started_at", DateTime, nullable=False, server_default=func.now()),
+    Column("ended_at", DateTime))                              # NULL: the current one
 games = Table(
     "games", meta,
     Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("event_id", Integer, ForeignKey("events.id")),      # the event it was played at
     Column("started_at", DateTime, nullable=False, server_default=func.now()),
     Column("ended_at", DateTime))
 round_scores = Table(
@@ -98,7 +105,8 @@ settings_t = Table(
 
 # columns added after the first installations: (table, column, SQL type) - added when missing
 LATER_COLUMNS = (("questions", "image", "VARCHAR(255) NOT NULL DEFAULT ''"),
-                 ("players", "card", "VARCHAR(191)"), ("players", "email", "VARCHAR(255)"))
+                 ("players", "card", "VARCHAR(191)"), ("players", "email", "VARCHAR(255)"),
+                 ("games", "event_id", "INTEGER"))
 
 
 def engine_url(db):
@@ -124,7 +132,7 @@ class Database:
                 con.execute("PRAGMA journal_mode = WAL")
                 con.execute("PRAGMA foreign_keys = ON")
         meta.create_all(self.engine)
-        cols = {t: {c["name"] for c in inspect(self.engine).get_columns(t)} for t in ("questions", "players")}
+        cols = {t: {c["name"] for c in inspect(self.engine).get_columns(t)} for t in ("questions", "players", "games")}
         with self.engine.begin() as con:
             for table, column, sqltype in LATER_COLUMNS:       # databases from before these columns
                 if column not in cols[table]:
@@ -137,6 +145,7 @@ class Database:
         if "card" not in cols["players"]:          # (and its index, before the QR cards)
             with self.engine.begin() as con:
                 con.execute(text("CREATE UNIQUE INDEX players_card ON players (card)"))
+        self._first_event()
 
     def _all(self, stmt):
         with self.engine.connect() as con:
@@ -300,7 +309,65 @@ class Database:
     # ------------------------------------------------------------ games and scores
 
     def start_game(self):
-        return self._write(insert(games).values(started_at=func.now()))
+        return self._write(insert(games).values(started_at=func.now(), event_id=self.current_event_id()))
+
+    # ------------------------------------------------------------ events (the ranking is per event)
+
+    def _first_event(self):
+        """There is always a current event: a new database starts one; a database
+        from before the events puts all its games in one (from its first game on)."""
+        if self.setting("event_id"):
+            return
+        with self.engine.begin() as con:
+            first = con.execute(select(func.min(games.c.started_at))).scalar()
+            eid = con.execute(insert(events).values(
+                name="Eerste event", **({"started_at": first} if first else {}))).inserted_primary_key[0]
+            con.execute(update(games).where(games.c.event_id.is_(None)).values(event_id=eid))
+        self.set_setting("event_id", str(eid))
+
+    def current_event_id(self):
+        return int(self.setting("event_id", "0") or 0) or None
+
+    def _event_stats(self, ev):
+        g, r = games.c, results.c
+        with self.engine.begin() as con:
+            ids = select(g.id).where(g.event_id == ev["id"])
+            n_games = con.execute(select(func.count()).select_from(games).where(g.event_id == ev["id"])).scalar()
+            row = con.execute(select(func.count(func.distinct(r.player_id)), func.count(r.id), func.max(r.score))
+                              .where(r.game_id.in_(ids))).one()
+        return {**ev, "games": n_games, "players": row[0], "plays": row[1], "best": row[2] or 0,
+                "current": ev["id"] == self.current_event_id()}
+
+    def event(self, event_id=None):
+        ev = self._one(select(events).where(events.c.id == (event_id or self.current_event_id())))
+        return self._event_stats(ev) if ev else None
+
+    def events(self):
+        """Every event, the newest first, with its numbers (games, players, plays, best)."""
+        return [self._event_stats(e) for e in self._all(select(events).order_by(events.c.id.desc()))]
+
+    def new_event(self, name):
+        """Closes the current event (it is kept, with all its games) and starts a new
+        one: from now on the ranking starts empty. Returns (the old id, the new id)."""
+        old = self.current_event_id()
+        with self.engine.begin() as con:
+            if old:
+                con.execute(update(events).where(events.c.id == old).values(ended_at=func.now()))
+            eid = con.execute(insert(events).values(name=name)).inserted_primary_key[0]
+        self.set_setting("event_id", str(eid))
+        return old, eid
+
+    def export_event(self, event_id):
+        """Everything of one event (for marketing, a backup): the event, the players
+        who played at it (name, age, email, card), its games, results and rounds."""
+        ids = select(games.c.id).where(games.c.event_id == event_id)
+        pids = select(results.c.player_id).where(results.c.game_id.in_(ids)).distinct()
+        return {"event": self.event(event_id),
+                "players": self._all(select(players).where(players.c.id.in_(pids)).order_by(players.c.id)),
+                "games": self._all(select(games).where(games.c.event_id == event_id).order_by(games.c.id)),
+                "results": self._all(select(results).where(results.c.game_id.in_(ids)).order_by(results.c.id)),
+                "rounds": self._all(select(round_scores).where(round_scores.c.game_id.in_(ids))
+                                    .order_by(round_scores.c.id))}
 
     def end_game(self, game_id):
         self._write(update(games).where(games.c.id == game_id).values(ended_at=func.now()))
@@ -318,14 +385,35 @@ class Database:
             game_id=game_id, player_id=r.get("player_id") or None, tile=r["tile"], name=r["name"], score=r["score"],
             lives=r["lives"], exterminated=int(bool(r.get("exterminated"))), rank=r.get("rank")))
 
-    def leaderboard(self, limit=1000):
-        """Every player's highest score over all plays, best first."""
-        p, r = players.c, results.c
-        best = func.max(r.score).label("best")
-        return self._all(
-            select(p.id.label("player_id"), p.name.label("name"), best, func.count(r.id).label("plays"))
-            .select_from(results.join(players, p.id == r.player_id))
-            .group_by(p.id, p.name).order_by(best.desc()).limit(limit))
+    def leaderboard(self, limit=1000, event_id=None):
+        """The ranking of an event (default: the current one), best first: per player
+        their best play at it - most rounds survived, then most lives left, then the
+        most points in that play (the tie-breakers). "rank": shared only when all
+        three are equal. [{player_id, name, best, lives, points, plays, rank}]"""
+        r, p, rs = results.c, players.c, round_scores.c
+        pts = (select(rs.game_id, rs.player_id, func.sum(rs.points).label("points"))
+               .group_by(rs.game_id, rs.player_id).subquery())
+        rows = self._all(
+            select(p.id.label("player_id"), p.name.label("name"), r.score, r.lives,
+                   func.coalesce(pts.c.points, 0).label("points"))
+            .select_from(results.join(players, p.id == r.player_id).join(games, games.c.id == r.game_id)
+                         .outerjoin(pts, (pts.c.game_id == r.game_id) & (pts.c.player_id == r.player_id)))
+            .where(games.c.event_id == (event_id or self.current_event_id())))
+        best, plays = {}, {}
+        for row in rows:
+            pid = row["player_id"]
+            key = (int(row["score"]), int(row["lives"]), int(row["points"]))
+            plays[pid] = plays.get(pid, 0) + 1
+            if pid not in best or key > best[pid][0]:
+                best[pid] = (key, row["name"])
+        out = sorted(({"player_id": pid, "name": name, "best": k[0], "lives": k[1], "points": k[2],
+                       "plays": plays[pid]} for pid, (k, name) in best.items()),
+                     key=lambda x: (-x["best"], -x["lives"], -x["points"], x["name"]))
+        for i, row in enumerate(out):
+            same = i > 0 and (row["best"], row["lives"], row["points"]) == (out[i - 1]["best"], out[i - 1]["lives"],
+                                                                         out[i - 1]["points"])
+            row["rank"] = out[i - 1]["rank"] if same else i + 1
+        return out[:limit]
 
     def recent_results(self, limit=30):
         return self._all(select(results, games.c.started_at).select_from(results.join(games, games.c.id == results.c.game_id))

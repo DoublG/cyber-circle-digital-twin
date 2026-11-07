@@ -114,7 +114,7 @@
 <text x="992" y="651.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">a table at the wall with up to 5 hand-held tiles</text>
 <text x="992" y="667.5" font-size="12" text-anchor="start" font-weight="400" fill="#57606a">(wheelchair users, blind players, a tablet):</text>
 <text x="992" y="683.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">Cat6 + 5 V from a small switch / PSU at the</text>
-<text x="992" y="699.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">station, or wifi; their screens Mobile A / B on</text>
+<text x="992" y="699.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">station (always wired); their screens Mobile A / B on</text>
 <text x="992" y="715.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">Pi 4, which stands at the station.</text>
 <text x="992" y="731.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">Accessible page: the player&#x27;s own phone.</text>
 </svg>

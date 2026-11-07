@@ -32,6 +32,7 @@ func _ready() -> void:
 	game = arena.game
 	var bots := DemoBots.new()
 	bots.players = 0                              # (nobody joins by itself: the app registers the visitors)
+	bots.protected_wrong = true                   # (the shield shows: a shielded player answers wrong, it blocks the shot)
 	bots.arena = arena
 	add_child(bots)
 	await get_tree().process_frame

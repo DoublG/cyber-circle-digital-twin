@@ -11,7 +11,9 @@ extends Node
 ##              after the quiz), then the standing of the players in the game
 ##              with the lives changing (SCOREBORD), then the next round
 ## When the last player is gone the game goes back to the LOBBY (stop_game
-## ends it at once). In the database one game = from start to the lobby; every
+## ends it at once). Exterminated is the end for a player: no new round for
+## them - and when everyone is exterminated, no new round at all (the
+## scoreboard waits for their tiles to come free, then the lobby). In the database one game = from start to the lobby; every
 ## player's result is saved when they leave.
 ## Counters (names on the screens in brackets):
 ##   points    (PUNTEN)  within one round; they decide the round's places
@@ -186,7 +188,7 @@ func _build_view() -> void:
 		"players":
 			var f := Callable()
 			if v.get("overlay", false) and current:
-				f = func(id): return current.make_player_overlay(id) if in_round(id) else _waiting_overlay()
+				f = func(id): return current.make_player_overlay(id) if in_round(id) else _waiting_overlay(id)
 			screen_wall.show_players(f, bool(v.get("look_down", false)))
 		"message":
 			screen_wall.show_shared(func(): return MessageView.new())
@@ -447,6 +449,9 @@ func _next_round() -> void:
 	if arena.player_ids().is_empty():    # the last player is gone: back to the lobby
 		_finish_game()
 		return
+	if arena.player_ids().all(func(id): return arena.tiles[id - 1].is_dead):
+		_timer = 0.5                     # everyone exterminated: the end - no new round; the scoreboard
+		return                           # waits until their tiles are free (death animation, their clip)
 	round_number += 1                    # counts rounds (database, 1 life per round)
 	_plan_rounds()
 	var entry: Dictionary = upcoming.pop_front()
@@ -901,9 +906,12 @@ func in_round(tile_id: int) -> bool:
 	return current != null and tile_id in current.players
 
 
-func _waiting_overlay() -> Control:
+## Not in this round: joined during it (they play from the next one) - or
+## exterminated: that is the end, no next round for them (their view keeps the
+## death clip, then GEËXTERMINEERD; the line stays empty).
+func _waiting_overlay(id: int) -> Control:
 	var line := StatusLine.new()
-	line.source = func(): return "WACHT OP DE VOLGENDE RONDE"
+	line.source = func(): return "" if arena.tiles[id - 1].is_dead else "WACHT OP DE VOLGENDE RONDE"
 	return line
 
 
@@ -1104,12 +1112,10 @@ func _load_records() -> void:
 	_records.clear()
 	if db:
 		for r in db.leaderboard():
-			_records[int(r.player_id)] = {"name": r.name, "best": int(r.best), "plays": int(r.plays)}
+			_records[int(r.player_id)] = {"name": r.name, "best": int(r.best), "plays": int(r.plays),
+				"lives": int(r.get("lives", 0)), "points": int(r.get("points", 0))}
 
 
-## The overall ranking, live: every player's record (most rounds survived), with
-## the players in the game right now counted with this play when that is more.
-## [{player_id, name, best, plays, tile}] best first (tile 0 = not playing now).
 ## The overview's timer: the screens' timer, else the countdown the screens
 ## show in their own view (the round intro's START OVER, the quiz's answer time).
 func overview_timer() -> String:
@@ -1125,27 +1131,46 @@ func overview_timer() -> String:
 	return ""
 
 
+## The overall ranking of the event, live: every player's best play (from the
+## control server: most rounds survived, then most lives left, then the most
+## points - the tie-breakers), the players in the game right now with this play
+## when it is better. [{player_id, name, best, lives, points, plays, tile}] best
+## first (tile 0 = not playing now).
 func overall_ranking() -> Array:
 	if arena == null:                      # screens are built before the game is set up
 		return []
 	var rows := {}
 	for pid in _records:
 		var r: Dictionary = _records[pid]
-		rows[pid] = {"player_id": pid, "name": r.name, "best": r.best, "plays": r.plays, "tile": 0}
+		rows[pid] = {"player_id": pid, "name": r.name, "best": r.best, "lives": r.get("lives", 0),
+			"points": r.get("points", 0), "plays": r.plays, "tile": 0}
 	for id in arena.player_ids():
 		var pid: int = arena.player_db_id(id)
 		if pid <= 0:
 			continue                       # joined without the app: not ranked
-		var row: Dictionary = rows.get(pid, {"player_id": pid, "name": arena.player_name(id), "best": 0, "plays": 0})
-		row.best = maxi(row.best, survived.get(id, 0))
+		var row: Dictionary = rows.get(pid, {"player_id": pid, "name": arena.player_name(id), "best": 0,
+			"lives": 0, "points": 0, "plays": 0})
+		var now := {"best": survived.get(id, 0), "lives": maxi(arena.tiles[id - 1].health, 0), "points": scores.get(id, 0)}
+		if _better(now, row):
+			row.merge(now, true)
 		row.tile = id
 		rows[pid] = row
 	var out := rows.values()
-	out.sort_custom(func(a, b): return a.best > b.best)
+	out.sort_custom(_better)
 	return out
 
 
-## Overall place of the player on this tile (equal records share it); 0 = not ranked.
+## a ranks above b: more rounds survived, then more lives left, then more points.
+static func _better(a: Dictionary, b: Dictionary) -> bool:
+	if a.best != b.best:
+		return a.best > b.best
+	if a.get("lives", 0) != b.get("lives", 0):
+		return a.get("lives", 0) > b.get("lives", 0)
+	return a.get("points", 0) > b.get("points", 0)
+
+
+## Overall place of the player on this tile at this event (shared only when rounds,
+## lives and points are all equal); 0 = not ranked.
 func overall_rank(tile_id: int) -> int:
 	if arena == null:
 		return 0
@@ -1156,7 +1181,7 @@ func overall_rank(tile_id: int) -> int:
 	var mine := ranking.filter(func(r): return r.player_id == pid)
 	if mine.is_empty():
 		return 0
-	return 1 + ranking.filter(func(r): return r.best > mine[0].best).size()
+	return 1 + ranking.filter(func(r): return _better(r, mine[0])).size()
 
 
 ## The player's record: most rounds survived (this play included).

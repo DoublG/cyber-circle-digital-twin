@@ -113,9 +113,8 @@
 <text x="1042" y="552" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Mobile station  (elsewhere in the booth)</text>
 <text x="1042" y="581.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">hand-held tiles M1–M5 + Pi 4 (Mobile A + B):</text>
 <text x="1042" y="597.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">a small switch there, one Cat6 to the core</text>
-<text x="1042" y="613.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">switch – or the tiles on wifi</text>
-<text x="1042" y="629.5" font-size="12" text-anchor="start" font-weight="400" fill="#57606a">(firmware env esp32dev-wifi)</text>
-<polyline points="1195,490 1195,530" fill="none" stroke="#1f6feb" stroke-width="2.2" stroke-linejoin="round" stroke-dasharray="7 5"/>
+<text x="1042" y="613.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">switch – every tile on a cable</text>
+<polyline points="1195,490 1195,530" fill="none" stroke="#1f6feb" stroke-width="2.2" stroke-linejoin="round"/>
 <polygon points="1195.0,530.0 1190.9,520.9 1199.1,520.9" fill="#1f6feb"/>
 <polygon points="1195.0,490.0 1199.1,499.1 1190.9,499.1" fill="#1f6feb"/>
 <rect x="40" y="90" width="250" height="70" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>

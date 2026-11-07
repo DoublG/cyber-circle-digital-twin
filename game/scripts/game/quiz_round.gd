@@ -41,6 +41,7 @@ const IMAGE_DIR := "res://data/images/"
 const ANSWER_BUTTONS: Array[StringName] = [&"Square", &"Triangle", &"Cross", &"Circle"]
 
 var categories: Array = []         # only questions from these categories (empty = all)
+var question := ""                 # one chosen question (its id or its text; the plan, a demo): asked whatever the ages
 var question_time := 15.0
 var reveal_time := 5.0
 var answers_time := 3.0            # s: everyone's answer shown, before who was right
@@ -109,6 +110,12 @@ func _start() -> void:
 ## protection for categories not asked for a while; then within it a question
 ## that was not asked yet, or the longest ago.
 func _pick_questions(all: Array) -> Array:
+	if question != "":
+		var chosen := all.filter(func(q): return _qid(q) == question or str(q.get("question", "")) == question)
+		if not chosen.is_empty():
+			game.note_question(str(chosen[0].get("category", "")), _qid(chosen[0]))
+			return [chosen[0]]
+		push_warning("quiz: no question %s - one at random" % question)
 	var pool := all.filter(func(q): return categories.is_empty() or q.get("category", "") in categories)
 	var ages := players.map(func(id): return game.arena.player_age(id)).filter(func(a): return a > 0)
 	if ages.size() == players.size() and not ages.is_empty():

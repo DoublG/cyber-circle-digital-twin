@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="960" viewBox="0 0 1400 960" font-family="Helvetica, Arial, sans-serif">
 <rect width="100%" height="100%" fill="#ffffff"/>
 <text x="24" y="38" font-size="24" text-anchor="start" font-weight="700" fill="#24292f">One tile – wiring</text>
-<text x="24" y="62" font-size="13" text-anchor="start" font-weight="400" fill="#57606a">ESP32 module with Ethernet (default WT32-ETH01), one WS2812B chain of 58 LEDs, 4 pressure sensors (FSR). Pins: tile_firmware/include/config.h</text>
+<text x="24" y="62" font-size="13" text-anchor="start" font-weight="400" fill="#57606a">ESP32 module with Ethernet (default WT32-ETH01), one WS2812B chain of 58 LEDs, 4 pressure sensors (FSR). Pins: firmware/tile/include/config.h</text>
 <rect x="20" y="90" width="330" height="400" rx="14" fill="#ffebe9" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
 <text x="34" y="110" font-size="13" text-anchor="start" font-weight="700" fill="#57606a">POWER</text>
 <rect x="40" y="120" width="290" height="70" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
@@ -190,7 +190,7 @@
 <text x="532" y="711.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">Level shifter: WS2812B at 5 V wants ≥ 3.5 V data; 3.3 V often works, not always</text>
 <text x="532" y="728.0" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">Other modules: Olimex ESP32-POE (ETH addr 0, power 12, clock GPIO17 out: config.h) – PoE</text>
 <text x="532" y="744.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">802.3af gives only ~13 W: lower BRIGHTNESS to ≤ 100 or keep the 12 V feed for the LEDs</text>
-<text x="532" y="761.0" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">A bare ESP32 DevKit: same pins, wifi instead of Ethernet (pio env esp32dev-wifi)</text>
+<text x="532" y="761.0" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">Always wired: every tile on Ethernet (there is no wifi build)</text>
 <rect x="1150" y="760" width="250" height="170" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
 <text x="1162" y="780" font-size="12" text-anchor="start" font-weight="700" fill="#24292f">Legend</text>
 <polyline points="1164,796 1210,796" fill="none" stroke="#a40e26" stroke-width="2.2" stroke-linejoin="round"/>

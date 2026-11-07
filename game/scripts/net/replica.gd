@@ -61,6 +61,7 @@ var _t_retry := 0.0
 var _attempt := 0
 var _beacon: PacketPeerUDP
 var _since_snapshot := false             # display: a snapshot arrived on this connection
+var _rx_msec := 0                        # display: when the master's last message came in
 
 
 # ---------------------------------------------------------------- start
@@ -344,6 +345,7 @@ func _snapshot(data: Dictionary) -> void:
 	arena.apply_replica(data.get("fields", {}), true)
 	arena.apply_replica_fast(data.get("fast", {}))
 	stats.snapshots += 1
+	_rx_msec = Time.get_ticks_msec()
 	_since_snapshot = true
 	if not online:
 		online = true
@@ -356,6 +358,7 @@ func _delta(fields: Dictionary) -> void:
 		return
 	arena.apply_replica(fields, false)
 	stats.deltas += 1
+	_rx_msec = Time.get_ticks_msec()
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -363,6 +366,7 @@ func _event(target: String, method: StringName, args: Array) -> void:
 	if not _since_snapshot:
 		return
 	stats.events += 1
+	_rx_msec = Time.get_ticks_msec()
 	if arena.replica_skip(target, method, args):
 		if debug:
 			print("replica: skipped %s.%s (its own tile: from MQTT)" % [target, method])
@@ -386,6 +390,7 @@ func _live_msg(data: Dictionary) -> void:
 	if not _since_snapshot:
 		return
 	stats.live += 1
+	_rx_msec = Time.get_ticks_msec()
 	var c := float(data.get("clock", arena.clock))
 	if absf(c - arena.clock) > 0.15:          # (small drift: let it run, it is smoother)
 		arena.clock = c
@@ -413,4 +418,5 @@ func link() -> Dictionary:
 		"loss": snappedf(p.get_statistic(ENetPacketPeer.PEER_PACKET_LOSS) / float(ENetPacketPeer.PACKET_LOSS_SCALE) * 100.0, 0.01),
 		"events": stats.events, "deltas": stats.deltas, "snapshots": stats.snapshots, "live": stats.live,
 		"connects": stats.connects,
+		"last_rx_s": snappedf((Time.get_ticks_msec() - _rx_msec) / 1000.0, 0.1) if _rx_msec > 0 else -1.0,
 		"connected_s": int(Time.get_unix_time_from_system() - stats.connected_at) if online else 0}

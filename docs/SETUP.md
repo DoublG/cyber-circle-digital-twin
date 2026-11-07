@@ -11,7 +11,7 @@ cyber-circle-challenge/
   gamemaster_app/   the gamemaster app (Flutter)
   firmware/tile/    the tiles' ESP32 firmware (PlatformIO, with a PC emulator)
   firmware/robot/   the real robot's ESP32 firmware (PlatformIO, with a PC emulator)
-  firmware/common/  what both emulators share (Arduino / WiFi stand-ins)
+  firmware/common/  what both emulators share (Arduino / network stand-ins)
   assets/blender/   model sources (build_models.py) and the light bake (bake_models.py)
   deploy/           install scripts, docker compose, the env file, the broker's access list
   tools/assets/     generators: sounds, read-aloud voice, diagrams, video conversion
@@ -95,6 +95,9 @@ the database and the game (one game computer).
      binary. *Tegels › Opstelling*: the clock hour T01 is on.
    * the screens show test patterns: check each monitor is above the right
      tiles, nothing cut off, no scaling.
+   * *Tegels › Diagnose*: every place (its tile online, firmware, IP, cable,
+     last button pressed) and every screen (its node, fps, ping) on one page,
+     live – press every icon of every tile and watch its row light up.
    * *Gamemasters* (names, colours), *Vragen* (or CSV import), *Teksten*,
      *Instellingen*; *Website*: start the control server with
      `--website=https://…/health` for the real registration website.
@@ -797,12 +800,12 @@ older firmware) a press counts when it arrives (Ritme: minus *Vertraging tegel
 In SETUP the hearts show its place number in binary and a pressed icon flashes
 (the sensor test); `identify` makes it light up. The status LED: blue =
 network, amber = MQTT but no place yet, green = ready, red = no network (cable,
-switch, DHCP). Build and flash: `cd firmware/tile && pio run -t upload`; a bare
-ESP32 dev board without Ethernet: `pio run -e esp32dev-wifi -t upload` (wifi,
-`WIFI_SSID` / `WIFI_PASSWORD` in `config.h`) (the sensors calibrate at power-up: nobody on the tile then).
+switch, DHCP). The tiles are always wired (Ethernet); there is no wifi build.
+Build and flash: `cd firmware/tile && pio run -t upload` (the sensors calibrate at
+power-up: nobody on the tile then).
 **Tile emulator on this PC** (no hardware, no account): the same firmware
-built for Linux with stand-ins for Arduino, FastLED and wifi
-(`firmware/tile/emulator/`), the tile drawn in the terminal – the ring seen
+built for Linux with stand-ins for Arduino, FastLED and the network
+(`firmware/tile/emulator/`, `firmware/common/emulator/`), the tile drawn in the terminal – the ring seen
 from above (LED_00 at the top, the robot side), the hearts, the 4 icons, the
 status LED – and keys **1 2 3 4** press the icons (**q** quits). Start as many
 as you like, each with its own MAC address; they behave like real tiles
@@ -825,17 +828,6 @@ quick try the test broker: `python3 game/tests/mqtt_test_broker.py 9001 --tcp 18
 (start the game with `--mqtt=ws://127.0.0.1:9001` and the control server
 with `--mqtt ws://127.0.0.1:9001`).
 
-**Emulator in the browser / VS Code**: [Wokwi](https://wokwi.com) runs the real
-firmware on a simulated ESP32 with a 48-LED ring, a strip with the 5 hearts,
-the 4 icon LEDs and the status LED, and 4 buttons in the icon colours as the
-pressure sensors (`firmware/tile/diagram.json`). Build it with
-`pio run -e wokwi` (the emulator's wifi `Wokwi-GUEST`; the MQTT broker on this
-PC as `host.wokwi.internal`, port 1883 – Mosquitto's plain listener), then in
-VS Code with the Wokwi extension: *Wokwi: Start Simulator* (its private gateway
-reaches the broker on this PC; `wokwi.toml`). Headless:
-`WOKWI_CLI_TOKEN=… ~/.wokwi/bin/wokwi-cli firmware/tile` (a free token:
-wokwi.com/dashboard/ci). Place the simulated tile like a real one: it shows up
-under *Tegels zonder plaats* with its MAC address.
 **MQTT** in the web interface shows the raw traffic live (filter by topic).
 
 ## 6. Database
@@ -887,6 +879,7 @@ cd game
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_flow.tscn   # whole game flow
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_db.tscn     # database, ranking
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_piet.tscn   # Zwarte Piet
+godot-4 --headless --path . --fixed-fps 60 res://tests/test_exterminated.tscn  # everyone exterminated: no new round, the lobby
 godot-4 --path . --disable-vsync res://tests/test_rhythm_shot.tscn      # Ritme (chart, judging, screenshot)
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_settings.tscn  # settings, tempo, sounds
 godot-4 --headless --path . --script res://tests/check_sound_triggers.gd   # sound triggers, loops, the Ritme beat grid
@@ -1082,6 +1075,19 @@ pattern (`scripts/ui/test_pattern.gd`) over the tile numbers:
 * Colour bars and a grey ramp 0–100 %: 0 % and 10 % must look different
   (black level), and so must 90 % and 100 % (white clipping).
 * A running clock and a sweeping green block: if they stop, the screen is frozen.
+* **Its tiles** (diagnosis): a card per tile with its physical tile – ONLINE /
+  OFFLINE / GEEN TEGEL (no tile on that place) / SIMULATIE (no MQTT) – its
+  id, firmware, IP address, Ethernet link (100M full) and how long ago it last
+  said hello. **Press each icon of each tile**: that button lights up on the
+  card (and the place's row in *Tegels › Diagnose*), so a tile on the wrong
+  place or a swapped sensor shows at once. The overview shows every place of
+  the installation, the tiles without a place, and the display nodes (screens,
+  IP, ping, loss).
+* **Network**: the master: the broker connected or not (and how many display
+  nodes); a display node: its link to the master – ping, packet loss and how
+  long ago the last update came (amber over 50 ms / 1 % / 2 s).
+* **Performance**: fps, the average and worst frame time and the slow frames
+  (over 1/30 s) of the last 2 s, the renderer and the GPU.
 
 The CRT effect is off in SETUP so lines and colours are exact. Still images of
 the patterns are in `docs/test_screens/` (to test a monitor without the game);
@@ -1168,7 +1174,19 @@ or a new master continues in the same mode.
   screen a question goes: the question with the 4 buttons (no answers yet,
   *Leestijd*) → the answers fade in and the countdown runs → TIJD OM → everyone's
   icon → who was right.
-* **Ranglijst** – the overall ranking (highest score per player).
+* **Ranglijst** – the ranking of the current **event** (highest score per player
+  at this event), and the events. An event is a fair or festival (1–2 days):
+  *Nieuw event starten* (with its name) closes the current one and starts an
+  empty ranking – players and their QR cards stay. Nothing is deleted: the old
+  event stays in the database (its ranking: `GET /api/ranking?event=<id>`),
+  and is saved as a zip in `EVENT_BACKUP_DIR` (default `/srv/cybercircle/events`,
+  kept for good – not cleaned up like the nightly dumps). Every event can be
+  downloaded as that zip at any time (*⬇ download*): `players.csv` (name, age,
+  email, QR card), `results.csv`, `games.csv`, `rounds.csv` (CSV with `;`, opens in
+  Excel) and `event.json` – for marketing. Mind the privacy rules (GDPR) for the
+  email addresses. A database from before the events: all its games are in
+  *Eerste event*. Demo data (the movies): `tools/ops/demo_history.py --db … --event NAME`
+  puts 300 earlier visitors of the event (yesterday and today) in the ranking.
 * **Instellingen** – times, speeds and points, per group: *Spel* (tempo,
   intro / result / scoreboard time, start delay, lives by age, the streak for
   +1 life, players needed for personal rounds, rounds planned ahead), one
@@ -1367,8 +1385,9 @@ they pick the right builds themselves. One settings file for all of it:
 | `sudo install_server.sh [SERVER_IP]` | overview PC / server Pi | settings file (random passwords), Mosquitto (plain + WebSocket, a password), MariaDB (database + user), the control server (virtualenv, **systemd: `cybercircle-control`**), nightly backup (**`cybercircle-backup.timer`**), https certificate (`CONTROL_HTTPS=1`), firewall ports (ufw) – then checks the broker and the web interface |
 | `sudo install_game.sh [--display 1,2]` | the server box (the **master**), each Pi (`--display` + its screens: a **display node**) | the role in this machine's settings (`GAME_ROLE`, `GAME_SHOW`, `GAME_NODE`), the kiosk user logging in automatically (GDM, LightDM or `raspi-config` on a Pi), Godot for this CPU (official x86_64 / arm64 build, unless exported), screen never blanks / locks / sleeps, the game as a **user service `cybercircle-game`** started with the desktop session (also via `/etc/xdg/autostart` for desktops without `graphical-session.target`, e.g. Raspberry Pi OS); ARM: the Compatibility renderer (OpenGL ES 3, `GAME_ENGINE_ARGS`); master: the display port (7350) in the firewall; a Pi with 2 screens: the desktop on X11 |
 | `sudo update.sh [release.tar.gz]` | each machine | a new version in place (settings, database, certificates kept), dependencies, restart |
-| `flash_tiles.sh [esp32dev-wifi]` | any PC / Pi with PlatformIO | the tile firmware with this installation's broker and login (no editing of `config.h`) |
+| `flash_tiles.sh` | any PC / Pi with PlatformIO | the tile firmware with this installation's broker and login (no editing of `config.h`) |
 | `backup.sh` | (the timer) | `mysqldump` → `/var/backups/cybercircle/cybercircle-<date>.sql.gz`, kept 30 days |
+| (the control server) | *Ranglijst › Nieuw event starten* | the closed event as a zip (CSV: players, results, games, rounds) → `EVENT_BACKUP_DIR` (`/srv/cybercircle/events`), kept for good |
 
 ```bash
 # the server (once; prints the web interface's address)

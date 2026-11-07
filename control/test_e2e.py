@@ -2,7 +2,7 @@
 through the control server), driven through the API like the web interface.
     control/.venv/bin/python control/test_e2e.py
 """
-import json, os, subprocess, sys, time, urllib.error, urllib.request
+import json, os, shutil, subprocess, sys, time, urllib.error, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
@@ -73,7 +73,10 @@ for f in (DB, DB + "-wal", DB + "-shm"):
 procs = [subprocess.Popen([sys.executable, os.path.join(ROOT, "game", "tests", "mqtt_test_broker.py"), str(MQTT_PORT)],
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)]
 time.sleep(1)
+EVENTS = os.path.join(ROOT, "game", "tests", "_e2e_events")       # (the closed events' zips)
+shutil.rmtree(EVENTS, ignore_errors=True)
 procs.append(subprocess.Popen([sys.executable, os.path.join(HERE, "server.py"), "--db", DB, "--port", str(PORT),
+                               "--event-backups", EVENTS,
                                "--host", "127.0.0.1", "--mqtt", f"ws://127.0.0.1:{MQTT_PORT}"],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
 time.sleep(2)
@@ -278,10 +281,37 @@ try:
     m = until(lambda: [n for n in call("GET", "/api/metrics")["nodes"] if n.get("role") == "master" and n.get("hist")], 10)
     check(bool(m) and m[0]["fps"] > 0 and m[0]["draw_calls"] >= 0 and "control" in call("GET", "/api/metrics"),
           "performance metrics of the game in /api/metrics (Prestaties)")
+    import paho.mqtt.client as paho                  # a tile's press, as the real tile sends it
+    pub = paho.Client(paho.CallbackAPIVersion.VERSION2, transport="websockets")
+    pub.connect("127.0.0.1", MQTT_PORT)
+    pub.loop_start()
+    pub.publish("cybercircle/tile/3/event", json.dumps({"press": "Cross"})).wait_for_publish(5)
+    dg = until(lambda: (lambda d: d if next(p for p in d["places"] if p["number"] == 3)["press"] else None)(
+        call("GET", "/api/diagnose")), 10)
+    pub.loop_stop()
+    check(bool(dg) and len(dg["places"]) == 18 and dg["mqtt"]
+          and next(p for p in dg["places"] if p["number"] == 3)["press"]["button"] == "Cross"
+          and any(s["screen"] == "overzicht" and s["role"] == "master" and s["online"] for s in dg["screens"])
+          and any(s["screen"] == 1 for s in dg["screens"]),
+          "Tegels › Diagnose (/api/diagnose): places, a tile's last press, the screens and their node")
     cl = until(lambda: [c for c in call("GET", "/api/clients")["clients"] if c["kind"] == "game"], 10)
     kinds = {c["kind"] for c in call("GET", "/api/clients")["clients"]}
     check(bool(cl) and cl[0]["id"].startswith("cybercircle-") and {"game", "control"} <= kinds,
           "connected clients in /api/clients (Verbindingen): %s" % sorted(kinds))
+
+    print("--- a new event: the ranking starts empty, the old event is kept and saved as a zip")
+    old = next(e for e in call("GET", "/api/events") if e["current"])
+    before = call("GET", "/api/ranking")
+    ne = call("POST", "/api/events", {"name": "E2E event 2"})
+    evs = call("GET", "/api/events")
+    check(ne["event"]["name"] == "E2E event 2" and ne["event"]["current"] and call("GET", "/api/ranking") == []
+          and len(call("GET", "/api/ranking?event=%d" % old["id"])) == len(before) > 0
+          and next(e for e in evs if e["id"] == old["id"])["ended_at"] is not None,
+          "new event: empty ranking, the old one closed and kept (%d in its ranking)" % len(before))
+    check(bool(ne["backup"]) and os.path.isfile(os.path.join(EVENTS, ne["backup"])),
+          "the old event saved as a zip: %s" % ne["backup"])
+    gid = call("POST", "/api/games")["id"]
+    check(any(e["current"] and e["games"] == 1 for e in call("GET", "/api/events")), "a new game counts for the new event")
 finally:
     for p in procs:
         p.terminate()

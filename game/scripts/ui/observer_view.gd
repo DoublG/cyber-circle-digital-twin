@@ -57,7 +57,7 @@ func _ready() -> void:
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 22)
 	head.add_child(hb)
-	var logo := Retro.label(40, Retro.BG, "CYBER CIRCLE")
+	var logo := Retro.label(40, Retro.BG, "CYBER CIRCLE CHALLENGE")
 	logo.add_theme_stylebox_override("normal", Retro.panel(Retro.TEAL, Retro.TEAL, 0, 8, 14))
 	hb.add_child(logo)
 	_status = Retro.label(44, Retro.CREAM)

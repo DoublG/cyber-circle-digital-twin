@@ -100,11 +100,18 @@ func select(sql: String, bindings := []) -> Array:
 	return _db.query_result.duplicate() if _run(sql, bindings) else []
 
 
-## All-time ranking: every player's highest score over all their plays,
-## best first: [{player_id, name, best, plays}].
+## The ranking (standalone: all plays in this file): per player their best play -
+## most rounds survived, then most lives left, then the most points (the
+## tie-breakers, as the control server): [{player_id, name, best, lives, points, plays}].
 func leaderboard() -> Array:
-	return select("SELECT p.id AS player_id, p.name AS name, MAX(r.score) AS best, COUNT(r.id) AS plays"
-		+ " FROM results r JOIN players p ON p.id = r.player_id GROUP BY p.id ORDER BY best DESC")
+	return select("SELECT player_id, name, best, lives, points, plays FROM ("
+		+ " SELECT p.id AS player_id, p.name AS name, r.score AS best, r.lives AS lives,"
+		+ " COALESCE((SELECT SUM(s.points) FROM round_scores s WHERE s.game_id = r.game_id AND s.player_id = r.player_id), 0) AS points,"
+		+ " COUNT(*) OVER (PARTITION BY p.id) AS plays,"
+		+ " ROW_NUMBER() OVER (PARTITION BY p.id ORDER BY r.score DESC, r.lives DESC,"
+		+ " (SELECT SUM(s.points) FROM round_scores s WHERE s.game_id = r.game_id AND s.player_id = r.player_id) DESC) AS n"
+		+ " FROM results r JOIN players p ON p.id = r.player_id)"
+		+ " WHERE n = 1 ORDER BY best DESC, lives DESC, points DESC")
 
 
 ## A new game; returns its id (0 without a database).

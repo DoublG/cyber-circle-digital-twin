@@ -17,7 +17,7 @@ lights and the screens.
 | [gamemaster_app/](gamemaster_app/) | Gamemaster app (Flutter): registers visitors by scanning their QR cards |
 | [firmware/tile/](firmware/tile/) | Floor and handheld tile firmware (ESP32, PlatformIO), with a PC emulator |
 | [firmware/robot/](firmware/robot/) | Robot firmware (ESP32, PlatformIO), with a PC emulator |
-| [firmware/common/](firmware/common/) | Arduino / WiFi stand-ins that both emulators share |
+| [firmware/common/](firmware/common/) | Arduino / network stand-ins that both emulators share |
 | [assets/blender/](assets/blender/) | Model sources and build/bake scripts (they export to `game/models/`) |
 | [deploy/](deploy/) | Install scripts, systemd units, docker compose test setup, broker config |
 | [tools/assets/](tools/assets/) | Generators: sound effects, read-aloud voice, diagrams, video conversion |

@@ -33,6 +33,9 @@ extends MqttClient
 ##   <prefix>/stream           game -> all    a companion video started / stopped: {tile, on, encoder?, error?}
 ##   <prefix>/robot/cmd        game -> robot  the real robot (firmware/robot/): the robot NPC's events as
 ##                                            commands {"look": 3}, {"exterminate": [3]}, {"mood": "playing"} ...
+##   <prefix>/device/<dev>/hello   tile -> all   retained: a physical tile announces itself {fw, net, ip, link, ...}
+##   <prefix>/device/<dev>/config  control -> tile  retained {"tile": n}: its place
+##                                            (the master reads both: the SETUP test screens show each place's tile)
 ##   <prefix>/sounds           game -> all    retained {"events": {"attack": ["laser1.ogg", ...], ...}}:
 ##                                            the sounds {"sound": "<event>"} on <prefix>/cmd can play
 ## Leave url empty to run without MQTT.
@@ -51,6 +54,10 @@ var _tile_timer := 0.0
 var _announce_timer := 0.0
 
 var arena: Node3D
+var devices := {}                # master: physical tile id -> its hello (device/<dev>/hello)
+var device_place := {}           # master: physical tile id -> its place (device/<dev>/config)
+var _device_seen := {}           # master: physical tile id -> msec its last hello came in
+const HELLO_TIMEOUT := 30.0      # s without a hello: offline (as the control server; tiles say hello every 10 s)
 var _display_announced := {}     # master: display node id -> msec its node/<id> went out
 
 
@@ -109,6 +116,8 @@ func setup(arena_node: Node3D) -> void:
 	subscribe(topic_prefix + "/settings")
 	subscribe(topic_prefix + "/texts")
 	subscribe(topic_prefix + "/db")
+	subscribe(topic_prefix + "/device/+/hello")
+	subscribe(topic_prefix + "/device/+/config")
 	arena.game.settings_changed.connect(_publish_settings)
 	arena.sound.sounds_changed.connect(_publish_sounds)
 	arena.light_cue.connect(func(event, data):
@@ -149,6 +158,9 @@ func _publish_sounds() -> void:
 
 
 func _on_message(topic: String, payload: PackedByteArray) -> void:
+	if topic.begins_with(topic_prefix + "/device/"):
+		_on_device(topic.trim_prefix(topic_prefix + "/device/").split("/"), payload)
+		return
 	var data = JSON.parse_string(payload.get_string_from_utf8())
 	if not data is Dictionary:
 		push_warning("mqtt: ignored non-JSON message on " + topic)
@@ -205,6 +217,44 @@ func _process(delta: float) -> void:
 		if json != _state_json:
 			_state_json = json
 			publish(topic_prefix + "/state", json, true)
+
+
+# ---------------------------------------------------------------- the physical tiles (SETUP test screens)
+
+## device/<dev>/hello or /config (an empty retained message: gone).
+func _on_device(parts: PackedStringArray, payload: PackedByteArray) -> void:
+	if parts.size() != 2:
+		return
+	var dev := parts[0]
+	var data = JSON.parse_string(payload.get_string_from_utf8()) if payload.size() > 0 else null
+	if parts[1] == "hello":
+		if data is Dictionary:
+			devices[dev] = data
+			_device_seen[dev] = Time.get_ticks_msec()
+		else:
+			devices.erase(dev)
+			_device_seen.erase(dev)
+	elif parts[1] == "config":
+		if data is Dictionary and int(data.get("tile", 0)) > 0:
+			device_place[dev] = int(data.tile)
+		else:
+			device_place.erase(dev)
+
+
+## What the SETUP test screens show about the installation: per place its
+## physical tile (from its hello), and the broker link. Sent to the display
+## nodes too (ScreenWall sends it every second in SETUP; also without a broker).
+func diagnosis() -> Dictionary:
+	var now := Time.get_ticks_msec()
+	var tiles := {}
+	for dev in device_place:
+		var h: Dictionary = devices.get(dev, {})
+		var age := (now - int(_device_seen[dev])) / 1000.0 if _device_seen.has(dev) else -1.0
+		tiles[str(device_place[dev])] = {"device": dev, "fw": str(h.get("fw", "")), "net": str(h.get("net", "")),
+			"ip": str(h.get("ip", "")), "link": str(h.get("link", "")),
+			"age": snappedf(age, 0.1), "online": age >= 0.0 and age < HELLO_TIMEOUT}
+	var unplaced := devices.keys().filter(func(d): return not device_place.has(d))
+	return {"mqtt": online, "broker": url, "tiles": tiles, "unplaced": unplaced}
 
 
 # ---------------------------------------------------------------- a display node

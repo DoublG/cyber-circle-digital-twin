@@ -28,7 +28,7 @@ document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   document.querySelectorAll("nav button, .tab").forEach(e => e.classList.remove("active"));
   b.classList.add("active");
   $(`#tab-${b.dataset.tab}`).classList.add("active");
-  ({ perf: startPerf, clients: startClients, recovery: renderRecovery, mqtt: startMqttLog, website: loadWebsite, sounds: renderSounds, texts: loadTexts, gamemasters: loadGamemasters, players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: () => { loadTiles(); loadRobot(); }, settings: loadSettings })[b.dataset.tab]?.();
+  ({ perf: startPerf, clients: startClients, recovery: renderRecovery, mqtt: startMqttLog, website: loadWebsite, sounds: renderSounds, texts: loadTexts, gamemasters: loadGamemasters, players: loadPlayers, questions: loadQuestions, ranking: loadRanking, tiles: () => { loadTiles(); loadRobot(); startDiag(); }, settings: loadSettings })[b.dataset.tab]?.();
 });
 
 // ---------------------------------------------------------------- live
@@ -356,6 +356,49 @@ $("#tile-table").onclick = async e => {
   loadTiles();
 };
 
+// ---------------------------------------------------------------- Tegels › Diagnose: setting up the installation
+let diagTimer = null;
+function startDiag() {
+  if (diagTimer) return;
+  diagTimer = setInterval(pollDiag, 1000);
+  pollDiag();
+}
+async function pollDiag() {
+  if (!$("#tab-tiles").classList.contains("active")) { clearInterval(diagTimer); diagTimer = null; return; }
+  try { renderDiag(await (await fetch("/api/diagnose")).json()); } catch (e) { /* the next poll */ }
+}
+const BUTTON_NL = { Square: "vierkant", Triangle: "driehoek", Cross: "kruis", Circle: "cirkel" };
+function renderDiag(d) {
+  const places = d.places.filter(p => p.installed);
+  const online = places.filter(p => p.device && p.online).length;
+  const shown = d.screens.filter(s => s.online).length;
+  $("#diag-summary").innerHTML = [
+    `<span class="${d.mqtt ? "good" : "bad"}">MQTT ${d.mqtt ? "verbonden" : "NIET verbonden"}</span>`,
+    `<span class="${online === places.length ? "good" : "warn"}">${online}/${places.length} tegels online</span>`,
+    `<span class="${d.screens.length && shown === d.screens.length ? "good" : "warn"}">${shown}/${d.screens.length} schermen</span>`,
+    d.unplaced.length ? `<span class="warn">${d.unplaced.length} tegel(s) zonder plaats: ${d.unplaced.map(esc).join(", ")}</span>` : "",
+    d.mode !== "setup" ? `<span class="hint">(de schermen tonen de test alleen in SETUP)</span>` : "",
+  ].filter(Boolean).join(" · ");
+  $("#diag-places tbody").innerHTML = places.map(p => {
+    const st = !p.device ? ["geen tegel", "warn"] : p.online ? ["online", "good"] : ["offline", "bad"];
+    const fresh = p.press && p.press.ago < 1.5;
+    return `<tr class="${fresh ? "diag-press" : ""} ${p.enabled ? "" : "off"}"><td>${label(p.number)}</td><td>${esc(p.device || "–")}</td>
+      <td class="${st[1]}">${st[0]}${p.enabled ? "" : " (buiten gebruik)"}</td><td>${esc(p.fw || "–")}</td><td>${esc(p.ip || "–")}</td>
+      <td>${esc(p.link || (p.device ? "?" : "–"))}</td><td>${p.seen_s == null ? "–" : p.seen_s + " s"}</td>
+      <td>${p.press ? `${BUTTON_NL[p.press.button] || esc(p.press.button)}, ${num(p.press.ago)} s` : "–"}</td></tr>`;
+  }).join("");
+  $("#diag-screens tbody").innerHTML = d.screens.map(s => {
+    const slow = s.slow_frames || 0;
+    return `<tr><td>${s.screen === "overzicht" ? "overzicht" : "scherm " + s.screen}</td>
+      <td>${esc(s.node || "–")}${s.host ? ` <span class="hint">${esc(s.host)}</span>` : ""}</td>
+      <td class="${s.online ? "good" : "bad"}">${s.node ? (s.online ? "online" : "offline") : "geen node"}</td>
+      <td>${num(s.fps)}</td><td>${num(s.frame_ms, 1)} ms <span class="hint">max ${num(s.worst_ms)}</span></td>
+      <td class="${slow ? "warn" : ""}">${num(s.slow_frames)}</td>
+      <td>${s.rtt_ms == null ? (s.role === "master" ? "master" : "–") : `${s.rtt_ms} ms <span class="hint">${num(s.loss, 1)} %</span>`}</td>
+      <td>${s.cpu == null ? "–" : num(s.cpu) + " %"}</td><td>${s.temp_c == null ? "–" : num(s.temp_c, 1) + " °C"}</td></tr>`;
+  }).join("") || `<tr><td colspan="9" class="hint">Nog geen spel (master) gemeld.</td></tr>`;
+}
+
 // ---------------------------------------------------------------- Prestaties: every component's performance
 let perfTimer = null;
 function startPerf() {
@@ -392,7 +435,6 @@ function renderPerf(m) {
   const nodes = m.nodes || [], c = m.control || {}, b = m.broker || {};
   const master = nodes.find(n => n.role === "master"), displays = nodes.filter(n => n.role === "display");
   const tilesOn = (m.tiles || []).filter(t => t.online);
-  const weakest = Math.min(...tilesOn.map(t => t.rssi ?? 0));
   const card = (cls, k, v, sub) => `<div class="card ${cls}"><div class="k">${esc(k)}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`;
   const nodeCard = n => card(n.online ? fpsLevel(n) : "off", `${n.role === "master" ? "Master" : "Display"} ${n.id}`,
     n.online ? `${num(n.fps)} fps` : "offline", n.online ? `CPU ${num(n.cpu)}% · ${n.temp_c != null ? num(n.temp_c, 0) + " °C" : num(n.rss_mb) + " MB"}` : `${dur(n.age)} geleden`);
@@ -403,7 +445,7 @@ function renderPerf(m) {
     card(b.clients != null ? "good" : "off", "MQTT-broker", b.clients != null ? `${num(b.clients)} clients` : "–",
       b.clients != null ? `${num(b.msgs_in_min)} / ${num(b.msgs_out_min)} ber./min` : "geen $SYS-gegevens"),
     card(!m.tiles?.length ? "off" : tilesOn.length < m.tiles.length ? "warn" : "good", "Tegels", `${tilesOn.length} / ${(m.tiles || []).length}`,
-      tilesOn.length && Number.isFinite(weakest) && weakest < 0 ? `zwakste signaal ${weakest} dBm` : "online"),
+      "online"),
     card(m.gamemasters ? "good" : "off", "Gamemaster-apps", String(m.gamemasters), "ingelogd"),
     card(m.website?.mock ? "off" : m.website?.status === "up" ? "good" : "bad", "Website", esc(m.website?.status || "–"),
       m.website?.latency_ms != null ? `${num(m.website.latency_ms)} ms` : ""),
@@ -466,7 +508,7 @@ function renderPerf(m) {
 
   $("#perf-tiles tbody").innerHTML = (m.tiles || []).map(t => `<tr><td><span class="dot ${t.online ? "on" : ""}"></span> ${esc(t.device)}</td>
     <td>${esc(t.fw || "–")}</td><td>${esc(t.net || "–")} <span class="hint">${esc(t.ip || "")}</span></td>
-    <td>${t.rssi != null ? span(lvl(t.rssi, -70, -80, true), `${t.rssi} dBm`) : t.link != null ? esc(String(t.link)) : "–"}</td>
+    <td>${t.link != null ? esc(String(t.link)) : "–"}</td>
     <td>${t.loop_hz != null ? span(lvl(t.loop_hz, 500, 100, true), `${t.loop_hz} Hz`) : "–"}</td>
     <td>${t.heap != null ? span(lvl(t.heap / 1024, 40, 20, true), `${num(t.heap / 1024)} KB`) : "–"}</td>
     <td>${t.mqtt_reconnects != null ? `${t.mqtt_reconnects}×` : "–"}</td><td>${dur(t.uptime)}</td><td>${dur(t.age)} geleden</td></tr>`).join("")
@@ -828,10 +870,29 @@ $("#delete-question").onclick = async () => {
 
 // ---------------------------------------------------------------- ranking
 async function loadRanking() {
-  const rows = await api("GET", "/api/ranking?limit=100");
+  const [rows, events] = await Promise.all([api("GET", "/api/ranking?limit=100"), api("GET", "/api/events")]);
+  const cur = events.find(e => e.current);
+  const when = t => t ? esc(String(t).slice(0, 16)) : "–";
+  $("#event-current").innerHTML = cur ? `<b>Huidig event: ${esc(cur.name)}</b>
+    <span class="hint">sinds ${when(cur.started_at)} · ${cur.games} spellen · ${cur.players} spelers · ${cur.plays} keer gespeeld</span>` : "";
+  $("#ranking-event").textContent = cur ? `– ${cur.name}` : "";
+  $("#events tbody").innerHTML = events.map(e => `<tr class="${e.current ? "current" : ""}"><td>${esc(e.name)}${e.current ? " <span class=\"good\">(huidig)</span>" : ""}</td>
+    <td>${when(e.started_at)}</td><td>${e.current ? "–" : when(e.ended_at)}</td><td>${e.games}</td><td>${e.players}</td><td>${e.plays}</td><td>${e.best}</td>
+    <td><a class="button-like" href="/api/events/${e.id}/export" download>⬇ download (zip)</a></td></tr>`).join("");
   $("#ranking tbody").innerHTML = rows.map((r, i) =>
-    `<tr><td>#${i + 1}</td><td>${esc(r.name)}</td><td>${r.best}</td><td>${r.plays}</td></tr>`).join("");
+    `<tr><td>#${r.rank ?? i + 1}</td><td>${esc(r.name)}</td><td>${r.best}</td><td>${r.lives ?? "–"}</td><td>${r.points ?? "–"}</td><td>${r.plays}</td></tr>`).join("")
+    || `<tr><td colspan="6" class="hint">Nog niemand gespeeld op dit event.</td></tr>`;
 }
+$("#event-new").onclick = async () => {
+  const name = $("#event-name").value.trim();
+  if (!name) { $("#event-msg").textContent = "geef het nieuwe event een naam"; return; }
+  const cur = (await api("GET", "/api/events")).find(e => e.current);
+  if (!confirm(`Event "${cur ? cur.name : ""}" afsluiten en "${name}" starten?\nDe ranglijst begint leeg. Het oude event blijft bewaard (en als zip in de backupmap).`)) return;
+  const r = await api("POST", "/api/events", { name });
+  $("#event-name").value = "";
+  $("#event-msg").textContent = r.backup ? `gestart – backup: ${r.backup}` : "gestart";
+  loadRanking();
+};
 
 connectLive();
 

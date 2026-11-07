@@ -1,4 +1,4 @@
-// Flashing over the network (ArduinoOTA, over Ethernet as well as wifi):
+// Flashing over the network (ArduinoOTA, over Ethernet):
 //   pio run -e ota -t upload --upload-port <the tile's IP>      (platformio.ini: env ota)
 // The password: OTA_PASSWORD in config.h (the same in platformio.ini's upload_flags).
 #pragma once

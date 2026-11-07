@@ -1,6 +1,6 @@
-// Cyber Circle tile (ESP32): Ethernet (net.cpp; wifi as an option) + MQTT, the
+// Cyber Circle tile (ESP32): wired Ethernet (net.cpp) + MQTT, the
 // 4 pressure sensors, the LEDs.
-//   announces itself    device/<mac>/hello (retained, every HELLO_MS) {device, fw, net, ip, link | rssi,
+//   announces itself    device/<mac>/hello (retained, every HELLO_MS) {device, fw, net, ip, link,
 //                       uptime (s), heap (free bytes), loop_hz, mqtt_reconnects}
 //   its place           device/<mac>/config {"tile": n} (the control server: Tegels / the app)
 //   find it             device/<mac>/identify {"seconds": 6}
@@ -10,7 +10,7 @@
 //                                          (a program running: "t" = ms since its start, "program" = its id)
 // Settings: include/config.h. The protocol's reference: the game's
 // game/scripts/net/mqtt_bridge.gd and game/scripts/tile_firmware.gd.
-#include <WiFi.h>                           // (WiFiClient: a TCP socket - over Ethernet too)
+#include <WiFi.h>                           // (only for WiFiClient: a TCP socket, over Ethernet)
 #include <PubSubClient.h>
 #include "display.h"
 #include "net.h"

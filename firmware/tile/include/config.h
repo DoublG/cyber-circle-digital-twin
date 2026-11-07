@@ -1,5 +1,5 @@
 // Cyber Circle tile - settings for one installation (every one can be
-// overridden with build_flags = -DNAME=value: see the wokwi env). Every tile gets the
+// overridden with build_flags = -DNAME=value: see the native env and flash_tiles.sh). Every tile gets the
 // same firmware: it announces itself with its MAC address and the control
 // server tells it which place it stands on (device/<mac>/config {"tile": n}).
 #pragma once
@@ -10,7 +10,7 @@
 // carrier board, an RMII PHY (LAN8720). The pins of the module; defaults: the
 // WT32-ETH01 (Olimex ESP32-POE: ADDR 0, POWER 12, CLOCK ETH_CLOCK_GPIO17_OUT).
 // RMII itself takes GPIO 0 / 17 (clock), 19, 21, 22, 25, 26, 27, MDC and MDIO:
-// keep the LEDs and sensors off those. (-DNET_WIFI: wifi instead - below.)
+// keep the LEDs and sensors off those.
 #ifndef TILE_ETH_PHY
 #define TILE_ETH_PHY   ETH_PHY_LAN8720
 #endif
@@ -30,13 +30,6 @@
 #define TILE_ETH_CLOCK ETH_CLOCK_GPIO0_IN    // the 50 MHz RMII clock: from the PHY's oscillator into GPIO0
 #endif
 
-// wifi (only with -DNET_WIFI: a dev board without Ethernet, the emulators)
-#ifndef WIFI_SSID
-#define WIFI_SSID      "cybercircle"
-#endif
-#ifndef WIFI_PASSWORD
-#define WIFI_PASSWORD  "change-me"
-#endif
 #ifndef MQTT_HOST
 #define MQTT_HOST      "192.168.1.10"   // the broker: plain MQTT listener (mosquitto: listener 1883)
 #endif
@@ -84,7 +77,7 @@
 #endif
 
 // ---- pressure sensors (FSR in a voltage divider) under the 4 icons, on ADC1
-// pins (ADC2 does not work while wifi is on); order Square, Triangle, Cross, Circle.
+// pins (ADC2 clashes with the ESP32's radio driver); order Square, Triangle, Cross, Circle.
 // 32, 33, 35, 39: broken out on the WT32-ETH01, the Olimex ESP32-POE (its GPIO34 is
 // the button) and a DevKit alike (the WT32-ETH01 has no GPIO34). docs/WIRING.md
 static const int SENSOR_PINS[4] = {32, 33, 39, 35};

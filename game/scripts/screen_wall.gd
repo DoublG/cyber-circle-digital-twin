@@ -74,6 +74,9 @@ var _tilt_done := false                 # the tilt already played (refresh: star
 var _shared_factory := Callable()       # shared mode: () -> Control
 var _timer_text := ""
 var _timer_labels: Array[Label] = []
+var diag := {}                    # SETUP: the installation's state for the test screens (MqttBridge.diagnosis)
+var _diag_at := 0
+var last_press := {}              # SETUP: tile id -> {"button", "msec"}: the test screens light it up
 var shared_views: Array = []            # current shared views, one per screen
 var _observer_screen: Control           # the overview page's screen (observer_page)
 var _followers: Array[Camera3D] = []    # cameras that show the floating observer rig
@@ -120,6 +123,11 @@ func show_shared(factory: Callable) -> void:
 func _process(_delta: float) -> void:
 	if Replica.client:
 		_update_link()
+	elif arena.game.mode == GameManager.Mode.SETUP and Time.get_ticks_msec() - _diag_at >= 1000:
+		_diag_at = Time.get_ticks_msec()          # (wall clock: the test screens' "seen 3 s ago")
+		var mqtt := arena.get_node_or_null("Mqtt") as MqttBridge
+		if mqtt:
+			set_diag(mqtt.diagnosis())
 	_followers = _followers.filter(func(c): return is_instance_valid(c))
 	for cam in _followers:
 		cam.global_transform = arena.observer.global_transform
@@ -134,6 +142,16 @@ func make_observer_cell() -> Control:
 	var cell := _view_cell(arena.observer.global_transform, 60.0)
 	_followers.append(cell.get_meta(&"camera"))
 	return cell
+
+
+## SETUP: the master's diagnosis (its tiles, the broker), for the test screens.
+func set_diag(d: Dictionary) -> void:
+	Replica.relay_live("wall", &"set_diag", [d])
+	diag = d
+
+
+func _on_press(tile_id: int, button: StringName) -> void:
+	last_press[tile_id] = {"button": button, "msec": Time.get_ticks_msec()}
 
 
 ## Text in the top-right corner of every screen (countdown / round timer).
@@ -473,7 +491,7 @@ func _join_panel() -> Control:
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_theme_constant_override("separation", 40)
 	panel.add_child(box)
-	box.add_child(Retro.label(96, Retro.TEAL, "CYBER CIRCLE"))
+	box.add_child(Retro.label(80, Retro.TEAL, "CYBER CIRCLE CHALLENGE"))
 	var cta := CallToAction.new(64)
 	cta.custom_minimum_size.y = 220
 	box.add_child(cta)
@@ -657,6 +675,10 @@ func _add_observer_page(parent: Node) -> void:
 ## SETUP: a test pattern over every screen (which screen, edges, colours, live)
 ## and the overview page; the CRT effect off so lines and colours are exact.
 func _test_patterns(on: bool) -> void:
+	if on:                                   # which button a tile last got (the wiring check)
+		for t in arena.tiles:
+			if not t.button_pressed.is_connected(_on_press):
+				t.button_pressed.connect(_on_press)
 	var mqtt := arena.get_node_or_null("Mqtt") as MqttBridge
 	var node: String = mqtt.node_id if mqtt and mqtt.node_id != "" else "-"
 	var all: Array[Control] = _screens.duplicate()
@@ -681,6 +703,7 @@ func _test_patterns(on: bool) -> void:
 		var m: int = int(monitors[k]) if k < monitors.size() else k
 		tp.output = "MONITOR %d" % m if multi_window else "PREVIEW"
 		tp.node_name = node
+		tp.wall = self
 		screen.add_child(tp)
 
 
@@ -738,7 +761,7 @@ func _build_windows() -> void:
 			_new_screen(self)
 		else:
 			var win := Window.new()
-			win.title = "Cyber Circle - scherm %d" % (k + 1)
+			win.title = "Cyber Circle Challenge - scherm %d" % (k + 1)
 			win.size = Vector2i(1280, 720)
 			add_child(win)
 			_place(win, k, local)
@@ -750,7 +773,7 @@ func _build_windows() -> void:
 			_add_observer_page(self)
 			return
 		var win := Window.new()
-		win.title = "Cyber Circle - overzicht"
+		win.title = "Cyber Circle Challenge - overzicht"
 		win.size = Vector2i(1280, 720)
 		add_child(win)
 		_place(win, groups().size(), local)

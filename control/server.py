@@ -43,6 +43,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import a11y
+import event_export
 import questions_csv
 from website import Website
 from db import FLOOR_TILES, PLACES, Database
@@ -133,6 +134,10 @@ class LivesIn(BaseModel):
     lives: int
 
 
+class EventIn(BaseModel):
+    name: str                                # e.g. "Maker Faire Gent 2026"
+
+
 class PlanIn(BaseModel):
     slot: int = 0                            # 0 = the next round
     round: str = ""                          # cyclone / quiz / reaction / rhythm / simon / zwarte_piet; "" = random
@@ -214,7 +219,8 @@ def machine_stats():
 
 
 def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website | None = None,
-               public_mqtt: str = "", a11y_opts: dict | None = None) -> FastAPI:
+               public_mqtt: str = "", a11y_opts: dict | None = None, event_dir: str = "") -> FastAPI:
+    event_dir = event_dir or os.path.join(HERE, "..", "out", "events")
     site = site or Website()
     listeners: set[asyncio.Queue] = set()
     loop: dict = {}
@@ -295,7 +301,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
     def live_snapshot():
         return {"checkpoint": checkpoint_info(),"mqtt": link.online, "state": link.state, "nodes": link.node_list(), "master": link.master,
                 "events": list(link.events), "sounds": link.sounds, "installed": installed(), "devices": link.device_list(), "mode": db.setting("mode", "setup"),
-                "t01_clock": float(db.setting("t01_clock", "12") or 12),
+                "t01_clock": float(db.setting("t01_clock", "12") or 12), "event": db.event(),
                 "website": {k: v for k, v in site.snapshot().items() if k != "history"},
                 "gamemasters_online": online_ref[0]() if online_ref else []}
 
@@ -321,7 +327,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
                    "mqtt_in_kbps": round((link.rx_bytes - last["rxb"]) * 8 / 1000 / span, 1),
                    "mqtt_reconnects": max(link.connects - 1, 0), **machine_stats()}
         last.update(t=now, cpu=cpu, req=http["requests"], ms=http["ms"], rx=link.rx_msgs, rxb=link.rx_bytes)
-        tiles = [{k: d.get(k) for k in ("device", "fw", "net", "ip", "rssi", "link", "uptime", "heap", "loop_hz",
+        tiles = [{k: d.get(k) for k in ("device", "fw", "net", "ip", "link", "uptime", "heap", "loop_hz",
                                         "mqtt_reconnects", "online")} | {"age": round(now - d.get("seen", now))}
                  for d in link.device_list()]
         w = site.snapshot()
@@ -390,7 +396,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
                 n = places.get(mac)
                 kind, name = "tile", f"Tegel {place_label(n)}" if n else "Tegel (geen plaats)"
                 d = devices.get(mac, {})
-                detail = " · ".join(x for x in [d.get("fw", ""), f"{d['rssi']} dBm" if d.get("rssi") is not None else ""] if x)
+                detail = " · ".join(x for x in [d.get("fw", ""), d.get("link") or ""] if x)
             elif cid.startswith("cybercircle-"):
                 node = nodes.get(cid[len("cybercircle-"):], {})
                 role = node.get("role", "")
@@ -423,6 +429,47 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         return {"clients": out, "events": [{**e, "ago": round(now - e["time"])} for e in events[:20]],
                 "broker_count": b.get("clients"), "known_since_s": round(now - link.clients_since),
                 "web": {"live": len(listeners), "gamemasters": [g["name"] for g in gm]}}
+
+    # ------------------------------------------------------------ diagnosis (web interface: Tegels › Diagnose)
+
+    @app.get("/api/diagnose")
+    def diagnose():
+        """Setting up the installation, at a glance: every place (its physical tile:
+        online, firmware, address, cable link, last hello, its last button press)
+        and every screen (the node that shows it: online, fps, frame times, ping)."""
+        now = time.time()
+        devices = {d["device"]: d for d in link.device_list()}
+        inst = set(installed())
+        tiles = db.tiles()
+        places = []
+        for t in tiles:
+            d = devices.get(t["device"] or "", {})
+            p = link.presses.get(t["number"])
+            places.append({"number": t["number"], "label": place_label(t["number"]), "device": t["device"],
+                           "enabled": bool(t["enabled"]), "installed": t["number"] in inst, "online": bool(d.get("online")),
+                           "seen_s": round(now - d["seen"]) if d.get("seen") else None,
+                           **{k: d.get(k) for k in ("fw", "net", "ip", "link", "uptime", "mqtt_reconnects")},
+                           "press": {"button": p["button"], "ago": round(now - p["at"], 1)} if p else None})
+        nodes = link.node_list()
+        metrics = {m.get("id"): m for m in link.metrics_list()}
+        masters = [n for n in nodes if n.get("role") == "master"]
+        master = next((n for n in masters if n.get("online")), masters[0] if masters else None)
+        screens = []
+        if master:
+            links = {d.get("node"): d for d in (metrics.get(master["id"], {}).get("replica") or {}).get("displays", [])}
+            local = master.get("screens", [])
+            for k in sorted(set(local) | set(master.get("remote_screens", []))) + ["overzicht"]:
+                node = master if k == "overzicht" or k in local else \
+                    next((n for n in nodes if n.get("role") == "display" and k in n.get("screens", [])), None)
+                m = metrics.get(node["id"], {}) if node else {}
+                r = links.get(node["id"], {}) if node and node is not master else {}
+                screens.append({"screen": k, "node": node["id"] if node else None, "role": node.get("role") if node else None,
+                                "host": node.get("host") if node else None, "online": bool(node and node.get("online")),
+                                **{f: m.get(f) for f in ("fps", "frame_ms", "worst_ms", "slow_frames", "cpu", "temp_c", "gpu")},
+                                "rtt_ms": r.get("rtt_ms"), "loss": r.get("loss")})
+        placed = {t["device"] for t in tiles if t["device"]}
+        return {"mqtt": link.online, "mode": db.setting("mode", "setup"), "places": places, "screens": screens,
+                "unplaced": [d for d in devices if d not in placed]}
 
     # ------------------------------------------------------------ live (web interface)
 
@@ -916,8 +963,39 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         return {"ok": True}
 
     @app.get("/api/ranking")
-    def ranking(limit: int = 1000):
-        return db.leaderboard(limit)
+    def ranking(limit: int = 1000, event: int = 0):
+        """The ranking of the current event (or ?event=id: an earlier one)."""
+        return db.leaderboard(limit, event or None)
+
+    # ------------------------------------------------------------ events (web interface: Ranglijst)
+
+    @app.get("/api/events")
+    def events_list():
+        """Every event, the newest first: name, from - to, games, players, plays, best; "current"."""
+        return db.events()
+
+    @app.post("/api/events")
+    def new_event(e: EventIn):
+        """A new event: the current one is closed (kept, with all its games) and saved
+        as a zip in the event backup folder; the ranking starts empty."""
+        name = e.name.strip()
+        if not name:
+            raise HTTPException(400, "a name, please")
+        old = db.current_event_id()
+        backup = event_export.save(db.export_event(old), event_dir) if old else None
+        db.new_event(name)
+        link.db_changed("ranking")                    # the game: the ranking (and records) again
+        changed("event")
+        return {"event": db.event(), "backup": os.path.basename(backup) if backup else None}
+
+    @app.get("/api/events/{eid}/export")
+    def export_event(eid: int):
+        """One event as a zip (players with email and card, results, games, rounds: CSV)."""
+        data = db.export_event(eid)
+        if not data["event"]:
+            raise HTTPException(404, "no such event")
+        return Response(event_export.event_zip(data), media_type="application/zip",
+                        headers={"Content-Disposition": 'attachment; filename="%s"' % event_export.file_name(data["event"])})
 
     @app.get("/api/results")
     def results(limit: int = 30):
@@ -943,6 +1021,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
 def main():
     ap = argparse.ArgumentParser(description="Cyber Circle control server")
     ap.add_argument("--db", default=os.path.join(HERE, "..", "game", "data", "cybercircle.db"))
+    ap.add_argument("--event-backups", default="", help="where a closed event is saved as a zip (default: ../out/events)")
     ap.add_argument("--mqtt", default="ws://localhost:9001", help="broker: ws://host:9001 or mqtt://host:1883")
     ap.add_argument("--mqtt-user", default="")
     ap.add_argument("--mqtt-password", default="")
@@ -980,7 +1059,7 @@ def main():
     a11y_opts = {"stream_publish": a.stream_publish.rstrip("/"), "stream_view": a.stream_view.rstrip("/"),
                  "stream_user": a.stream_user, "stream_password": a.stream_password,
                  "encoder": a.stream_encoder, "fps": a.stream_fps, "buttons": not a.a11y_no_buttons}
-    app = create_app(db, link, a.gm_web, site, a.public_mqtt, a11y_opts)
+    app = create_app(db, link, a.gm_web, site, a.public_mqtt, a11y_opts, a.event_backups)
     if a.internal_port:                       # (no lifespan: the main server runs the MQTT link)
         import threading
         inner = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=a.internal_port, log_level="warning", lifespan="off"))

@@ -149,3 +149,12 @@ dialog label input, dialog label textarea, dialog label select { display: block;
 table.kv td:first-child { color: var(--dim); width: 45%; }
 #tempo-presets { gap: 8px; align-items: center; flex-wrap: wrap; }
 #tempo-presets button.active { color: var(--bg); background: var(--amber); border-color: var(--amber); }
+
+/* Tegels › Diagnose: a row lights up when its tile reports a press */
+#diag-places tr.diag-press td { background: rgba(51, 204, 191, .25); }
+#diag-places tr.off td { opacity: .6; }
+#diag-summary span { margin-right: .4em; }
+
+/* Ranglijst › Event */
+#events tr.current td { background: rgba(51, 204, 191, .12); }
+#events a.button-like { text-decoration: none; padding: 2px 8px; }

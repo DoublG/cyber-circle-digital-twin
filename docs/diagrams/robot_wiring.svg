@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="980" viewBox="0 0 1400 980" font-family="Helvetica, Arial, sans-serif">
 <rect width="100%" height="100%" fill="#ffffff"/>
 <text x="24" y="38" font-size="24" text-anchor="start" font-weight="700" fill="#24292f">The robot – wiring</text>
-<text x="24" y="62" font-size="13" text-anchor="start" font-weight="400" fill="#57606a">ESP32 with Ethernet (WT32-ETH01), all on the ATX supply: the head motor via an H-bridge, side + home sensors, 40 WS2812B LEDs (body + eye), relays for the 230 V star light and smoke. Pins: robot_firmware/include/config.h</text>
+<text x="24" y="62" font-size="13" text-anchor="start" font-weight="400" fill="#57606a">ESP32 with Ethernet (WT32-ETH01), all on the ATX supply: the head motor via an H-bridge, side + home sensors, 40 WS2812B LEDs (body + eye), relays for the 230 V star light and smoke. Pins: firmware/robot/include/config.h</text>
 <rect x="20" y="90" width="330" height="250" rx="14" fill="#ffebe9" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
 <text x="34" y="110" font-size="13" text-anchor="start" font-weight="700" fill="#57606a">POWER  (ATX supply)</text>
 <rect x="40" y="118" width="290" height="92" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>

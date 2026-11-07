@@ -47,6 +47,7 @@ class MqttLink:
         self.sounds = {}                     # the sounds the game can play: event -> [file] (sounds)
         self.text_defaults = {}              # the game's texts as they are without changes (texts/defaults)
         self.devices = {}                    # physical tile id -> hello + "seen"
+        self.presses = {}                    # place number -> {"button", "at"}: its last press (Tegels › Diagnose)
         self.state = {}
         self.events = deque(maxlen=60)
         self.voice = deque(maxlen=200)       # the lines the game reads out (voice), each with "seq" (the a11y pages)
@@ -183,6 +184,13 @@ class MqttLink:
             elif topic == "stream" and isinstance(data, dict):
                 self.streams[int(data.get("tile", 0))] = data
                 kind = "stream"
+            elif topic.startswith("tile/") and topic.endswith("/event"):
+                if isinstance(data, dict) and data.get("press"):
+                    try:
+                        self.presses[int(topic.split("/")[1])] = {"button": str(data["press"]), "at": time.time()}
+                    except ValueError:
+                        pass
+                return                          # (polled: no live update per press)
             elif topic == "event":
                 self.events.appendleft({**(data if isinstance(data, dict) else {"text": str(data)}),
                                         "time": time.strftime("%H:%M:%S")})

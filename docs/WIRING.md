@@ -120,7 +120,7 @@ All grounds are joined at the tile's terminal block.
 **Sensor pins (changed).** The Cross sensor used to be on GPIO34. The
 WT32-ETH01 does not break out GPIO34, and on the Olimex ESP32-POE it is the
 on-board button. It is now on **GPIO39**, which every one of these boards has
-as an ADC1 input (`SENSOR_PINS` in `config.h`, and the Wokwi `diagram.json`).
+as an ADC1 input (`SENSOR_PINS` in `config.h`).
 
 ## 3b. The robot – wiring (firmware/robot/)
 

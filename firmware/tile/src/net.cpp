@@ -2,21 +2,18 @@
 
 #include "config.h"
 
-#ifdef NET_WIFI
+#ifdef NET_EMULATOR
+// The PC emulator (env:native): this PC's network (WiFiClient there = a TCP socket).
 #include <WiFi.h>
 
 namespace net {
-void begin() {
-    WiFi.mode(WIFI_STA);
-    WiFi.setAutoReconnect(true);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-}
-bool up() { return WiFi.status() == WL_CONNECTED; }
+void begin() {}
+bool up() { return true; }
 String mac() { return WiFi.macAddress(); }
 void describe(JsonDocument &doc) {
-    doc["net"] = "wifi";
+    doc["net"] = "ethernet";
     doc["ip"] = WiFi.localIP().toString().c_str();
-    doc["rssi"] = WiFi.RSSI();
+    doc["link"] = "emulator";
 }
 }  // namespace net
 

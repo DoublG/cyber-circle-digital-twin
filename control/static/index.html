@@ -81,6 +81,15 @@
   <div class="row" id="install-places"></div>
   <div class="row"><button id="install-save">Opslaan</button><span id="install-msg" class="hint"></span></div>
   <table id="tile-table"><thead><tr><th>Plaats</th><th>Fysieke tegel</th><th>Status</th><th>In gebruik</th></tr></thead><tbody></tbody></table>
+  <h2>Diagnose <span class="hint">– live, elke seconde</span></h2>
+  <p class="hint">Om de opstelling te controleren: zet het spel op <b>SETUP</b>. Elk scherm toont dan zijn nummer, zijn
+    tegels (online, firmware, adres, kabel), de verbinding en de prestaties. Druk op <b>elke knop van elke tegel</b>:
+    de knop licht op op het scherm en de rij licht hier op. Zo zie je meteen of de juiste tegel op de juiste plaats ligt.</p>
+  <div id="diag-summary" class="row"></div>
+  <table id="diag-places"><thead><tr><th>Plaats</th><th>Tegel</th><th>Status</th><th>Firmware</th><th>IP</th><th>Kabel</th>
+    <th>Gezien</th><th>Laatste knop</th></tr></thead><tbody></tbody></table>
+  <table id="diag-screens"><thead><tr><th>Scherm</th><th>Node</th><th>Status</th><th>FPS</th><th>Frame</th><th>Traag (2 s)</th>
+    <th>Ping</th><th>CPU</th><th>Temp.</th></tr></thead><tbody></tbody></table>
   <h2>Niet toegewezen tegels</h2>
   <ul id="free-devices" class="events"></ul>
   <h2>Robot <span class="hint">– de echte: draait op zijn eigen tempo binnen de kabel, extermineert één voor één</span></h2>
@@ -127,7 +136,7 @@
     <div><h2>MQTT-broker</h2><table id="perf-broker" class="kv"></table></div>
   </div>
   <h2>Tegels</h2>
-  <div class="scroll"><table id="perf-tiles"><thead><tr><th>Tegel</th><th>Firmware</th><th>Netwerk</th><th>Signaal</th>
+  <div class="scroll"><table id="perf-tiles"><thead><tr><th>Tegel</th><th>Firmware</th><th>Netwerk</th><th>Kabel</th>
     <th>Lus</th><th>Vrij geheugen</th><th>Herverbonden</th><th>Actief</th><th>Laatst gezien</th></tr></thead><tbody></tbody></table></div>
   <h2>Meekijkvideo's</h2>
   <div id="perf-streams" class="hint"></div>
@@ -280,7 +289,18 @@
 </section>
 
 <section id="tab-ranking" class="tab">
-  <table id="ranking"><thead><tr><th>Plaats</th><th>Naam</th><th>Record (meeste rondes overleefd)</th><th>Keer gespeeld</th></tr></thead><tbody></tbody></table>
+  <h2>Event</h2>
+  <p class="hint">De ranglijst geldt per <b>event</b> (een beurs, een festival: 1–2 dagen). Bij een nieuw event begint de
+    ranglijst leeg; spelers en hun QR-kaarten blijven. Het vorige event blijft volledig bewaard en wordt ook als zip
+    opgeslagen (spelers met e-mail en kaart, resultaten, spellen – CSV voor Excel), en is hieronder altijd te downloaden.</p>
+  <div id="event-current" class="row"></div>
+  <div class="row"><label>Naam nieuw event <input id="event-name" placeholder="bv. Maker Faire Gent 2026" size="32"></label>
+    <button id="event-new" class="danger">Nieuw event starten</button><span id="event-msg" class="hint"></span></div>
+  <table id="events"><thead><tr><th>Event</th><th>Van</th><th>Tot</th><th>Spellen</th><th>Spelers</th><th>Keer gespeeld</th>
+    <th>Beste</th><th></th></tr></thead><tbody></tbody></table>
+  <h2>Ranglijst <span id="ranking-event" class="hint"></span></h2>
+  <p class="hint">Per speler zijn beste spel op dit event: de meeste rondes overleefd; bij gelijkstand de meeste levens over, dan de meeste punten. Alleen bij gelijke rondes, levens én punten delen spelers een plaats.</p>
+  <table id="ranking"><thead><tr><th>Plaats</th><th>Naam</th><th>Record (meeste rondes overleefd)</th><th>Levens over</th><th>Punten</th><th>Keer gespeeld</th></tr></thead><tbody></tbody></table>
 </section>
 <section id="tab-settings" class="tab">
   <p class="hint">Tijden, snelheid en punten van het spel en van elk spelletje. <b>Tempo</b> versnelt of vertraagt

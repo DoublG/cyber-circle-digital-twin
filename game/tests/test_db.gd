@@ -144,6 +144,32 @@ func _ready() -> void:
 	arena.join(9, "Gast", 10)                       # joined without the app
 	check(game.overall_rank(9) == 0, "a player without a database id is not ranked")
 
+	print("--- tie-breakers: equal rounds survived -> more lives left -> more points")
+	var cleo := db.add_player("Cleo", "#aa00ff", 9)
+	var daan := db.add_player("Daan", "#88ff00", 10)
+	arena.join(2, "Cleo", 9, cleo)
+	arena.join(3, "Daan", 10, daan)
+	game.survived[2] = 60                           # the same rounds as Bram ...
+	game.survived[3] = 60
+	arena.tiles[3].health = 3                       # Bram 3 lives, Cleo the same, Daan one less
+	arena.tiles[1].health = 3
+	arena.tiles[2].health = 2
+	game.scores[2] = 25                             # Cleo more points than Bram
+	game.scores[3] = 99
+	print("    ", game.overall_ranking().map(func(r): return [r.name, r.best, r.lives, r.points]))
+	check(game.overall_rank(2) == 1 and game.overall_rank(4) == 2,
+		"60 rounds, the same lives: Cleo (25 points) before Bram (0 points)")
+	check(game.overall_rank(3) == 3, "60 rounds, one life less: Daan third (his 99 points don't count first)")
+	game.scores[2] = 0
+	check(game.overall_rank(2) == 1 and game.overall_rank(4) == 1, "all three equal: Cleo and Bram share #1")
+	for r in [[cleo, 5, 3], [daan, 5, 1]]:                    # saved plays: the database's ranking the same way
+		var g2 := db.start_game()
+		db.save_round(g2, 1, "quiz", [{"player_id": r[0], "tile": 1, "points": 7, "score": 5, "lives": r[2]}])
+		db.save_result(g2, {"player_id": r[0], "tile": 1, "name": "x", "score": r[1], "lives": r[2], "exterminated": false})
+	var lb := db.leaderboard().filter(func(r): return r.player_id in [cleo, daan])
+	check(lb.size() == 2 and lb[0].player_id == cleo and lb[0].lives == 3 and lb[0].points == 7,
+		"the database's ranking: 5 rounds both, Cleo (3 lives) before Daan (1)")
+
 	print("\nDONE: %d failure(s)" % failures)
 	get_tree().quit(1 if failures else 0)
 

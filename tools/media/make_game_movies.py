@@ -5,7 +5,8 @@
   mobiel_1.mp4, mobiel_2.mp4    the mobile players' screens
   beheer.mp4                    the control server's web interface (the operator)
   gamemaster.mp4                the gamemaster app on a phone (registering the visitors)
-One real run: the test broker, the control server (a fresh database), the game
+One real run: the test broker, the control server (a fresh database with
+300 earlier visitors of the event in the ranking: tools/ops/demo_history.py), the game
 (game/movie/game_movie.tscn: every screen rendered at full HD, frame by frame,
 at --fixed-fps 30 - game time, however slow the PC renders) and Chrome showing
 the two web pages. The pages are captured on the game's clock (the game writes
@@ -46,6 +47,11 @@ WEB_EVERY = 2                # a web page frame every 2 game frames: 15 fps
 CARDS = [("CC-0101", "Anna", 11), ("CC-0102", "Bram", 13), ("CC-0103", "Cleo", 10), ("CC-0104", "Daan", 9),
          ("CC-0105", "Eva", 12), ("CC-0106", "Finn", 14), ("CC-0107", "Gust", 12)]
 ROUNDS = ["quiz", "cyclone", "rhythm", "quiz"]
+# the first quiz: a question from 12 years - the younger visitors and mobile players get a
+# shield (tile, drone, the quiz screen) and answer wrong: the shield blocks the robot's shot
+SHIELD_QUESTION = "Welk getal is 1010 in binair?"
+EVENT = "Cyber Circle Challenge - demo"   # the event the movies play at
+HISTORY = 300                # earlier visitors at this event (yesterday, today): the ranking is not empty
 APP_SCANS = 3                # visitors Erik scans with the (filmed) app; Lies registers the others
 MOBILES = [("CC-0108", "Hanne", 11), ("CC-0109", "Ilias", 10), ("CC-0110", "Jules", 13),
            ("CC-0111", "Kato", 12), ("CC-0112", "Lotte", 9)]
@@ -270,6 +276,8 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     py = os.path.join(ROOT, "control/.venv/bin/python")
     db = os.path.join(TMP, "game.db")
+    subprocess.run([py, os.path.join(ROOT, "tools/ops/demo_history.py"), "--db", db,   # the event so far:
+                    "--players", str(HISTORY), "--event", EVENT], check=True)            # earlier visitors in the ranking
     logs = {n: open(os.path.join(TMP, n + ".log"), "w") for n in ("broker", "control", "game")}
     procs = [subprocess.Popen([py, os.path.join(GODOT, "tests/mqtt_test_broker.py"), str(WS), "--tcp", str(TCP)],
                               stdout=logs["broker"], stderr=subprocess.STDOUT)]
@@ -367,7 +375,8 @@ def main():
         until(lambda: len(state().get("players", [])) >= len(floor) + len(mobiles), 300)
         admin.do(web_tab("game"))
         for slot, r in enumerate(ROUNDS[:3]):          # (the game plans 3 rounds ahead: the 4th later)
-            call("POST", "/api/plan", {"slot": slot, "round": r})
+            call("POST", "/api/plan", {"slot": slot, "round": r,
+                                       "options": {"question": SHIELD_QUESTION} if slot == 0 else {}})
         wait_frames(90)
 
         log("--- the operator starts the game")
