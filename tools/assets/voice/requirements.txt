@@ -1,0 +1,14 @@
+# The Python packages of tools/assets/make_voice.py with the Babbeldoos voice
+# (Howest-AI-Lab/babbeldoos-flemish-tts: Flemish LoRA adapters on Chatterbox
+# Multilingual). Installed by tools/assets/voice/setup.sh into tools/assets/voice/.venv
+# (Python 3.10 / 3.11). chatterbox-tts brings its own torch (2.6.0, CUDA 12).
+chatterbox-tts==0.1.7
+safetensors>=0.4
+huggingface_hub>=0.26
+soundfile
+numpy
+pyloudnorm
+setuptools<81          # (the Perth watermark of Chatterbox imports pkg_resources)
+# Flemish Piper voices (CC0 recordings): a reference clip without a recording
+# (tools/assets/voice/make_reference.py), or --backend piper
+piper-tts>=1.5

@@ -109,8 +109,8 @@ else
     fi
     "$GODOT_BIN" --version
     say "importing the project (once, a few minutes on a Pi)"
-    sudo -u "$KIOSK" -H "$GODOT_BIN" --headless --path "$CC_ROOT/godot" --import >/dev/null 2>&1 || true
-    if [ "$ARCH" = arm64 ] && ! ls "$CC_ROOT"/godot/addons/godot-sqlite/bin/*linux*arm64* >/dev/null 2>&1; then
+    sudo -u "$KIOSK" -H "$GODOT_BIN" --headless --path "$CC_ROOT/game" --import >/dev/null 2>&1 || true
+    if [ "$ARCH" = arm64 ] && ! ls "$CC_ROOT"/game/addons/godot-sqlite/bin/*linux*arm64* >/dev/null 2>&1; then
         echo "note: godot-sqlite has no linux arm64 binaries here - fine with the control server"
         echo "      (--control); only the standalone mode (--db=FILE) needs them (docs/SETUP.md §3)"
     fi

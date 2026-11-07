@@ -8,7 +8,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, "..")
 PORT, MQTT_PORT = 8093, 9014
 BASE = f"http://127.0.0.1:{PORT}"
-DB = os.path.join(ROOT, "godot", "tests", "_control_e2e.db")
+DB = os.path.join(ROOT, "game", "tests", "_control_e2e.db")
 failures = 0
 
 
@@ -70,15 +70,15 @@ if os.environ.get("CC_TEST_DB"):            # another database (a URL), emptied 
 for f in (DB, DB + "-wal", DB + "-shm"):
     if os.path.exists(f):
         os.remove(f)
-procs = [subprocess.Popen([sys.executable, os.path.join(ROOT, "godot", "tests", "mqtt_test_broker.py"), str(MQTT_PORT)],
+procs = [subprocess.Popen([sys.executable, os.path.join(ROOT, "game", "tests", "mqtt_test_broker.py"), str(MQTT_PORT)],
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)]
 time.sleep(1)
 procs.append(subprocess.Popen([sys.executable, os.path.join(HERE, "server.py"), "--db", DB, "--port", str(PORT),
                                "--host", "127.0.0.1", "--mqtt", f"ws://127.0.0.1:{MQTT_PORT}"],
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
 time.sleep(2)
-godot_log = open(os.path.join(ROOT, "godot", "tests", "_e2e_godot.log"), "w")
-procs.append(subprocess.Popen(["godot-4", "--headless", "--path", os.path.join(ROOT, "godot"), "--",
+godot_log = open(os.path.join(ROOT, "game", "tests", "_e2e_godot.log"), "w")
+procs.append(subprocess.Popen(["godot-4", "--headless", "--path", os.path.join(ROOT, "game"), "--",
                                f"--mqtt=ws://127.0.0.1:{MQTT_PORT}", "--sim-tiles", f"--control={BASE}",
                                "--node=test-master"], stdout=godot_log, stderr=subprocess.STDOUT))
 try:

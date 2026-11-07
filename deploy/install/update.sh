@@ -13,7 +13,7 @@ SRC=$(cd "$HERE/../.." && pwd)
 if [ -n "${1:-}" ]; then                         # a release tarball (build.sh)
     tmp=$(mktemp -d)
     tar xzf "$1" -C "$tmp"
-    SRC="$tmp/digital_twin"
+    SRC=$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -1)   # (cyber-circle-challenge/; older releases: digital_twin/)
 fi
 if [ "$SRC" != "$CC_ROOT" ]; then
     rsync -a --delete --exclude-from="$HERE/rsync-exclude.txt" \
@@ -31,7 +31,7 @@ if [ -f /etc/systemd/user/cybercircle-game.service ]; then
     echo "== game"
     kiosk=${GAME_KIOSK_USER:-cybercircle}
     if [ -x "$GODOT_BIN" ] && [ ! -x "$CC_ROOT/dist/game/cybercircle.x86_64" ]; then
-        sudo -u "$kiosk" -H "$GODOT_BIN" --headless --path "$CC_ROOT/godot" --import >/dev/null 2>&1 || true
+        sudo -u "$kiosk" -H "$GODOT_BIN" --headless --path "$CC_ROOT/game" --import >/dev/null 2>&1 || true
     fi
     uid=$(id -u "$kiosk")
     sudo -u "$kiosk" XDG_RUNTIME_DIR="/run/user/$uid" systemctl --user restart cybercircle-game 2>/dev/null \

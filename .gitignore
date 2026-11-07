@@ -1,53 +1,43 @@
+# Everything generated goes to out/ (movies, render frames, exports, release builds)
+out/
+dist/
+
 # Godot
 .godot/
 *.import.tmp
+game/tests/shots/
+game/tests/_recovery*.db*
+game/tests/_recovery_godot.log
+game/tests/_recovery_broker.log
+game/tests/_voice/
+
 # Python
-control/.venv/
+**/.venv/
 __pycache__/
+
 # runtime data: databases, logs
 *.db
 *.db-shm
 *.db-wal
 *.log
-# generated: screenshots, raw recordings (make them again, see docs/SETUP.md §7)
-godot/tests/shots/
-godot/movie/*.avi
-movies/*.avi
+
 # blender backups
 *.blend1
-godot/movie/clips_tmp/
-control/*.pem
-# videos kept locally (tools/make_clips.sh, the test scenes make them again) and old gallery runs
-movies/gameplay/
-movies/drones.mp4
-movies/13_players_end_of_round.mp4
-movies/gallery_old/
 
-# PlatformIO build output
-tile_firmware/.pio/
+# PlatformIO build output, flash logs
+firmware/*/.pio/
+firmware/robot/robot_flash_*.txt
+
+# control: the local https certificate (tools/ops/make_cert.sh)
+control/*.pem
 
 # deploy: the generated certificates (deploy/certs/make_certs.sh)
 deploy/certs/*.pem
 deploy/certs/*.key
 deploy/certs/*.srl
 deploy/certs/server.san
-godot/tests/_recovery*.db*
-godot/tests/_recovery_godot.log
-godot/tests/_recovery_broker.log
 
-# generated: the read-aloud lines export (--voice-export), release builds (deploy/install/build.sh)
-voice_lines.csv
-dist/
-
-# read-aloud generator (tools/voice/setup.sh): its venv, the downloaded model,
-# the reference voice (a person's voice: not in git) and test output
-tools/voice/.venv/
-tools/voice/models/
-tools/voice/reference*.wav
-godot/tests/_voice/
-godot/movie/game_tmp/
-movies/game/
-godot/movie/*_tmp/
-movies/game_*/
-robot_firmware/.pio/
-robot_flash_*.txt
+# read-aloud generator (tools/assets/voice/setup.sh): the downloaded model,
+# the reference voice (a person's voice: not in git)
+tools/assets/voice/models/
+tools/assets/voice/reference*.wav

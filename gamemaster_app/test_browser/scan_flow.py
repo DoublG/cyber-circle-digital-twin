@@ -46,11 +46,11 @@ def state():
 def waiting(name):
     return any(p["name"] == name for p in state().get("pending", []))
 py = sys.executable if not os.path.exists(os.path.join(ROOT, "control/.venv/bin/python")) else os.path.join(ROOT, "control/.venv/bin/python")
-procs = [subprocess.Popen([py, os.path.join(ROOT, "godot/tests/mqtt_test_broker.py"), str(MQ)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)]
+procs = [subprocess.Popen([py, os.path.join(ROOT, "game/tests/mqtt_test_broker.py"), str(MQ)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)]
 time.sleep(1)
 procs.append(subprocess.Popen([py, os.path.join(ROOT, "control/server.py"), "--db", DB, "--port", str(PORT), "--host", "127.0.0.1", "--mqtt", f"ws://127.0.0.1:{MQ}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
 time.sleep(2)
-procs.append(subprocess.Popen(["godot-4", "--headless", "--path", os.path.join(ROOT, "godot"), "--", f"--mqtt=ws://127.0.0.1:{MQ}", "--sim-tiles", f"--control={BASE}", "--node=cam-master"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+procs.append(subprocess.Popen(["godot-4", "--headless", "--path", os.path.join(ROOT, "game"), "--", f"--mqtt=ws://127.0.0.1:{MQ}", "--sim-tiles", f"--control={BASE}", "--node=cam-master"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
 fails = 0
 def check(ok, what):
     global fails

@@ -6,7 +6,7 @@
 #   1. /etc/cybercircle/cybercircle.env (once, with random passwords; SERVER_IP
 #      from the argument or this PC's address) - the settings of everything
 #   2. packages: mosquitto, mariadb-server, python3-venv, ...
-#   3. the user CC_USER and the project in CC_ROOT (/srv/cybercircle/digital_twin)
+#   3. the user CC_USER and the project in CC_ROOT (/srv/cybercircle/cyber-circle-challenge)
 #   4. Mosquitto: plain MQTT (tiles) + WebSocket (game, control server, app), a password
 #   5. MariaDB: the database and its user
 #   6. the control server: a virtualenv, systemd service cybercircle-control
@@ -93,7 +93,7 @@ sudo -u "$CC_USER" python3 -m venv "$CC_ROOT/control/.venv"
 sudo -u "$CC_USER" "$CC_ROOT/control/.venv/bin/pip" install -q --upgrade pip
 sudo -u "$CC_USER" "$CC_ROOT/control/.venv/bin/pip" install -q -r "$CC_ROOT/control/requirements.txt"
 if [ "${CONTROL_HTTPS:-0}" = "1" ] && [ ! -f "$CC_ROOT/control/cert.pem" ]; then
-    sudo -u "$CC_USER" "$CC_ROOT/tools/make_cert.sh" "$SERVER_IP"
+    sudo -u "$CC_USER" "$CC_ROOT/tools/ops/make_cert.sh" "$SERVER_IP"
 fi
 [ -d "$CC_ROOT/gamemaster_app/build/web" ] || echo "note: no gamemaster web build (build.sh): /gm/ stays empty"
 install_unit() {   # unit file -> /etc/systemd/system with the paths filled in

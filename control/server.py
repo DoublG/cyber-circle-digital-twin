@@ -6,7 +6,7 @@ interface and the HTTP API, and follows / steers the game over MQTT.
 
 Web interface: http://<this pc>:8080/      API: http://<this pc>:8080/api/...
 Gamemaster app in a browser (iPhone): http://<this pc>:8080/gm/ (the Flutter web build;
-  the camera needs https: --ssl-cert / --ssl-key, see tools/make_cert.sh)
+  the camera needs https: --ssl-cert / --ssl-key, see tools/ops/make_cert.sh)
   game master  GET /api/questions, GET /api/players/{id}, GET /api/ranking,
                POST /api/games, POST /api/games/{id}/rounds|results|end
   displays     GET /api/master        (where the master is: the Pis connect to it)
@@ -49,7 +49,7 @@ from db import FLOOR_TILES, PLACES, Database
 from mqtt_link import MqttLink
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-QUESTIONS_JSON = os.path.join(HERE, "..", "godot", "data", "questions.json")
+QUESTIONS_JSON = os.path.join(HERE, "..", "game", "data", "questions.json")
 
 
 class PlayerIn(BaseModel):
@@ -502,7 +502,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
     @app.post("/api/sound/{event}")
     def play_sound(event: str, s: SoundIn | None = None):
         """Play a sound now, whatever the game is doing: a random file of `event` (a folder in
-        godot/data/sounds/ or the game's --sounds=DIR), or `file`. Body optional."""
+        game/data/sounds/ or the game's --sounds=DIR), or `file`. Body optional."""
         s = s or SoundIn()
         if link.sounds:                       # (known once a game has announced its sounds)
             if event not in link.sounds:
@@ -529,7 +529,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
 
     @app.post("/api/cmd")
     def raw_command(cmd: dict):
-        """Any command the game understands (see the top of godot/scripts/arena.gd)."""
+        """Any command the game understands (see the top of game/scripts/arena.gd)."""
         link.command(cmd)
         return {"ok": True}
 
@@ -942,7 +942,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
 
 def main():
     ap = argparse.ArgumentParser(description="Cyber Circle control server")
-    ap.add_argument("--db", default=os.path.join(HERE, "..", "godot", "data", "cybercircle.db"))
+    ap.add_argument("--db", default=os.path.join(HERE, "..", "game", "data", "cybercircle.db"))
     ap.add_argument("--mqtt", default="ws://localhost:9001", help="broker: ws://host:9001 or mqtt://host:1883")
     ap.add_argument("--mqtt-user", default="")
     ap.add_argument("--mqtt-password", default="")
@@ -953,7 +953,7 @@ def main():
     ap.add_argument("--host", default="0.0.0.0", help="0.0.0.0 = reachable on the LAN")
     ap.add_argument("--port", type=int, default=8080)
     ap.add_argument("--ssl-cert", default="", help="https (the gamemaster web app's camera on iPhones): certificate ...")
-    ap.add_argument("--ssl-key", default="", help="... and its key (tools/make_cert.sh makes a self-signed pair)")
+    ap.add_argument("--ssl-key", default="", help="... and its key (tools/ops/make_cert.sh makes a self-signed pair)")
     ap.add_argument("--gm-web", default=GM_WEB, help="the gamemaster app's web build, served at /gm/")
     ap.add_argument("--website", default="", help="the registration website's health endpoint (none: a mock)")
     ap.add_argument("--website-interval", type=float, default=15.0, help="s between its checks")

@@ -10,6 +10,6 @@ RUN curl -fsSL -o /tmp/godot.zip \
         https://github.com/godotengine/godot/releases/download/${GODOT}-stable/Godot_v${GODOT}-stable_linux.x86_64.zip \
     && unzip /tmp/godot.zip -d /tmp && mv /tmp/Godot_v${GODOT}-stable_linux.x86_64 /usr/local/bin/godot \
     && rm /tmp/godot.zip
-COPY godot/ /game/
+COPY game/ /game/
 RUN godot --headless --path /game --import 2>&1 | tail -3
 ENTRYPOINT ["godot", "--path", "/game"]

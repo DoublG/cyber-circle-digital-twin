@@ -1,0 +1,8 @@
+file;spoken
+# Lines the rules of pronunciation.csv cannot get right: the exact text to say
+# for a file name (tools/assets/make_voice.py). A question whose text changes gets a
+# new file name, so an entry here never ends up on the wrong question.
+question_welk-van-deze-is-een-sterk-wacht_e42d3e_answer_3;Kruis: Kat, uitroepteken, Fiets, zeven, hekje, Maan.
+question_wat-is-1-1-in-binair_17e9b4_answer_2;Driehoek: één één.
+question_wat-is-1-1-in-binair_17e9b4_answer_3;Kruis: één nul.
+question_wat-is-1-1-in-binair_17e9b4_answer_4;Cirkel: nul één.

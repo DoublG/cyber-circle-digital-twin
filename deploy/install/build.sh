@@ -20,12 +20,12 @@ say() { printf '\n\033[1;36m== %s\033[0m\n' "$*"; }
 cd "$ROOT"
 
 say "Godot import ($("$GODOT" --version))"
-"$GODOT" --headless --path godot --import >/dev/null 2>&1 || true
+"$GODOT" --headless --path game --import >/dev/null 2>&1 || true
 
 if [ $TEST = 1 ]; then
     say "tests"
     for t in test_flow test_db test_piet test_settings test_recovery test_control_queue; do
-        out=$("$GODOT" --headless --path godot --fixed-fps 60 "res://tests/$t.tscn" 2>&1 | grep -E "^DONE" || true)
+        out=$("$GODOT" --headless --path game --fixed-fps 60 "res://tests/$t.tscn" 2>&1 | grep -E "^DONE" || true)
         echo "  $t: ${out:-no result}"
         grep -q "0 failure" <<<"$out" || { echo "FAILED: $t"; exit 1; }
     done
@@ -46,7 +46,7 @@ if [ $EXPORT = 1 ]; then
     mkdir -p dist/game
     for preset in "Linux x86_64:cybercircle.x86_64" "Linux arm64:cybercircle.arm64"; do
         name=${preset%%:*}; file=${preset##*:}
-        if "$GODOT" --headless --path godot --export-release "$name" "../dist/game/$file" >/tmp/cc_export.log 2>&1 \
+        if "$GODOT" --headless --path game --export-release "$name" "../dist/game/$file" >/tmp/cc_export.log 2>&1 \
             && [ -f "dist/game/$file" ]; then
             echo "  $name: dist/game/$file"
         else
@@ -60,7 +60,7 @@ say "release tarball"
 stamp=$(date +%F)
 stage=$(mktemp -d)
 rsync -a --exclude-from="$ROOT/deploy/install/rsync-exclude.txt" --exclude=control/cert.pem --exclude=control/key.pem \
-    "$ROOT/" "$stage/digital_twin/"
-tar czf "dist/cybercircle-$stamp.tar.gz" -C "$stage" digital_twin
+    "$ROOT/" "$stage/cyber-circle-challenge/"
+tar czf "dist/cybercircle-$stamp.tar.gz" -C "$stage" cyber-circle-challenge
 rm -rf "$stage"
 ls -lh "dist/cybercircle-$stamp.tar.gz"

@@ -77,4 +77,4 @@ exported="$CC_ROOT/dist/game/cybercircle.x86_64"
 if [ -x "$exported" ]; then
     exec "$exported" "${engine[@]}" "${scene[@]}" -- "${args[@]}"
 fi
-exec "${GODOT_BIN:-godot}" "${engine[@]}" --path "$CC_ROOT/godot" "${scene[@]}" -- "${args[@]}"
+exec "${GODOT_BIN:-godot}" "${engine[@]}" --path "$CC_ROOT/game" "${scene[@]}" -- "${args[@]}"

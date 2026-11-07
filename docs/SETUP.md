@@ -4,22 +4,21 @@ How to install the game, connect it to the installation (tiles, app, MQTT,
 database) and start it. Everything lives in this folder:
 
 ```
-digital_twin/
-  godot/            the game (Godot 4.7 project)
-    addons/godot-sqlite/   SQLite for Godot (prebuilt, Linux/Windows/macOS)
-    data/           questions.json (fallback), schema.sql, videos/, cybercircle.db (demo)
-    scenes/ scripts/ shaders/ models/ textures/ fonts/
-    tests/          automatic tests and screenshot scenes
-    movie/          the two scripted demo movies
+cyber-circle-challenge/
+  game/             the game (Godot 4.7 project): scenes, scripts, data, tests,
+                    movie/ (the scripted demo and gameplay-movie scenes)
   control/          the control server: database owner, web interface, HTTP API (Python)
-  tile_firmware/    the tiles' ESP32 firmware (PlatformIO)
-  robot_firmware/   the real robot's ESP32 firmware (PlatformIO, with a PC emulator)
   gamemaster_app/   the gamemaster app (Flutter)
-  deploy/           install scripts, the env file, the broker's access list
-  blender/          model sources (build_models.py) and the light bake (bake_models.py)
-  tools/            cybercircle_db.py (database), convert_video.sh (videos)
-  movies/           rendered demo movies (MP4)
-  docs/             this file
+  firmware/tile/    the tiles' ESP32 firmware (PlatformIO, with a PC emulator)
+  firmware/robot/   the real robot's ESP32 firmware (PlatformIO, with a PC emulator)
+  firmware/common/  what both emulators share (Arduino / WiFi stand-ins)
+  assets/blender/   model sources (build_models.py) and the light bake (bake_models.py)
+  deploy/           install scripts, docker compose, the env file, the broker's access list
+  tools/assets/     generators: sounds, read-aloud voice, diagrams, video conversion
+  tools/media/      recorders: game movies, gameplay clips, the screenshot gallery
+  tools/ops/        cybercircle_db.py (database), make_cert.sh (https certificate)
+  docs/             this file, WIRING, TODO, CREDITS, gallery/ (screenshots), demo/ (2 demo movies)
+  out/              everything generated, not in git: movies, render frames, voice_lines.csv
 ```
 
 ## 1. How it fits together
@@ -44,7 +43,7 @@ plan, sequences): [WIRING.md](WIRING.md).
   **HTTP API** for the game and the app, and follows / steers the game over
   MQTT. See §10.
 * **The game master** (Godot) runs the rounds, the robot, the screens and the
-  digital twin of the room. In the final setup the split screens are rendered
+  3D model of the room. In the final setup the split screens are rendered
   by **display nodes** (a Raspberry Pi per 2 screens) that follow the
   master's game state over Godot's multiplayer (ENet) and render it
   themselves (§4 *Display nodes*; diagrams: [WIRING.md](WIRING.md)). It talks MQTT over WebSocket (tiles, app,
@@ -53,8 +52,8 @@ plan, sequences): [WIRING.md](WIRING.md).
   it can open a SQLite file itself (`--db=PATH`, for testing).
 * **The tiles** run their own logic for the tile games (Cyclone, Reaction,
   Simon): the game uploads a program during the round intro, sends `start`,
-  and the tile reports results. Message formats: `godot/scripts/tile_firmware.gd`.
-* **The robot** (`robot_firmware/`, an ESP32 with Ethernet like the tiles)
+  and the tile reports results. Message formats: `game/scripts/tile_firmware.gd`.
+* **The robot** (`firmware/robot/`, an ESP32 with Ethernet like the tiles)
   turns its head, lights up and puffs smoke on the robot NPC's events, which
   the master sends on `robot/cmd` (§4 *The real robot*).
 * **The app** creates a player through the control server
@@ -85,7 +84,7 @@ the database and the game (one game computer).
    Start it once with `--windows`, see which monitor shows which screen, set
    `--screens` / `--mobile-screens` / `--monitors`, and put the final command
    in the autostart file (§4).
-6. **Tiles** – in `tile_firmware/include/config.h`: `MQTT_HOST` (the overview
+6. **Tiles** – in `firmware/tile/include/config.h`: `MQTT_HOST` (the overview
    PC), `MQTT_USER` / `MQTT_PASSWORD` (the broker login) and the Ethernet
    module's pins (`TILE_ETH_*`); then flash every tile with the same firmware
    (`pio run -t upload`, §5). Nobody on a tile at power-up (the sensors
@@ -100,7 +99,7 @@ the database and the game (one game computer).
      *Instellingen*; *Website*: start the control server with
      `--website=https://…/health` for the real registration website.
 8. **Gamemaster app** (§11) – the Android APK, or the web version at
-   `/gm/` (iPhones: the control server on https, `tools/make_cert.sh`). In the
+   `/gm/` (iPhones: the control server on https, `tools/ops/make_cert.sh`). In the
    app's *Instellingen*: the control server's address and the MQTT login.
 9. **Lock the setup** 🔒 and press **Start spel**.
 
@@ -115,11 +114,11 @@ emulator (§5).
 | broker address | the broker's listeners (1883 plain, 9001 WebSocket) | control server `--mqtt ws://…:9001`; game `--mqtt=ws://…:9001`; tiles `MQTT_HOST` + `MQTT_PORT 1883`. The app gets it from `/api/config` (the control server's `--mqtt`, `localhost` replaced by the address the app used; `--public-mqtt` behind NAT / Docker) |
 | database login | MySQL `CREATE USER` (§10) | control server `--db mysql+pymysql://user:pw@host/cybercircle?charset=utf8mb4` |
 | control server address | `--host` (default `0.0.0.0`), `--port` (default 8080) | game `--control=http://…:8080`; the app's *Instellingen* |
-| https | `tools/make_cert.sh`, or `deploy/certs/` (§12); control server `--ssl-cert` / `--ssl-key` | game `--ca=` for an own CA; phones trust the certificate once |
+| https | `tools/ops/make_cert.sh`, or `deploy/certs/` (§12); control server `--ssl-cert` / `--ssl-key` | game `--ca=` for an own CA; phones trust the certificate once |
 | registration website | control server `--website=URL` | – |
 | which tiles each screen shows, which monitor | game `--screens`, `--mobile-screens`, `--monitors` | the physical layout |
 | tiles' places, layout, gamemasters, questions, texts, game settings, operating mode | the web interface | stored in the database: every game process and app follows it |
-| tile hardware (LED counts, sensor thresholds, Ethernet pins) | `tile_firmware/include/config.h` | – |
+| tile hardware (LED counts, sensor thresholds, Ethernet pins) | `firmware/tile/include/config.h` | – |
 | Docker test ports, passwords | `deploy/.env` (from `.env.example`) | – |
 
 ## 2. What you need
@@ -157,7 +156,7 @@ sudo mosquitto_passwd -c /etc/mosquitto/passwd cybercircle
 sudo systemctl restart mosquitto
 ```
 
-(`godot/tests/mqtt_test_broker.py` is a tiny broker for the automatic tests
+(`game/tests/mqtt_test_broker.py` is a tiny broker for the automatic tests
 only – not for the installation.)
 
 ### Display nodes: a Raspberry Pi per 2 screens
@@ -192,29 +191,29 @@ before) still works: `GAME_REMOTE_SCREENS=` empty.
 ```bash
 # 1. the project
 sudo mkdir -p /srv/cybercircle && sudo chown $USER /srv/cybercircle
-cp -r digital_twin /srv/cybercircle/          # or git clone
+cp -r cyber-circle-challenge /srv/cybercircle/          # or git clone
 
 # 2. Godot 4.7
 sudo snap install godot-4                     # or unpack the official build
 
 # 3. import once (also after adding new scripts!)
-cd /srv/cybercircle/digital_twin
-godot-4 --headless --path godot --import
+cd /srv/cybercircle/cyber-circle-challenge
+godot-4 --headless --path game --import
 
 # 4. the database: MySQL / MariaDB for the control server, see §10
 #    (standalone without a control server: a SQLite file,
-#     python3 tools/cybercircle_db.py init --db /srv/cybercircle/cybercircle.db --demo-players)
+#     python3 tools/ops/cybercircle_db.py init --db /srv/cybercircle/cybercircle.db --demo-players)
 ```
 
-The SQLite add-on is already in `godot/addons/godot-sqlite` (v4.9, built for
+The SQLite add-on is already in `game/addons/godot-sqlite` (v4.9, built for
 Godot 4.7.1; binaries for Linux, Windows and macOS – for a Pi add the
 `linux.*.arm64` files from the same release).
 
 ## 4. Start the game
 
 ```bash
-cd /srv/cybercircle/digital_twin
-godot-4 --path godot -- --windows --node=overview-pc \
+cd /srv/cybercircle/cyber-circle-challenge
+godot-4 --path game -- --windows --node=overview-pc \
     --screens=1,2,3/4,5,6/7,8,9/10,11/12,13 --mobile-screens=14,15/16,17,18 \
     --monitors=0,1,2,3,4,5,6,7 \
     --mqtt=ws://localhost:9001 --mqtt-user=cybercircle --mqtt-password=SECRET \
@@ -254,7 +253,7 @@ Options (everything after `--`):
 | `--serve-replicas[=7350]` | **display nodes** (a Raspberry Pi per 2 screens) connect on this UDP port (Godot multiplayer, ENet) and follow the game (see *Display nodes* below); a beacon on UDP 7351 tells them where the master is |
 | `--advertise=IP` | the address announced on MQTT (`<prefix>/node/<id>`; default a LAN address of this machine – set it when the machine has several, e.g. Docker bridges; `start_game.sh`: `SERVER_IP`) |
 | `--remote-screens=all` | with `--serve-replicas`: these screens (`1,2,5-7`, `all`) are rendered by display nodes, not here – built and driven as always, never drawn here (no window, no GPU cost) |
-| `--mqtt=URL` | broker WebSocket URL. Not given: no MQTT, the tiles are simulated in the twin |
+| `--mqtt=URL` | broker WebSocket URL. Not given: no MQTT, the tiles are simulated in the game |
 | `--mqtt-user=…` `--mqtt-password=…` | broker login |
 | `--sim-tiles` | with MQTT, still simulate the tile logic (no real tiles) |
 | `--control=URL` | **installation**: the control server, e.g. `http://192.168.1.10:8080` – questions, players, ranking and scores through its API |
@@ -266,12 +265,12 @@ Options (everything after `--`):
 | `--settings=FILE` | standalone: game settings as JSON, the same as the web interface's *Instellingen*, e.g. `{"game": {"tempo": 1.2}, "quiz": {"question_time": 20}}` |
 | `--no-sound` | no sound effects |
 | `--sounds=DIR` | extra sound files, `DIR/<event>/*.ogg` (see *Sound* below) |
-| `--texts=FILE` | standalone: the screen texts as JSON, the same as the web interface's *Teksten* (`godot/scripts/data/texts.gd`) |
+| `--texts=FILE` | standalone: the screen texts as JSON, the same as the web interface's *Teksten* (`game/scripts/data/texts.gd`) |
 | `--rounds=quiz,simon` | only these round types (`cyclone`, `quiz`, `reaction`, `rhythm`, `simon`, `zwarte_piet`) – for testing |
 | `--demo[=N]` `--demo-idle=S` | N bot players (default 6, max 13) keep the game going; they walk up after S seconds of an idle game |
 
 Without any options the game starts in preview mode, without MQTT, with the
-demo database `godot/data/cybercircle.db`.
+demo database `game/data/cybercircle.db`.
 
 **Crash / power cut.** The game comes back where it was. At every stable
 moment – a player invited, activated or leaving, a round starting, the end of
@@ -296,7 +295,7 @@ hour (`--restore-max-age`): yesterday's game – a fresh start. `--no-restore`:
 always a fresh start.
 
 **Sound.** Every game event plays a random file from
-`godot/data/sounds/<event>/` (`.ogg`, `.wav` or `.mp3`): `charge` (the robot
+`game/data/sounds/<event>/` (`.ogg`, `.wav` or `.mp3`): `charge` (the robot
 charges), `attack` (the shot), `hit`, `shield`, `death` (a player is
 exterminated), `zap` (the tile's electrocution), `explosion`, `life` (+1),
 `round_start`, `scoreboard`, `join`, `random` (now and then while the game
@@ -311,7 +310,7 @@ length; [CREDITS.md](../CREDITS.md) where to find free sounds, and the licence
 and credit of every file that is not our own. The current files are free CC0 sounds and music
 from OpenGameArt ([CREDITS.md](../CREDITS.md)); only the robot's show (`boot`,
 `shutdown`, `power_down`, `off`) has synthesised placeholders
-(`python3 tools/make_sounds.py`, which never overwrites a folder with real
+(`python3 tools/assets/make_sounds.py`, which never overwrites a folder with real
 sounds in it). Drop other or own recordings (e.g. a robot voice) in those folders – or in a folder outside the project with `--sounds=DIR`, no
 re-export needed. Volume and the random interval are in *Instellingen*. Sound
 comes from where *Instellingen › Geluid › Geluid op* says: 0 automatic (on
@@ -323,12 +322,12 @@ master, 2 the displays, 3 both.
 the game can read out what the screens show: the question, its answers
 ("Vierkant: …"), each round's intro, "Tijd om!" and the invite ("Ga naar tegel 3
 en druk op de 4 iconen."). It plays **prebaked audio files only** – no speech
-engine in the game: `godot/data/voice/<name>.ogg` (`.wav`, `.mp3`) or a folder
+engine in the game: `game/data/voice/<name>.ogg` (`.wav`, `.mp3`) or a folder
 outside the project with `--voice=DIR` (no import needed). Every line has a
 fixed name; get the list to record or generate:
 
 ```bash
-godot-4 --headless --path godot -- --control=http://localhost:8080 --voice-export=$HOME/voice_lines.csv
+godot-4 --headless --path game -- --control=http://localhost:8080 --voice-export=$HOME/voice_lines.csv
 ```
 
 (CSV: `file;text;kind`, the questions as they are in the database now. A
@@ -348,27 +347,27 @@ with that tile, and `"tile"`) – so a speaker, headphones or a Pi per screen ca
 play its own screen's lines. A line without a file is logged once
 (`voice: no file for …`).
 
-**Generating the voice (Babbeldoos, Flemish).** `tools/make_voice.py` makes
+**Generating the voice (Babbeldoos, Flemish).** `tools/assets/make_voice.py` makes
 every line with [Babbeldoos](https://huggingface.co/Howest-AI-Lab/babbeldoos-flemish-tts)
 (Howest AI Lab): two LoRA adapters that turn Chatterbox Multilingual's Dutch
 into Flemish. It runs on the server box (any NVIDIA GPU; CPU works, but
 slowly), once, not during the game: the game only plays the files.
 
 ```bash
-tools/voice/setup.sh          # once: venv (Python 3.10/3.11), torch, Chatterbox, the adapters (~180 MB);
+tools/assets/voice/setup.sh          # once: venv (Python 3.10/3.11), torch, Chatterbox, the adapters (~180 MB);
                               # the Chatterbox base (~2 GB) comes from Hugging Face on the first run
 # the voice: 5–15 s of clean speech, one speaker, no music or echo (someone who agreed to it)
-ffmpeg -f pulse -i default -t 12 -ac 1 -ar 24000 tools/voice/reference.wav
+ffmpeg -f pulse -i default -t 12 -ac 1 -ar 24000 tools/assets/voice/reference.wav
 # or no recording: a Flemish Piper voice (CC0 recordings) reads a reference clip
-tools/voice/.venv/bin/python tools/voice/make_reference.py --voice rdh     # -> tools/voice/reference_rdh.wav (or nathalie)
+tools/assets/voice/.venv/bin/python tools/assets/voice/make_reference.py --voice rdh     # -> tools/assets/voice/reference_rdh.wav (or nathalie)
 #   (--reference builtin: Chatterbox's own default voice; --backend piper --piper-voice rdh: Piper reads every line itself)
 # the current lines (questions from the database) and the files
-godot-4 --headless --path godot -- --control=http://localhost:8080 --voice-export=$PWD/voice_lines.csv
-tools/voice/.venv/bin/python tools/make_voice.py --dry-run     # how each line will be spoken
-tools/voice/.venv/bin/python tools/make_voice.py               # -> godot/data/voice/<file>.ogg
+godot-4 --headless --path game -- --control=http://localhost:8080 --voice-export=$PWD/voice_lines.csv
+tools/assets/voice/.venv/bin/python tools/assets/make_voice.py --dry-run     # how each line will be spoken
+tools/assets/voice/.venv/bin/python tools/assets/make_voice.py               # -> game/data/voice/<file>.ogg
 ```
 
-- Only new or changed lines are made (`godot/data/voice/voice_manifest.json`
+- Only new or changed lines are made (`game/data/voice/voice_manifest.json`
   remembers each file's text, voice and settings); `--force` makes all again,
   `--only 'invite_*'` / `--kinds question,answer` a part, `--prune` removes files
   of questions that are gone. `--out DIR` writes to the folder of
@@ -379,21 +378,21 @@ tools/voice/.venv/bin/python tools/make_voice.py               # -> godot/data/v
   `--only NAME --seed 8 --force`).
 - What the model says: digits become Dutch words (13 → *dertien*; long
   codes and binary numbers digit by digit), acronyms and English names follow
-  `tools/voice/pronunciation.csv` (CPU → *cee pee uu*), unknown 2–3 letter
+  `tools/assets/voice/pronunciation.csv` (CPU → *cee pee uu*), unknown 2–3 letter
   capitals are spelled. A line no rule gets right: its exact text in
-  `tools/voice/spoken.csv` (the password *Kat!Fiets7#Maan*).
+  `tools/assets/voice/spoken.csv` (the password *Kat!Fiets7#Maan*).
 - Each file is trimmed, levelled to the same loudness (−18 LUFS) and written as
   Ogg Vorbis, 24 kHz mono. Listen to them all once: the model can skip or
   repeat a word.
-- Check a folder: `VOICE_DIR=$PWD/godot/data/voice LINES=$PWD/voice_lines.csv
-  godot-4 --headless --path godot --script res://tests/check_voice.gd`
+- Check a folder: `VOICE_DIR=$PWD/game/data/voice LINES=$PWD/out/voice_lines.csv
+  godot-4 --headless --path game --script res://tests/check_voice.gd`
   (a playable file for every line). The pipeline without the model:
-  `python3 tools/make_voice.py --backend test --out godot/tests/_voice` (beeps).
+  `python3 tools/assets/make_voice.py --backend test --out game/tests/_voice` (beeps).
 - Licence: the adapters are **CC BY-NC 4.0** (non-commercial use; Chatterbox
   itself is MIT). Chatterbox puts an inaudible watermark (Perth) in its output.
   Do not use someone's voice as reference without their consent. New files in
-  `godot/data/voice/` need a Godot import (open the editor once, or
-  `godot-4 --headless --path godot --import`) before an exported build has them.
+  `game/data/voice/` need a Godot import (open the editor once, or
+  `godot-4 --headless --path game --import`) before an exported build has them.
 
 **Sounds from outside** (a show controller, a button, the operator): the
 web interface's **Geluid** tab has a button per sound and per file, and
@@ -402,7 +401,7 @@ other systems use the HTTP API, `POST /api/sound/<event>` (body optional:
 `cybercircle/cmd`. The sound plays at once, whatever the game is doing. Any
 folder is an event, so for your own sounds add folders: in the `--sounds=DIR`
 folder (new files count after **Opnieuw inlezen** / `{"sound_reload": true}`,
-no restart) or in `godot/data/sounds/` (needs an import or re-export first).
+no restart) or in `game/data/sounds/` (needs an import or re-export first).
 `POST /api/sounds/stop` stops every sound; `GET /api/sounds` lists them.
 
 **Start automatically at login** (game computer, or later each Pi):
@@ -412,7 +411,7 @@ no restart) or in `godot/data/sounds/` (needs an import or re-export first).
 [Desktop Entry]
 Type=Application
 Name=Cyber Circle
-Exec=sh -c 'cd /srv/cybercircle/digital_twin && godot-4 --path godot -- --windows --mqtt=ws://localhost:9001 --mqtt-user=cybercircle --mqtt-password=SECRET --control=http://localhost:8080'
+Exec=sh -c 'cd /srv/cybercircle/cyber-circle-challenge && godot-4 --path game -- --windows --mqtt=ws://localhost:9001 --mqtt-user=cybercircle --mqtt-password=SECRET --control=http://localhost:8080'
 X-GNOME-Autostart-enabled=true
 ```
 
@@ -423,7 +422,7 @@ the game: the logic, the database, MQTT, the control server's API, the
 overview. A **display node** (a Raspberry Pi 5) runs the very same scene with
 `--replica`: the same 3D world, the same screens and views – but no game
 logic. It follows the master over **Godot's high-level multiplayer**
-(`ENetMultiplayerPeer` + RPCs, UDP 7350; `godot/scripts/net/replica.gd`):
+(`ENetMultiplayerPeer` + RPCs, UDP 7350; `game/scripts/net/replica.gd`):
 
 * **game state** – what the screens read (players, invites, lives, the game's
   state, the round and its fields, what the screens show) as data: a
@@ -439,7 +438,7 @@ there between the master's messages, and a network hiccup only delays the
 next change – the picture never freezes. The **robot is an NPC**: nobody
 steers it over the network – on every node it acts by itself on the game's
 events (a press reaching it, an attack, an extermination, the phase of the
-game; `godot/scripts/robot_npc.gd`); the master's head angle only pulls a
+game; `game/scripts/robot_npc.gd`); the master's head angle only pulls a
 drifted idle spin back. Each Pi **plays the sound** (every sound effect: the
 master picks the file, all play the same) and the **read-aloud lines of its
 own screens** on its HDMI / audio jack (*Instellingen › Geluid*: where the
@@ -500,7 +499,7 @@ godot-4 --rendering-method gl_compatibility --path . -- --replica --show=1,2 --m
 * **The ENet link** in the web interface's *Prestaties*: round trip, jitter,
   packet loss per display (ENet's own statistics), events / snapshots, whether
   its own tiles come over MQTT.
-* Tests (two processes on one PC): `godot/tests/run_replica_test.sh` – at each
+* Tests (two processes on one PC): `game/tests/run_replica_test.sh` – at each
   moment (lobby, intro, quiz, attack, extermination, scoreboard, rhythm round)
   the display compares its state with the master's (`mark … state EQUAL`) and
   both save their screens, compared by `tests/compare_shots.gd`. A bad
@@ -610,14 +609,14 @@ choose any of them in the web interface.
 
 The same over MQTT on `cybercircle/cmd`: `{"game": "start"}`, `{"game": "next"}`,
 `{"game": "stop"}` – and every command listed at the top of
-`godot/scripts/arena.gd`.
+`game/scripts/arena.gd`.
 
-### The real robot (robot_firmware/)
+### The real robot (firmware/robot/)
 
 The robot in the room is an ESP32 with Ethernet, like the tiles, and talks
 MQTT like them (wiring: [WIRING.md](WIRING.md) §3b). It is slower than the one
 on the screens, so the game does not steer it: the robot NPC's events
-(`godot/scripts/robot_npc.gd`) go to it as commands on `<prefix>/robot/cmd`
+(`game/scripts/robot_npc.gd`) go to it as commands on `<prefix>/robot/cmd`
 from the master, and the robot runs the physical part itself:
 
 * **Turning** to a side (the tiles have fixed places: side *k* faces tile
@@ -654,10 +653,10 @@ The web interface: *Tegels › Robot* – its state (side, turns, moving, queue,
 errors), the settings (sent retained on `<prefix>/robot/config`, kept in its
 flash), *Zoek de start*, *Stop motor*, a smoke test, turn to a side; *Spel*:
 **💨 Rook**. Topics: `robot/cmd`, `robot/config`, `robot/state`, `robot/event`,
-`robot/hello` (`robot_firmware/src/main.cpp`, `robot.cpp`).
+`robot/hello` (`firmware/robot/src/main.cpp`, `robot.cpp`).
 
 ```bash
-cd robot_firmware
+cd firmware/robot
 pio run -t upload                                     # the first time over USB
 pio run -e ota -t upload --upload-port 192.168.1.40   # then over Ethernet (OTA_PASSWORD in config.h)
 pio test -e test                                      # the motion / homing logic on the PC
@@ -666,7 +665,7 @@ pio run -e native && .pio/build/native/program --host 127.0.0.1 --port 1883 --we
                                                       # the robot from above at http://localhost:8095
 ```
 
-The tiles flash over Ethernet the same way: `cd tile_firmware && pio run -e ota
+The tiles flash over Ethernet the same way: `cd firmware/tile && pio run -e ota
 -t upload --upload-port <IP of the tile>`.
 
 ## 5. MQTT topics
@@ -730,7 +729,7 @@ type has its own). `flashes`: the operator's setting *Licht › Flitsen*: false
 = the lighting should not flash or strobe either.
 
 **`cybercircle/light/event`** (not retained): one message per moment, at the
-moment itself (the same moments as the sounds: `godot/scripts/arena.gd`,
+moment itself (the same moments as the sounds: `game/scripts/arena.gd`,
 `cue()`). An event at a tile has `tile` (1–13, 14–18 = M1–M5) and `angle`:
 where it is, in degrees clockwise from T01 seen from above (T01 = 0, T02 ≈
 27.7, …; the drones: where they fly) – map fixtures by tile number or by
@@ -767,10 +766,10 @@ crackle between two pillars). *Instellingen › Licht*: their brightness, and
 *Flitsen*.
 
 The tile programs and results for Cyclone, Reaction and Simon are described
-in the header of `godot/scripts/tile_firmware.gd` – that file is also the
+in the header of `game/scripts/tile_firmware.gd` – that file is also the
 reference implementation for the tile firmware.
 
-**Tile firmware** (`tile_firmware/`, PlatformIO, ESP32 with FastLED, the 4
+**Tile firmware** (`firmware/tile/`, PlatformIO, ESP32 with FastLED, the 4
 pressure sensors on ADC1 pins): one firmware for every tile. The ESP32 is a
 module with **wired Ethernet**, socketed on the tile's carrier board: an RMII
 PHY (LAN8720; the defaults are a WT32-ETH01's pins, the Olimex ESP32-POE's are
@@ -784,7 +783,7 @@ MAC address (`device/<mac>/hello`, every 10 s: also its IP and the link, e.g.
 `100M full`), gets its place from the control server (`device/<mac>/config`)
 and then shows `tile/<n>/state`, plays the effects and runs the tile programs –
 Reactie, Simon, Cyclone and Zwarte Piet, a 1:1 port of
-`godot/scripts/tile_firmware.gd` – and sends `{"press": …}` and the results.
+`game/scripts/tile_firmware.gd` – and sends `{"press": …}` and the results.
 **Timing**: a tile measures everything relative to the one `start` of a
 round, on its own clock (crystal drift: about 1 ms per round), so the network
 never decides a result. Reaction, Simon and Cyclone measure on the tile; for
@@ -798,43 +797,43 @@ older firmware) a press counts when it arrives (Ritme: minus *Vertraging tegel
 In SETUP the hearts show its place number in binary and a pressed icon flashes
 (the sensor test); `identify` makes it light up. The status LED: blue =
 network, amber = MQTT but no place yet, green = ready, red = no network (cable,
-switch, DHCP). Build and flash: `cd tile_firmware && pio run -t upload`; a bare
+switch, DHCP). Build and flash: `cd firmware/tile && pio run -t upload`; a bare
 ESP32 dev board without Ethernet: `pio run -e esp32dev-wifi -t upload` (wifi,
 `WIFI_SSID` / `WIFI_PASSWORD` in `config.h`) (the sensors calibrate at power-up: nobody on the tile then).
 **Tile emulator on this PC** (no hardware, no account): the same firmware
 built for Linux with stand-ins for Arduino, FastLED and wifi
-(`tile_firmware/emulator/`), the tile drawn in the terminal – the ring seen
+(`firmware/tile/emulator/`), the tile drawn in the terminal – the ring seen
 from above (LED_00 at the top, the robot side), the hearts, the 4 icons, the
 status LED – and keys **1 2 3 4** press the icons (**q** quits). Start as many
 as you like, each with its own MAC address; they behave like real tiles
 (place them in the app / web interface, play):
 
 ```bash
-cd tile_firmware && pio run -e native
+cd firmware/tile && pio run -e native
 .pio/build/native/program --mac 02:00:00:00:00:01 --host 127.0.0.1 --port 1883 [--user u --password p]
 ```
 
 Add `--web 8090` for the tile's top in the browser at `http://localhost:8090`:
-the drawing of the real tile (`tile_firmware/emulator/tile_top.svg`, the
+the drawing of the real tile (`firmware/tile/emulator/tile_top.svg`, the
 measurements of the 3D model; `make_tile_svg.py` regenerates it) with every
 LED, heart and icon lit live – click and hold an icon to stand on it (or keys
-1–4 in the page). `python3 tile_firmware/test/emulator_e2e.py` runs two
+1–4 in the page). `python3 firmware/tile/test/emulator_e2e.py` runs two
 emulated tiles against the whole stack.
 
 It needs a broker with plain MQTT: Mosquitto's `listener 1883`, or for a
-quick try the test broker: `python3 godot/tests/mqtt_test_broker.py 9001 --tcp 1883`
+quick try the test broker: `python3 game/tests/mqtt_test_broker.py 9001 --tcp 1883`
 (start the game with `--mqtt=ws://127.0.0.1:9001` and the control server
 with `--mqtt ws://127.0.0.1:9001`).
 
 **Emulator in the browser / VS Code**: [Wokwi](https://wokwi.com) runs the real
 firmware on a simulated ESP32 with a 48-LED ring, a strip with the 5 hearts,
 the 4 icon LEDs and the status LED, and 4 buttons in the icon colours as the
-pressure sensors (`tile_firmware/diagram.json`). Build it with
+pressure sensors (`firmware/tile/diagram.json`). Build it with
 `pio run -e wokwi` (the emulator's wifi `Wokwi-GUEST`; the MQTT broker on this
 PC as `host.wokwi.internal`, port 1883 – Mosquitto's plain listener), then in
 VS Code with the Wokwi extension: *Wokwi: Start Simulator* (its private gateway
 reaches the broker on this PC; `wokwi.toml`). Headless:
-`WOKWI_CLI_TOKEN=… ~/.wokwi/bin/wokwi-cli tile_firmware` (a free token:
+`WOKWI_CLI_TOKEN=… ~/.wokwi/bin/wokwi-cli firmware/tile` (a free token:
 wokwi.com/dashboard/ci). Place the simulated tile like a real one: it shows up
 under *Tegels zonder plaats* with its MAC address.
 **MQTT** in the web interface shows the raw traffic live (filter by topic).
@@ -845,8 +844,8 @@ under *Tegels zonder plaats* with its MAC address.
 through SQLAlchemy (`control/db.py` defines the tables and creates the missing
 ones itself; §10). The control server takes `--db` as a SQLAlchemy URL; a plain
 file path is a SQLite file – for tests and trying things out, as is the game's
-standalone `--db=FILE` and `tools/cybercircle_db.py` (schema
-`godot/data/schema.sql`, the same tables).
+standalone `--db=FILE` and `tools/ops/cybercircle_db.py` (schema
+`game/data/schema.sql`, the same tables).
 
 | table | written by | |
 |---|---|---|
@@ -859,12 +858,12 @@ standalone `--db=FILE` and `tools/cybercircle_db.py` (schema
 * **Questions**: edit them in the web interface (*Vragen*, also CSV), or in any
   MySQL client; set `active = 0` to hide one. Answer 1–4 = Square, Triangle, Cross, Circle.
   `min_age`: younger players get a shield (no life lost). Changes are used
-  from the next quiz round. `python3 tools/cybercircle_db.py init` re-imports
+  from the next quiz round. `python3 tools/ops/cybercircle_db.py init` re-imports
   `questions.json` (updates rows with the same `slug`).
-* **Videos**: put them in `godot/data/videos/` and set `video` to the file
-  name. Convert with `tools/convert_video.sh input.mp4` (Theora .ogv, ≤ 1280
+* **Videos**: put them in `game/data/videos/` and set `video` to the file
+  name. Convert with `tools/assets/convert_video.sh input.mp4` (Theora .ogv, ≤ 1280
   wide; keep them 720p for a Pi). The death clip is
-  `godot/data/videos/exterminate.ogv` – make your own 1080×1080 (Theora
+  `game/data/videos/exterminate.ogv` – make your own 1080×1080 (Theora
   .ogv), important content in the middle 600 px wide strip: it fills the
   player's slot (627×1060 with 3 per screen, 945×1060 with 2) and the sides
   are cut off. Any length; its last frame stays until `clip_time` is over.
@@ -877,14 +876,14 @@ standalone `--db=FILE` and `tools/cybercircle_db.py` (schema
   sent once it is back – also after the game restarts. The *Processen* page
   shows writes still waiting. Changes made elsewhere reach the game at once
   (`cybercircle/db`).
-* **Players** (what the app does): `python3 tools/cybercircle_db.py add-player Erik "#ff8800" 10`
+* **Players** (what the app does): `python3 tools/ops/cybercircle_db.py add-player Erik "#ff8800" 10`
   prints the id and the MQTT message to send.
 * **Overall ranking**: `SELECT name, MAX(score) FROM results JOIN players ON players.id = player_id GROUP BY player_id, name ORDER BY 2 DESC`.
 
 ## 7. Tests and demo movies
 
 ```bash
-cd godot
+cd game
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_flow.tscn   # whole game flow
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_db.tscn     # database, ranking
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_piet.tscn   # Zwarte Piet
@@ -908,32 +907,32 @@ Screenshot scenes (`tests/test_*_shot.tscn`) and the demo movies need a
 display. **Always add `--disable-vsync`**: a hidden or covered window otherwise
 gets ~1 frame per second from the desktop.
 
-**Gameplay clips** of the whole installation (`godot/movie/clips.gd`):
+**Gameplay clips** of the whole installation (`game/movie/clips.gd`):
 `setup`, `joining`, `few` (3 players), `full` (13 tiles + 5 drones), `mobile`
 and `leaving`. Each clip is one movie with every screen at once – the
 overview page big, the floor screens and the mobile screens around it, with a
 caption – and every screen on its own in full HD (the same moments):
 
 ```bash
-tools/make_clips.sh                  # all clips -> movies/gameplay/<clip>.mp4 and <clip>/<screen>.mp4
-tools/make_clips.sh full mobile      # only these
+tools/media/make_clips.sh                  # all clips -> out/movies/gameplay/<clip>.mp4 and <clip>/<screen>.mp4
+tools/media/make_clips.sh full mobile      # only these
 ```
 
-**Screenshots** (`movies/gallery/`): the game's screens in every state, and
+**Screenshots** (`docs/gallery/`): the game's screens in every state, and
 everything around it from one real run – the gamemaster app on a phone, every
 tab of the web interface, the tile emulator's top (three emulated tiles on
 T01–T03: setup, invite, activation, a round on the tiles, the website down):
 
 ```bash
-cd godot && godot-4 --path . --resolution 1920x1080 --fixed-fps 30 --disable-vsync \
-    res://movie/clips.tscn -- --clip=gallery --shots=$PWD/../movies/gallery   # the game: NN_<state>*.jpg
-python3 tools/make_gallery.py        # -> movies/gallery/app/, controller/, tegel/ (playwright + Chrome)
+cd game && godot-4 --path . --resolution 1920x1080 --fixed-fps 30 --disable-vsync \
+    res://movie/clips.tscn -- --clip=gallery --shots=$PWD/../docs/gallery   # the game: NN_<state>*.jpg
+python3 tools/media/make_gallery.py        # -> docs/gallery/app/, controller/, tegel/ (playwright + Chrome)
 ```
 
 ```bash
 godot-4 --path . --resolution 1920x1080 --fixed-fps 30 --disable-vsync \
-    --write-movie movie/observer_demo.avi res://movie/observer_demo.tscn
-ffmpeg -i movie/observer_demo.avi -c:v libx264 -crf 20 -pix_fmt yuv420p ../movies/observer_demo.mp4
+    --write-movie ../out/render/observer_demo.avi res://movie/observer_demo.tscn
+ffmpeg -i ../out/render/observer_demo.avi -c:v libx264 -crf 20 -pix_fmt yuv420p ../docs/demo/observer_demo.mp4
 ```
 
 ## 8. Performance (a Raspberry Pi per 2 screens)
@@ -971,7 +970,7 @@ Forward+ / Compatibility): ~1 550 / 2 100 draw calls, ~780 k triangles.
 ## 9. Rebuilding the models / baking the light
 
 ```bash
-cd blender
+cd assets/blender
 blender -b -P build_models.py -- all                    # tile, robot, arena, room, drone (.blend + .glb)
 blender -b -P bake_models.py -- environment --samples 256 --size 4096
 ```
@@ -991,12 +990,12 @@ console's own block, under the roundels.
 All static and baked into the room: no extra cost at runtime (only the six
 blinking lamps per console are live, as before).
 
-**Room textures** (70s sci-fi): `blender/retro_textures.py` generates them
+**Room textures** (70s sci-fi): `assets/blender/retro_textures.py` generates them
 (numpy, no image files to keep): padded cream wall panels with an orange waist
 stripe, ribbed teal pillars with chrome bands, the round floor as concentric
 deck plates with an orange dashed circle round the play area and a vent band at
 the wall, and a tufted navy dome. `build_models.py -- room` puts them on the
-room (colour + a height map as bump; PNGs in `blender/textures/`), and the bake
+room (colour + a height map as bump; PNGs in `assets/blender/textures/`), and the bake
 below bakes colour, relief and light into the two atlases – at runtime they
 cost nothing extra (the same two textures, the same draw calls). Change a
 texture: edit `retro_textures.py`, then `build_models.py -- room` and
@@ -1005,7 +1004,7 @@ texture: edit `retro_textures.py`, then `build_models.py -- room` and
 
 `bake_models.py` bakes the room, floor, ducts and cables (with the robot and
 tiles as shadow casters) into two texture atlases with Cycles on the GPU
-(OptiX/CUDA) and exports `godot/models/environment_baked.glb`. **Work in
+(OptiX/CUDA) and exports `game/models/environment_baked.glb`. **Work in
 progress:** the baked environment is not used by the game yet; the robot and
 the tiles follow.
 
@@ -1019,7 +1018,7 @@ sudo mysql -e "CREATE DATABASE cybercircle CHARACTER SET utf8mb4;
   CREATE USER 'cybercircle'@'localhost' IDENTIFIED BY 'DBSECRET';
   GRANT ALL ON cybercircle.* TO 'cybercircle'@'localhost';"
 
-cd /srv/cybercircle/digital_twin/control
+cd /srv/cybercircle/cyber-circle-challenge/control
 /usr/bin/python3 -m venv .venv                 # Python 3.11+
 .venv/bin/pip install -r requirements.txt     # fastapi, uvicorn, paho-mqtt, SQLAlchemy, PyMySQL
 .venv/bin/python server.py \
@@ -1046,8 +1045,8 @@ Wants=network-online.target
 
 [Service]
 User=cybercircle
-WorkingDirectory=/srv/cybercircle/digital_twin/control
-ExecStart=/srv/cybercircle/digital_twin/control/.venv/bin/python server.py \
+WorkingDirectory=/srv/cybercircle/cyber-circle-challenge/control
+ExecStart=/srv/cybercircle/cyber-circle-challenge/control/.venv/bin/python server.py \
     --db "mysql+pymysql://cybercircle:DBSECRET@localhost/cybercircle?charset=utf8mb4" \
     --mqtt ws://localhost:9001 --mqtt-user cybercircle --mqtt-password SECRET
 Restart=always
@@ -1103,7 +1102,7 @@ new players come in, and *Start spel* calls it off. *Spel › ⚡ Opstarten /
 a test shutdown in an open game the robot boots again by itself). The flashing
 stays within 3 flashes a second, the full screens never flash. The pieces:
 `robot.gd` (`play_boot`, `play_shutdown`), `GameManager._power`,
-`ui/power_view.gd`, the real robot `robot_firmware/src/robot.cpp` + `leds.cpp`.
+`ui/power_view.gd`, the real robot `firmware/robot/src/robot.cpp` + `leds.cpp`.
 
 **Stop spel** ends the game: everyone leaves (their results are saved), the
 game is closed again. The mode is kept in the database, so a restarted game
@@ -1120,7 +1119,7 @@ or a new master continues in the same mode.
   not, in or out of service. **Installatie** (SETUP only): which places this
   installation has – all, all floor tiles, half (T01–T07), half + mobile, only
   mobile, or any choice of places. The others are gone from the game: the
-  digital twin hides their tile (or drone), its ducts, cable and light strip,
+  3D room hides their tile (or drone), its ducts, cable and light strip,
   the screens give them no slot (a screen left without any shows how to join),
   the app and the light / voice events leave them out (`PUT /api/installation
   {installed: [1, …]}`; standalone: `--installed=1-7,14-18`). Swapping a tile: in SETUP just pick the new
@@ -1143,7 +1142,7 @@ or a new master continues in the same mode.
   free tile, and per game its name and rules (intro, overview). Empty = the
   default (shown in grey); a game's name and rules from its next round. The
   default rules follow the settings (points, times) – a changed text does
-  not. Standalone: `--texts=FILE` (JSON, `godot/scripts/data/texts.gd`).
+  not. Standalone: `--texts=FILE` (JSON, `game/scripts/data/texts.gd`).
 * **Geluid** – play any sound now: a button per sound (a random file) and per
   file, optionally at its own volume; *Alles stoppen*; *Opnieuw inlezen* after
   adding files. Below: how other systems trigger them (HTTP, MQTT). See §4 *Sound*.
@@ -1165,7 +1164,7 @@ or a new master continues in the same mode.
   Questions are managed here only (not in the gamemaster app).
 * **Vragen** – add / edit / hide questions (answer 1–4 = square, triangle,
   cross, circle; ages; video; a picture next to the question – a file in
-  `godot/data/images/`, `.png`/`.jpg`/`.webp`/`.svg`; explanation). On the
+  `game/data/images/`, `.png`/`.jpg`/`.webp`/`.svg`; explanation). On the
   screen a question goes: the question with the 4 buttons (no answers yet,
   *Leestijd*) → the answers fade in and the countdown runs → TIJD OM → everyone's
   icon → who was right.
@@ -1246,7 +1245,7 @@ Test: `control/.venv/bin/python control/test_e2e.py` (broker + control server
 + game, driven through the API). Crash / power cut: `control/.venv/bin/python control/test_recovery.py`
 kills the game (`kill -9`) in the lobby, during a round, on the scoreboard and
 with the control server down too, and checks it comes back where it was;
-`godot/tests/test_recovery.tscn` and `test_control_queue.tscn` test the parts.
+`game/tests/test_recovery.tscn` and `test_control_queue.tscn` test the parts.
 
 ## 11. Gamemaster app
 
@@ -1308,7 +1307,7 @@ updates come straight from the MQTT broker. **iPhone / any browser**: the
 control server serves the web version at `http://<server ip>:8080/gm/`
 (`flutter build web --release --base-href /gm/ --no-web-resources-cdn` – no
 internet needed); live updates through the server. A browser only allows the
-camera on **https**: `tools/make_cert.sh <server ip>` and start the control
+camera on **https**: `tools/ops/make_cert.sh <server ip>` and start the control
 server with `--ssl-cert control/cert.pem --ssl-key control/key.pem`; open
 `https://<server ip>:8080/gm/` once on every iPhone and accept the warning.
 
@@ -1462,7 +1461,7 @@ over https with the same certificate (a page on https may not load an http
 video). The game must run with the official Godot build or an exported one
 (the snap version cannot start FFmpeg).
 
-Tests: `godot/tests/test_stream_capture.tscn` (the capture: started, kept
+Tests: `game/tests/test_stream_capture.tscn` (the capture: started, kept
 alive, stopped, frames of the right screen). Not yet tested end to end with
 MediaMTX and real screen readers – do that on the installation, with a blind
 tester if possible (live regions behave differently in VoiceOver, TalkBack and
@@ -1472,13 +1471,13 @@ NVDA).
 
 | problem | fix |
 |---|---|
-| a test or the game hangs after adding scripts, "Could not find type …" | run `godot-4 --headless --path godot --import` once |
+| a test or the game hangs after adding scripts, "Could not find type …" | run `godot-4 --headless --path game --import` once |
 | rendering / screenshots / movies are extremely slow | `--disable-vsync` (see §7) |
 | `godot-4` can't read files in `/tmp` | it's a snap: keep files inside your home folder |
 | a Pi shows *WACHTEN OP DE MASTER* | the master runs with `--serve-replicas` (`GAME_REMOTE_SCREENS` set), UDP 7350 open on the master (`sudo ufw allow 7350/udp`; the beacon: 7351/udp on the Pi), `SERVER_IP` right in the Pi's settings; the Pi's log: `journalctl --user-unit cybercircle-game -f` |
 | a Pi's screen stays black / shows the wrong screen | `GAME_SHOW` (its screen numbers: floor 1–5, mobile 6, 7) and `GAME_DISPLAY_MONITORS`; with 2 monitors the Pi desktop on X11 (`sudo raspi-config nonint do_wayland W1`) |
 | a Pi is slow (fps in *Processen*) | lower `GAME_VIEW_SCALE` (0.6), `GAME_DETAIL=3`, or one screen per Pi; see §8 |
 | a split screen on the master's monitor shows nothing | it is a remote screen: rendered by a Pi (`GAME_REMOTE_SCREENS`); empty = the master renders it |
-| "database: godot-sqlite extension not found" | the add-on binaries for this OS/CPU are missing in `godot/addons/godot-sqlite/bin` |
+| "database: godot-sqlite extension not found" | the add-on binaries for this OS/CPU are missing in `game/addons/godot-sqlite/bin` |
 | players can't be assigned | check the player id exists in `players`, and that the game uses the same `--db` file as the app |
 | no MQTT connection | the URL must be the WebSocket listener (`ws://host:9001`); check user/password; the game retries every 3 s |

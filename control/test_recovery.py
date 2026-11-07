@@ -11,7 +11,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 PORT, MQTT_PORT = 8117, 9017
 BASE = f"http://127.0.0.1:{PORT}"
-DB = os.path.join(ROOT, "godot", "tests", "_recovery.db")
+DB = os.path.join(ROOT, "game", "tests", "_recovery.db")
 fails = 0
 
 
@@ -63,7 +63,7 @@ def start_server(fresh=False):
     return p
 
 
-log = open(os.path.join(ROOT, "godot", "tests", "_recovery_godot.log"), "w")
+log = open(os.path.join(ROOT, "game", "tests", "_recovery_godot.log"), "w")
 
 
 def start_game(wait=True):
@@ -73,7 +73,7 @@ def start_game(wait=True):
         seq = call("GET", "/api/mqtt/log?limit=1")["seq"]
     except Exception:
         seq, wait = 0, False
-    p = subprocess.Popen(["godot-4", "--headless", "--path", os.path.join(ROOT, "godot"), "--",
+    p = subprocess.Popen(["godot-4", "--headless", "--path", os.path.join(ROOT, "game"), "--",
                           f"--mqtt=ws://127.0.0.1:{MQTT_PORT}", "--sim-tiles", f"--control={BASE}",
                           "--node=recovery-master"], stdout=log, stderr=subprocess.STDOUT)
     if wait:
@@ -94,7 +94,7 @@ def press_all(tile):
         time.sleep(0.25)
 
 
-broker = subprocess.Popen([sys.executable, os.path.join(ROOT, "godot", "tests", "mqtt_test_broker.py"), str(MQTT_PORT)],
+broker = subprocess.Popen([sys.executable, os.path.join(ROOT, "game", "tests", "mqtt_test_broker.py"), str(MQTT_PORT)],
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 time.sleep(1)
 server = start_server(fresh=True)

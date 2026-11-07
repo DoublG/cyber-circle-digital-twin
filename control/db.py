@@ -2,8 +2,8 @@
 master, the app and the web interface all go through the control server's
 HTTP API. SQLAlchemy (Core): MySQL / MariaDB on the installation
 (mysql+pymysql://user:password@host/cybercircle), or a SQLite file (a plain
-path: tests, trying things out). The tables match ../godot/data/schema.sql
-(the game's standalone SQLite mode and tools/cybercircle_db.py)."""
+path: tests, trying things out). The tables match ../game/data/schema.sql
+(the game's standalone SQLite mode and tools/ops/cybercircle_db.py)."""
 
 import datetime
 import json

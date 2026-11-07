@@ -17,5 +17,5 @@ export PLATFORMIO_BUILD_FLAGS="-DMQTT_HOST=\\\"$SERVER_IP\\\" -DMQTT_PORT=${MQTT
 -DMQTT_USER=\\\"$MQTT_USER\\\" -DMQTT_PASSWORD=\\\"$MQTT_PASSWORD\\\" \
 -DWIFI_SSID=\\\"${TILE_WIFI_SSID:-cybercircle}\\\" -DWIFI_PASSWORD=\\\"${TILE_WIFI_PASSWORD:-}\\\""
 echo "tile firmware ($target): broker $SERVER_IP:${MQTT_PORT:-1883}, user $MQTT_USER  (settings: $ENV_FILE)"
-cd "$HERE/../../tile_firmware"
+cd "$HERE/../../firmware/tile"
 pio run -e "$target" -t upload
