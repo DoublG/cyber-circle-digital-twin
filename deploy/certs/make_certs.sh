@@ -12,12 +12,12 @@ cd "${CERT_DIR:-$(dirname "$0")}"
 SAN="DNS:broker,DNS:control,DNS:localhost,IP:127.0.0.1${CERT_NAMES:+,$CERT_NAMES}"
 if [ ! -f ca.pem ]; then
     openssl req -x509 -newkey rsa:3072 -nodes -days 3650 -keyout ca.key -out ca.pem \
-        -subj "/CN=Cyber Circle CA" \
+        -subj "/CN=Cyber Circle Challenge CA" \
         -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign"
     echo "made the CA: ca.pem"
 fi
 if [ ! -f server.pem ] || [ "$(cat server.san 2>/dev/null)" != "$SAN" ]; then
-    openssl req -newkey rsa:2048 -nodes -keyout server.key -out server.csr -subj "/CN=Cyber Circle gamemaster PC"
+    openssl req -newkey rsa:2048 -nodes -keyout server.key -out server.csr -subj "/CN=Cyber Circle Challenge gamemaster PC"
     printf "subjectAltName=%s\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n" \
         "$SAN" > server.ext
     # 825 days: the most iPhones accept

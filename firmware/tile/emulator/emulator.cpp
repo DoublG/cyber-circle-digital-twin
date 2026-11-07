@@ -201,7 +201,7 @@ void CFastLED::show() {
     for (int i = 0; i < HEART_COUNT; i++) hearts += dot(ledBuf[HEART_FIRST + i], "♥", "♡") + " ";
     const char *sym[4] = {"▢", "△", "✕", "○"};
     for (int i = 0; i < 4; i++) icons += dot(ledBuf[ICON_FIRST + i], sym[i], sym[i]) + "   ";
-    std::string out = "\x1b[H\x1b[0m\x1b[1mCYBER CIRCLE TILE (emulator)\x1b[0m  " + emu_mac + "  broker " + emu_host + ":" +
+    std::string out = "\x1b[H\x1b[0m\x1b[1mCYBER CIRCLE CHALLENGE TILE (emulator)\x1b[0m  " + emu_mac + "  broker " + emu_host + ":" +
                       std::to_string(emu_port) + "  status " + dot(ledBuf[STATUS_LED], "●") + "\x1b[0m\x1b[K\n\n";
     for (int y = 0; y < H; y++) {
         std::string line;

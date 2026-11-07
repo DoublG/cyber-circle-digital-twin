@@ -1,4 +1,4 @@
-// Cyber Circle robot - settings for one installation (each one can be
+// Cyber Circle Challenge robot - settings for one installation (each one can be
 // overridden with build_flags = -DNAME=value). The cable window, the speeds,
 // the smoke times and the brightness can also be set at run time from the
 // control server (<prefix>/robot/config, retained - kept in flash: they also

@@ -3,7 +3,7 @@ extends Control
 ## The overview page for visitors (its own full-screen display): the floating
 ## observer camera, the status bar (what is happening + timer) always on top,
 ## and under it a loop for the people watching, scene after scene:
-##   scores   a rotating call to action ("VERSLA DE DALEK!"), the overall
+##   scores   a rotating call to action ("VERSLA DE ROBOT!"), the overall
 ##            ranking (top 10 by most rounds survived in one play) bottom-left,
 ##            the live player list and the event feed right
 ##   games    every game explained, one after the other (title and rules) -

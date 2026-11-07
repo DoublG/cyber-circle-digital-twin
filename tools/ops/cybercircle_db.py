@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cyber Circle database (SQLite): create it, import questions, add players.
+"""Cyber Circle Challenge database (SQLite): create it, import questions, add players.
 Python standard library only. The game opens the same file itself (godot-sqlite).
 
 The external app and the game share this database:

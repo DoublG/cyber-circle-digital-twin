@@ -1,4 +1,4 @@
-// Cyber Circle tile (ESP32): wired Ethernet (net.cpp) + MQTT, the
+// Cyber Circle Challenge tile (ESP32): wired Ethernet (net.cpp) + MQTT, the
 // 4 pressure sensors, the LEDs.
 //   announces itself    device/<mac>/hello (retained, every HELLO_MS) {device, fw, net, ip, link,
 //                       uptime (s), heap (free bytes), loop_hz, mqtt_reconnects}
@@ -146,7 +146,7 @@ void setup() {
     mqtt.setServer(MQTT_HOST, MQTT_PORT);
     mqtt.setBufferSize(8192);               // (a program can be a few kB)
     mqtt.setCallback(onMessage);
-    Serial.printf("cyber circle tile %s, fw %s\n", deviceId.c_str(), FW_VERSION);
+    Serial.printf("cyber circle challenge tile %s, fw %s\n", deviceId.c_str(), FW_VERSION);
 }
 
 void loop() {

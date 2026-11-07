@@ -1,4 +1,4 @@
-// Cyber Circle gamemaster: scan a visitor's QR card, register them if the
+// CyberControl (the Cyber Circle Challenge gamemaster app): scan a visitor's QR card, register them if the
 // card is new, and assign them to a floor tile or (mobile players) a drone -
 // in this gamemaster's colour. Talks to the control server by IP address
 // (REST) and follows the game live (MQTT; in the browser through the server).
@@ -25,7 +25,7 @@ class GamemasterApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'Cyber Circle Gamemaster',
+        title: 'CyberControl',
         theme: Retro.theme(),
         debugShowCheckedModeBanner: false,
         home: HomePage(app: app),
@@ -57,7 +57,7 @@ class _HomePageState extends State<HomePage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 color: Retro.teal,
-                child: const Text('CYBER CIRCLE', style: TextStyle(color: Retro.bg, fontWeight: FontWeight.bold, fontSize: 14)),
+                child: const Text('CYBERCONTROL', style: TextStyle(color: Retro.bg, fontWeight: FontWeight.bold, fontSize: 14)),
               ),
               const SizedBox(width: 10),
               Expanded(child: Text(s.summary, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),

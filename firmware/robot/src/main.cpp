@@ -1,4 +1,4 @@
-// Cyber Circle robot (ESP32): Ethernet (wifi as an option) + MQTT, like the tiles.
+// Cyber Circle Challenge robot (ESP32): Ethernet (wifi as an option) + MQTT, like the tiles.
 //   <prefix>/robot/cmd     game -> robot     what to do (robot.cpp: look, attack, exterminate, mood, smoke ...)
 //   <prefix>/robot/config  control -> robot  retained: the cable window, speeds, smoke times (kept in flash)
 //   <prefix>/robot/state   robot -> all      retained, on change: position, side, turns, moving, homing, error ...

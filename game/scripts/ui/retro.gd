@@ -21,9 +21,10 @@ const BG_SHADER := preload("res://shaders/retro_background.gdshader")
 
 ## Calls to action, rotating on the overview page and the empty screens.
 const CALLS_TO_ACTION := [
-	"VERSLA DE DALEK!",
+	"VERSLA DE ROBOT!",
 	"RED DE GALAXY!",
-	"DE DALEK WIL DE GALAXY VEROVEREN - HOU HEM TEGEN!",
+	"DE ROBOT WIL DE GALAXY VEROVEREN - HOU HEM TEGEN!",
+	"DURF JIJ DE CYBER CIRCLE CHALLENGE AAN?",
 	"WIE HOUDT HET LANGST STAND?",
 	"SAMEN STERK TEGEN DE ROBOT!",
 	"DE GALAXY REKENT OP JOU!",

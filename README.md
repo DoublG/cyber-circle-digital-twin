@@ -23,7 +23,7 @@ lights and the screens.
 | [tools/assets/](tools/assets/) | Generators: sound effects, read-aloud voice, diagrams, video conversion |
 | [tools/media/](tools/media/) | Recorders: whole-game movies (one per screen), gameplay clips, screenshot gallery |
 | [tools/ops/](tools/ops/) | Database tool, https certificate |
-| [docs/](docs/) | [SETUP](docs/SETUP.md) (install, run, test), [WIRING](docs/WIRING.md), [TODO](docs/TODO.md), [CREDITS](docs/CREDITS.md), `gallery/` screenshots, `demo/` movies |
+| [docs/](docs/) | [SETUP](docs/SETUP.md) (install, run, test), [WIRING](docs/WIRING.md), [TODO](docs/TODO.md), [CREDITS](docs/CREDITS.md), `gallery/` screenshots |
 | `out/` | Everything generated, not in git: rendered movies, render frames, `voice_lines.csv` |
 
 ## Quick start

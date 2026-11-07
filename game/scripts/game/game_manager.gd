@@ -1136,7 +1136,9 @@ func overview_timer() -> String:
 ## points - the tie-breakers), the players in the game right now with this play
 ## when it is better. [{player_id, name, best, lives, points, plays, tile}] best
 ## first (tile 0 = not playing now).
-func overall_ranking() -> Array:
+## lives: {tile: lives} to rank with instead of the tiles' health now (the scoreboard:
+## the lives after this round's change, so the place matches the row order).
+func overall_ranking(lives := {}) -> Array:
 	if arena == null:                      # screens are built before the game is set up
 		return []
 	var rows := {}
@@ -1150,7 +1152,7 @@ func overall_ranking() -> Array:
 			continue                       # joined without the app: not ranked
 		var row: Dictionary = rows.get(pid, {"player_id": pid, "name": arena.player_name(id), "best": 0,
 			"lives": 0, "points": 0, "plays": 0})
-		var now := {"best": survived.get(id, 0), "lives": maxi(arena.tiles[id - 1].health, 0), "points": scores.get(id, 0)}
+		var now := {"best": survived.get(id, 0), "lives": int(lives.get(id, maxi(arena.tiles[id - 1].health, 0))), "points": scores.get(id, 0)}
 		if _better(now, row):
 			row.merge(now, true)
 		row.tile = id
@@ -1171,13 +1173,13 @@ static func _better(a: Dictionary, b: Dictionary) -> bool:
 
 ## Overall place of the player on this tile at this event (shared only when rounds,
 ## lives and points are all equal); 0 = not ranked.
-func overall_rank(tile_id: int) -> int:
+func overall_rank(tile_id: int, lives := {}) -> int:
 	if arena == null:
 		return 0
 	var pid: int = arena.player_db_id(tile_id)
 	if pid <= 0:
 		return 0
-	var ranking := overall_ranking()
+	var ranking := overall_ranking(lives)
 	var mine := ranking.filter(func(r): return r.player_id == pid)
 	if mine.is_empty():
 		return 0
@@ -1232,15 +1234,19 @@ func _alive_players() -> Array:
 ## number after it, "lives_before" before; "out" = exterminated (after it).
 func _ranking(round_points: Dictionary, changes := {}) -> Array:
 	var rows := []
+	var lives_after := {}
+	for id in scores:
+		if arena.is_playing(id):
+			lives_after[id] = maxi(arena.lives_after_hits(id) + int(changes.get(id, 0)), 0)
 	for id in scores:
 		if not arena.is_playing(id):
 			continue
 		var before: int = arena.lives_after_hits(id)
-		var after: int = maxi(before + int(changes.get(id, 0)), 0)
+		var after: int = lives_after[id]
 		rows.append({"name": arena.player_name(id), "tile": id, "survived": survived.get(id, 0),
 			"lives": after, "lives_before": before, "change": changes.get(id, 0), "score": scores[id],
 			"delta": round_points.get(id, 0), "out": arena.tiles[id - 1].is_dead or after == 0,
-			"was_out": arena.tiles[id - 1].is_dead, "record": record(id), "rank": overall_rank(id),
+			"was_out": arena.tiles[id - 1].is_dead, "record": record(id), "rank": overall_rank(id, lives_after),
 			"new": state == State.SCOREBOARD and current != null and id not in current.players})
 	rows.sort_custom(func(a, b):
 		if a.survived != b.survived:

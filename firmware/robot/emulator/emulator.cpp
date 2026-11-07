@@ -247,7 +247,7 @@ button{font:inherit;background:#17130f;color:#e8e2d6;border:2px solid #ff7314;pa
 button.on{background:#ff7314;color:#0b0907}
 #off{color:#ff5544;display:none}
 </style></head><body>
-<header><b>CYBER CIRCLE ROBOT</b> emulator · <span id="mac"></span> · seen from above, T01 at the top <span id="off">· emulator stopped</span></header>
+<header><b>CYBER CIRCLE CHALLENGE ROBOT</b> emulator · <span id="mac"></span> · seen from above, T01 at the top <span id="off">· emulator stopped</span></header>
 <svg id="robot" viewBox="0 0 640 700">
   <defs><filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="b"/>
   <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>

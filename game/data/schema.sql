@@ -1,4 +1,4 @@
--- Cyber Circle database (SQLite). Used by the game (scripts/data/game_db.gd)
+-- Cyber Circle Challenge database (SQLite). Used by the game (scripts/data/game_db.gd)
 -- and tools/cybercircle_db.py; every statement is safe to run again.
 
 CREATE TABLE IF NOT EXISTS players (

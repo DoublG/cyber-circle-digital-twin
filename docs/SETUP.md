@@ -17,7 +17,7 @@ cyber-circle-challenge/
   tools/assets/     generators: sounds, read-aloud voice, diagrams, video conversion
   tools/media/      recorders: game movies, gameplay clips, the screenshot gallery
   tools/ops/        cybercircle_db.py (database), make_cert.sh (https certificate)
-  docs/             this file, WIRING, TODO, CREDITS, gallery/ (screenshots), demo/ (2 demo movies)
+  docs/             this file, WIRING, TODO, CREDITS, gallery/ (screenshots)
   out/              everything generated, not in git: movies, render frames, voice_lines.csv
 ```
 
@@ -413,7 +413,7 @@ no restart) or in `game/data/sounds/` (needs an import or re-export first).
 ```
 [Desktop Entry]
 Type=Application
-Name=Cyber Circle
+Name=Cyber Circle Challenge
 Exec=sh -c 'cd /srv/cybercircle/cyber-circle-challenge && godot-4 --path game -- --windows --mqtt=ws://localhost:9001 --mqtt-user=cybercircle --mqtt-password=SECRET --control=http://localhost:8080'
 X-GNOME-Autostart-enabled=true
 ```
@@ -925,7 +925,7 @@ python3 tools/media/make_gallery.py        # -> docs/gallery/app/, controller/, 
 ```bash
 godot-4 --path . --resolution 1920x1080 --fixed-fps 30 --disable-vsync \
     --write-movie ../out/render/observer_demo.avi res://movie/observer_demo.tscn
-ffmpeg -i ../out/render/observer_demo.avi -c:v libx264 -crf 20 -pix_fmt yuv420p ../docs/demo/observer_demo.mp4
+ffmpeg -i ../out/render/observer_demo.avi -c:v libx264 -crf 20 -pix_fmt yuv420p ../out/movies/observer_demo.mp4
 ```
 
 ## 8. Performance (a Raspberry Pi per 2 screens)
@@ -1032,7 +1032,7 @@ app's web build), `--website`, `--website-interval` (`server.py --help`).
 
 ```
 [Unit]
-Description=Cyber Circle control server
+Description=Cyber Circle Challenge control server
 After=network-online.target mariadb.service mosquitto.service
 Wants=network-online.target
 

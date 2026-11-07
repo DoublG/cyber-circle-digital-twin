@@ -1,6 +1,6 @@
 # cc_gamemaster
 
-Cyber Circle gamemaster: QR cards scannen en spelers toewijzen
+CyberControl - Cyber Circle Challenge gamemaster: QR cards scannen en spelers toewijzen
 
 ## Getting Started
 

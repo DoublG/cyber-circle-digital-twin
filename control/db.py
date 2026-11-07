@@ -1,4 +1,4 @@
-"""The Cyber Circle database. The control server is its only owner: the game
+"""The Cyber Circle Challenge database. The control server is its only owner: the game
 master, the app and the web interface all go through the control server's
 HTTP API. SQLAlchemy (Core): MySQL / MariaDB on the installation
 (mysql+pymysql://user:password@host/cybercircle), or a SQLite file (a plain

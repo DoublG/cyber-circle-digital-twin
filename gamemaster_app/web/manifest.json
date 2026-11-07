@@ -1,11 +1,11 @@
 {
-    "name": "cc_gamemaster",
-    "short_name": "cc_gamemaster",
+    "name": "CyberControl",
+    "short_name": "CyberControl",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "Cyber Circle gamemaster: QR cards scannen en spelers toewijzen",
+    "description": "CyberControl - Cyber Circle Challenge gamemaster: QR cards scannen en spelers toewijzen",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

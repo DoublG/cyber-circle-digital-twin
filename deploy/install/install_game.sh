@@ -189,7 +189,7 @@ sudo -u "$KIOSK" ln -sf /etc/systemd/user/cybercircle-game.service \
 cat > /etc/xdg/autostart/cybercircle-game.desktop <<EOF
 [Desktop Entry]
 Type=Application
-Name=Cyber Circle
+Name=Cyber Circle Challenge
 Exec=sh -c '[ "\$(id -un)" = "$KIOSK" ] && systemctl --user import-environment DISPLAY WAYLAND_DISPLAY XAUTHORITY && systemctl --user start cybercircle-game.service'
 X-GNOME-Autostart-enabled=true
 NoDisplay=true

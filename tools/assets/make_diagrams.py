@@ -139,7 +139,7 @@ class Diagram:
 # ==================================================================== 1. software architecture
 
 def architecture():
-    d = Diagram(1400, 1000, "Cyber Circle – software architecture",
+    d = Diagram(1400, 1000, "Cyber Circle Challenge – software architecture",
                 "One server box (control + overview) · Raspberry Pi 5 for the split screens (3 in the robot, 1 at the mobile station) · MQTT. "
                 "Ports: deploy/install/cybercircle.env.example · topics: SETUP.md §5")
     d.zone(20, 80, 300, 420, "VISITORS & CREW", FILL["people"])

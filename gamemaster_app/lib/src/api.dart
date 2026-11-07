@@ -115,7 +115,7 @@ class Api {
 
   Future<Config> config() async {
     final j = await _send('GET', '/api/config') as Map<String, dynamic>?;
-    if (j == null) throw ApiError('Dit is geen Cyber Circle server ($base)');
+    if (j == null) throw ApiError('Dit is geen Cyber Circle Challenge server ($base)');
     return Config('${j['mqtt']}', '${j['prefix']}', (j['floor_tiles'] as num).toInt(), (j['places'] as num).toInt(),
         (j['t01_clock'] as num? ?? 12).toDouble());
   }

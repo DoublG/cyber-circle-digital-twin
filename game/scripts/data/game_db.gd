@@ -1,6 +1,6 @@
 class_name GameDb
 extends RefCounted
-## The Cyber Circle database (SQLite via the godot-sqlite extension), shared
+## The Cyber Circle Challenge database (SQLite via the godot-sqlite extension), shared
 ## with the external app (see data/schema.sql and tools/ops/cybercircle_db.py):
 ##   players       put in by the app; the game reads name, colour and age when
 ##                 the app sends {"assign": <id>} over MQTT

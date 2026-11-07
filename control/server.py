@@ -1,4 +1,4 @@
-"""Cyber Circle control server: owns the database, serves the management web
+"""Cyber Circle Challenge control server: owns the database, serves the management web
 interface and the HTTP API, and follows / steers the game over MQTT.
 
     control/.venv/bin/python control/server.py --db /srv/cybercircle/cybercircle.db \\
@@ -264,7 +264,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         site.stop()
         link.stop()
 
-    app = FastAPI(title="Cyber Circle control", lifespan=lifespan)
+    app = FastAPI(title="Cyber Circle Challenge control", lifespan=lifespan)
 
     # what a write to these changes in the database the game works with: it
     # hears it on <prefix>/db and fetches again (keeps the game in sync)
@@ -1019,7 +1019,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Cyber Circle control server")
+    ap = argparse.ArgumentParser(description="Cyber Circle Challenge control server")
     ap.add_argument("--db", default=os.path.join(HERE, "..", "game", "data", "cybercircle.db"))
     ap.add_argument("--event-backups", default="", help="where a closed event is saved as a zip (default: ../out/events)")
     ap.add_argument("--mqtt", default="ws://localhost:9001", help="broker: ws://host:9001 or mqtt://host:1883")

@@ -1,4 +1,4 @@
-// Cyber Circle tile - settings for one installation (every one can be
+// Cyber Circle Challenge tile - settings for one installation (every one can be
 // overridden with build_flags = -DNAME=value: see the native env and flash_tiles.sh). Every tile gets the
 // same firmware: it announces itself with its MAC address and the control
 // server tells it which place it stands on (device/<mac>/config {"tile": n}).

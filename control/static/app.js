@@ -1,4 +1,4 @@
-// Cyber Circle control: live game state over server-sent events, the rest
+// Cyber Circle Challenge control: live game state over server-sent events, the rest
 // through the control server's JSON API.
 const $ = (s, el = document) => el.querySelector(s);
 const STATE_NAMES = { LOBBY: "WACHT OP SPELERS", INTRO: "INTRO", PLAYING: "BEZIG", SCOREBOARD: "SCOREBORD" };

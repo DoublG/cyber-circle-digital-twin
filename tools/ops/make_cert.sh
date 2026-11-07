@@ -8,5 +8,5 @@ set -e
 IP=${1:?usage: tools/ops/make_cert.sh <the server IP address>}
 cd "$(dirname "$0")/../../control"
 openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -keyout key.pem -out cert.pem \
-    -subj "/CN=Cyber Circle $IP" -addext "subjectAltName=IP:$IP,DNS:localhost"
+    -subj "/CN=Cyber Circle Challenge $IP" -addext "subjectAltName=IP:$IP,DNS:localhost"
 echo "control/cert.pem and control/key.pem for $IP"

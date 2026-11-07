@@ -32,7 +32,7 @@ header b{color:#ffb000}
 #log{font-size:12px;color:#8c7a66;white-space:pre;max-width:92vw;overflow:hidden;padding:8px 16px 16px}
 #off{color:#ff5544;display:none}
 </style></head><body>
-<header><b>CYBER CIRCLE TILE</b> emulator · <span id="mac"></span> · click / hold an icon = stand on it (keys 1 2 3 4) <span id="off">· emulator stopped</span></header>
+<header><b>CYBER CIRCLE CHALLENGE TILE</b> emulator · <span id="mac"></span> · click / hold an icon = stand on it (keys 1 2 3 4) <span id="off">· emulator stopped</span></header>
 )HTML";
 
 static const char PAGE_TAIL[] = R"HTML(

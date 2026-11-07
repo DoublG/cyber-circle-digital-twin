@@ -1,6 +1,6 @@
 class_name CyberTile
 extends Node3D
-## One Cyber Circle floor tile ("tegel") in the game.
+## One Cyber Circle Challenge floor tile ("tegel") in the game.
 ## Wraps models/tile.glb and exposes the same things the real tile has:
 ## 48-LED ring, 5-heart health bar (lives), and a glass plate with 4 etched
 ## button icons, each lit by an RGB LED and read by a pressure sensor.

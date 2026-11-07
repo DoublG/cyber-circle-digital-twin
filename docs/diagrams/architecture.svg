@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1000" viewBox="0 0 1400 1000" font-family="Helvetica, Arial, sans-serif">
 <rect width="100%" height="100%" fill="#ffffff"/>
-<text x="24" y="38" font-size="24" text-anchor="start" font-weight="700" fill="#24292f">Cyber Circle – software architecture</text>
+<text x="24" y="38" font-size="24" text-anchor="start" font-weight="700" fill="#24292f">Cyber Circle Challenge – software architecture</text>
 <text x="24" y="62" font-size="13" text-anchor="start" font-weight="400" fill="#57606a">One server box (control + overview) · Raspberry Pi 5 for the split screens (3 in the robot, 1 at the mobile station) · MQTT. Ports: deploy/install/cybercircle.env.example · topics: SETUP.md §5</text>
 <rect x="20" y="80" width="300" height="420" rx="14" fill="#fff8c5" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
 <text x="34" y="100" font-size="13" text-anchor="start" font-weight="700" fill="#57606a">VISITORS &amp; CREW</text>
