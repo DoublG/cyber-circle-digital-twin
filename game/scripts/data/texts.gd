@@ -8,7 +8,7 @@ class_name Texts
 ##   join_steps   "HOE DOE JE MEE?" on the overview
 ##   join_text    on the screen of a free tile
 ##   title.<type> / rules.<type>   a game (type: quiz, cyclone, reaction,
-##                rhythm, simon, zwarte_piet); the default rules include the
+##                rhythm, simon, zwarte_piet, code); the default rules include the
 ##                current settings (points, times) - a changed text does not
 
 const JOIN_STEPS := "1. Haal een QR-codekaart.\n2. Registreer je met je gsm.\n3. Ga naar een gamemaster: die laat je toe tot het spel.\n4. Zoek de tegel in jouw kleur en druk op de 4 iconen.\n5. Blijf zo lang mogelijk in het spel!"

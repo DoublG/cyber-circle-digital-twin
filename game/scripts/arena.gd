@@ -931,7 +931,7 @@ func _update_packets(delta: float) -> void:
 ##   --node=NAME          this process' name in the web interface (default godot-<ip>)
 ##   --demo[=N]           N (default 6) bot players keep the game going (showing it without visitors)
 ##   --demo-idle=S        the bots only walk up after S seconds (the game idles until then)
-##   --rounds=quiz,simon  only these round types (cyclone, quiz, reaction, rhythm, simon, zwarte_piet)
+##   --rounds=quiz,simon  only these round types (code, cyclone, quiz, reaction, rhythm, simon, zwarte_piet)
 ##   --texts=FILE         texts (JSON, see Texts): {"cta": "...", "rules.quiz": "...", ...}
 ##   --control=URL        the control server (installation): questions, players and scores
 ##                        through its HTTP API, e.g. --control=http://192.168.1.10:8080

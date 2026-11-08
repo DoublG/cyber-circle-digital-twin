@@ -1,4 +1,4 @@
-// Reaction, Simon, Cyclone and Zwarte Piet on the tile - a port of
+// Reaction, Simon, Cyclone, Zwarte Piet and the game's own pictures (show) on the tile - a port of
 // game/scripts/tile_firmware.gd (keep both the same). Programs draw into
 // their own ring / icon buffers; draw() copies them into the LEDs.
 #include "programs.h"
@@ -31,6 +31,8 @@ const CRGB REPEAT_ICON(89, 89, 89);         // where to press, no colour hint
 // cyclone
 static int target = 0, dir = 1, turnCount = 0;
 static float pos = 0;
+// show (Code kraken, run by the game): ring segments and icon colours as sent
+static bool shown = false;
 // zwarte piet
 static bool piet = false;
 static float pietSpeed = 15, pietPos = 0;
@@ -337,8 +339,26 @@ void receive(JsonObjectConst msg) {
             pIconsOnly(-1, CRGB::Black);
         }
     }
+    if (msg["show"].is<JsonObjectConst>()) {           // the ring in equal segments, one colour each (a small gap between)
+        JsonArrayConst seg = msg["show"]["ring"];
+        int count = seg.size();
+        pFill(CRGB::Black);
+        for (int k = 0; k < count; k++) {
+            CRGB c = parseColor(seg[k] | "#000000");
+            int from = k * RING_COUNT / count, to = (k + 1) * RING_COUNT / count;
+            for (int i = from + (count > 1 ? 1 : 0); i < to - (count > 1 ? 1 : 0); i++) pRing[i] = c;
+        }
+        JsonArrayConst ic = msg["show"]["icons"];
+        for (int k = 0; k < 4; k++) pIcons[k] = k < (int)ic.size() ? parseColor(ic[k] | "#000000") : CRGB::Black;
+        shown = true;
+    } else if (msg["show"].is<bool>() && !msg["show"].as<bool>()) {
+        shown = false;
+        pFill(CRGB::Black);
+        pIconsOnly(-1, CRGB::Black);
+    }
     if (!msg["pause"].isNull()) paused = msg["pause"];
     if (!msg["stop"].isNull()) {
+        shown = false;
         running = false;
         armed = false;
         openStep = -1;
@@ -380,7 +400,7 @@ void press(int icon) {
     else if (openStep >= 0) close(icon);
 }
 
-bool ownsRing() { return piet || (running && game != "clock") || armed || flashUntil; }
+bool ownsRing() { return piet || shown || (running && game != "clock") || armed || flashUntil; }
 
 bool clockNow(String &programId, uint32_t &ms) {
     if (!running) return false;

@@ -25,6 +25,11 @@ extends Node
 ##       Zwarte Piet (run by the game): a light with a tail runs around the
 ##       ring at `speed` LEDs/s while this tile has it; presses are reported
 ##       as usual ({"press": ...}).
+##   {"show": {"ring": ["#00ff00", "#ffd000", "#202020", ...], "icons": [4 colours]}}
+##       Code kraken (run by the game): the ring in equal segments (from the
+##       LED facing the robot, clockwise; a dark LED between), one colour each,
+##       and the 4 icons (CyberTile.BUTTONS order); {"show": false} or a stop
+##       clears it. Presses are reported as usual.
 ## Results from the tile (as apply_command input):
 ##   {"tile": 3, "result": {"program": id, "step": 4, "outcome": "hit",
 ##                          "button": "Triangle", "ms": 412, "window": 1100, "streak": 4}}
@@ -147,6 +152,25 @@ func receive(msg: Dictionary) -> void:
 			_piet = {}
 			tile.clear_ring()
 			_icons(&"")
+	if msg.get("show") is Dictionary:
+		var seg: Array = msg.show.get("ring", [])
+		var colors := []
+		colors.resize(CyberTile.LED_COUNT)
+		colors.fill(Color.BLACK)
+		var count := seg.size()
+		for k in count:
+			var from := k * CyberTile.LED_COUNT / count
+			var to := (k + 1) * CyberTile.LED_COUNT / count
+			var gap := 1 if count > 1 else 0
+			for i in range(from + gap, to - gap):
+				colors[i] = Color(seg[k])
+		tile.set_ring(colors)
+		var ic: Array = msg.show.get("icons", [])
+		for k in 4:
+			tile.set_button_led(CyberTile.BUTTONS[k], Color(ic[k]) if k < ic.size() else Color.BLACK)
+	elif msg.has("show") and not msg.show:
+		tile.clear_ring()
+		_icons(&"")
 	if msg.has("pause"):
 		_paused = bool(msg.pause)
 	if msg.has("stop"):

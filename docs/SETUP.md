@@ -594,7 +594,12 @@ press on nothing −1. Three steps: slow taps one at a time; then also hold
 notes – the icon with a band up to a second icon: stand on it and let go when
 that end reaches the line (the same points again; too early or too late: 0);
 then faster and two at once. The game judges the presses, not the tile: set *Vertraging tegel →
-spel* to the network delay of the installation). The quiz is the backbone;
+spel* to the network delay of the installation) and **Code kraken** (crack a
+secret code, a row of icons: press a row on your tile; every icon of the try
+gets a box on your screen and a segment on your ring – green: right place,
+yellow: in the code, another place, grey: not in it. Cracked: points, more for
+fewer tries, and a harder code – 4 different icons, then 4 with a repeat, then
+5. The game keeps the codes and judges; the tile only shows `{"show": ...}`). The quiz is the backbone;
 the randomizer fills the plan of the next 3 rounds and puts the other games
 in between (those never twice in a row, quiz after quiz can; with fewer than 4
 players only the quiz – personal rounds always have a loser); the operator can
@@ -685,7 +690,7 @@ Prefix `cybercircle` (setting `topic_prefix` on the *Mqtt* node). Payloads are J
 | `cybercircle/stream` | game → control | a companion video started / stopped `{tile, on, encoder?, error?}` (§14) |
 | `cybercircle/voice` | game → all | a line read out (§4 *Read aloud*): `{name, text, kind, screens, tile?, file}` |
 | `cybercircle/sounds` | master → all | retained `{"events": {"attack": ["laser1.ogg", …], …}}`: the sounds `{"sound": …}` can play |
-| `cybercircle/tile/<n>/cmd` | game → tile | `{"program": {...}}`, `{"start": "<id>"}`, `{"stop": true}`, `{"pause": true}`, `{"piet": {"on": true, "speed": 20, "color": "#ff2a00"}}`, effects `{"fx": "attack" \| "hit" \| "block" \| "life" \| "doomed" \| "death", "color": "#rrggbb"}` |
+| `cybercircle/tile/<n>/cmd` | game → tile | `{"program": {...}}`, `{"start": "<id>"}`, `{"stop": true}`, `{"pause": true}`, `{"piet": {"on": true, "speed": 20, "color": "#ff2a00"}}`, `{"show": {"ring": ["#rrggbb", ...], "icons": [4 colours]}}` / `{"show": false}` (Code kraken: the ring in equal segments, from the LED facing the robot, clockwise; firmware 0.2+), effects `{"fx": "attack" \| "hit" \| "block" \| "life" \| "doomed" \| "death", "color": "#rrggbb"}` |
 | `cybercircle/tile/<n>/state` | game → tile | retained: what the tile shows – `{"mode": "off" \| "setup" \| "pending" \| "idle" \| "dead" \| "playing", "number": n, "color": "#…" (pending), "lives", "max_lives", "shield", "buttons": {"Square": "#…" \| "", …}}` |
 | `cybercircle/tile/<n>/event` | tile → game | `{"press": "Cross", "hold": 1}` and when let go `{"release": "Cross"}` (firmware 0.2+; `hold`: the game keeps the icon down until the release – Ritme's hold notes; without it a press is a tap), a program running: `+ "t": ms since its start, "program": id` on both, `{"pressure": {...}}`, `{"result": {...}}` |
 | `cybercircle/registered` | game → app | `{"tile": 3, "player": "Erik", "color": "#ff8800"}` |
@@ -883,6 +888,7 @@ godot-4 --headless --path . --fixed-fps 60 res://tests/test_db.tscn     # databa
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_piet.tscn   # Zwarte Piet
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_exterminated.tscn  # everyone exterminated: no new round, the lobby
 godot-4 --path . --disable-vsync res://tests/test_rhythm_shot.tscn      # Ritme (chart, judging, screenshot)
+godot-4 --path . --disable-vsync res://tests/test_code.tscn             # Code kraken (hints, codes, a round, screenshots)
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_settings.tscn  # settings, tempo, sounds
 godot-4 --headless --path . --script res://tests/check_sound_triggers.gd   # sound triggers, loops, the Ritme beat grid
 godot-4 --path . --disable-vsync --fixed-fps 30 res://tests/test_drones.tscn       # mobile players (video frames)
@@ -1197,7 +1203,8 @@ or a new master continues in the same mode.
   red / yellow / a miss; Reactie: reaction window, chance of red, all points;
   Simon: start length, show time, speed-up, points; Zwarte Piet: hidden time,
   light speed, penalty; Ritme: fall time and spacing at the start / end, when
-hold notes start (chance, how long), when two at once start, band and line size, points, tile delay), *Randomizer* and *Vragen* (weights per round type and
+hold notes start (chance, how long), when two at once start, band and line size, points, tile delay; Code kraken:
+  points per code, the bonus per try fewer, extra per harder code, how long the hints stay on the tile), *Randomizer* and *Vragen* (weights per round type and
   per question category, see below) and *Geluid* (volume, random
   sound interval) and *Licht* (the brightness of the virtual lights in the
   room, flashes on / off – also sent to the real lights).

@@ -8,6 +8,9 @@
 //   cyclone   a green light runs round; press on the red LED (yellow counts too)
 //   piet      (Zwarte Piet, run by the game) a light with a tail runs round
 //             while this tile has it; presses go to the game as usual
+//   show      (Code kraken, run by the game) {"show": {"ring": [colours], "icons":
+//             [4 colours]}}: the ring in equal segments, one colour each;
+//             {"show": false} or a stop clears it
 //   clock     (Ritme) nothing on the ring: only the round's clock, so every
 //             press carries its time since the start ({"press": .., "t": ms,
 //             "program": id}) - the game scores it at that moment, not when it
@@ -18,11 +21,12 @@
 
 namespace programs {
 // tile/<n>/cmd: {"program": {...}}, {"start": id}, {"stop": true},
-// {"pause": true|false}, {"piet": {"on": true, "speed": 20, "color": "#ff2a00"}}
+// {"pause": true|false}, {"piet": {"on": true, "speed": 20, "color": "#ff2a00"}},
+// {"show": {"ring": ["#00ff00", ...], "icons": ["#ff66cc", ...]}} / {"show": false}
 void receive(JsonObjectConst msg);
 void update(uint32_t dtMs);                 // every loop
 void press(int icon);
-bool ownsRing();                            // a program or Zwarte Piet is on the ring and icons
+bool ownsRing();                            // a program, Zwarte Piet or a shown picture is on the ring and icons
 // A program is running: its id and the ms since its start (for a press's time stamp).
 bool clockNow(String &programId, uint32_t &ms);
 void draw();                                // its ring and icons into the LEDs

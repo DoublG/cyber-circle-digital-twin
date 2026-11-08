@@ -695,7 +695,7 @@ $("#sound-stop").onclick = () => api("POST", "/api/sounds/stop");
 $("#sound-reload").onclick = () => api("POST", "/api/sounds/reload");
 
 // ---------------------------------------------------------------- texts
-const GAME_ORDER = ["quiz", "cyclone", "reaction", "simon", "zwarte_piet", "rhythm"];
+const GAME_ORDER = ["quiz", "cyclone", "reaction", "simon", "zwarte_piet", "rhythm", "code"];
 
 async function loadTexts() {
   const { defaults, values } = await api("GET", "/api/texts");

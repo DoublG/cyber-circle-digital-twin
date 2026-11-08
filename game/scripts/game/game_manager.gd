@@ -60,7 +60,7 @@ enum Mode { SETUP, CLOSED, OPEN, PAUSED }
 const ROUND_TYPES := [preload("res://scripts/game/cyclone_round.gd"),
 	preload("res://scripts/game/quiz_round.gd"), preload("res://scripts/game/reaction_round.gd"),
 	preload("res://scripts/game/rhythm_round.gd"), preload("res://scripts/game/simon_round.gd"),
-	preload("res://scripts/game/zwarte_piet_round.gd")]
+	preload("res://scripts/game/zwarte_piet_round.gd"), preload("res://scripts/game/code_round.gd")]
 
 ## Game settings the operator can change (see settings_schema); every round
 ## type has its own (GameRound.tunables). tempo > 1: every time shorter.
@@ -121,7 +121,7 @@ var _last_type: Script
 ## extra chance per round a type was not played, and how strongly the
 ## players' lives steer it.
 var randomizer_off := {}                   # type name -> true: never drawn (the operator can still plan it)
-var round_weights := {"cyclone": 1.0, "quiz": 5.0, "reaction": 1.0, "rhythm": 1.0, "simon": 1.0, "zwarte_piet": 1.0}
+var round_weights := {"code": 1.0, "cyclone": 1.0, "quiz": 5.0, "reaction": 1.0, "rhythm": 1.0, "simon": 1.0, "zwarte_piet": 1.0}
 @export var drought := 0.5
 @export var mercy := 1.0
 var _history: Array[Script] = []           # the round types played, last at the end
@@ -636,7 +636,7 @@ func _plan_rounds() -> void:
 		upcoming.pop_back()
 
 
-## Operator: play `type_name` (cyclone, quiz, reaction, rhythm, simon, zwarte_piet) as the round in
+## Operator: play `type_name` (code, cyclone, quiz, reaction, rhythm, simon, zwarte_piet) as the round in
 ## slot `slot` of the plan (0 = the next round). "" = random again from there.
 func set_planned_round(slot: int, type_name: String, options := {}) -> void:
 	_plan_rounds()

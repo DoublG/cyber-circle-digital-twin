@@ -36,7 +36,7 @@ def rounds_survived(rng):
 
 
 OPEN, CLOSE = 10, 18                 # the event's opening hours
-ROUND_TYPES = ["quiz", "quiz", "cyclone", "rhythm", "simon", "reaction", "zwarte_piet"]
+ROUND_TYPES = ["quiz", "quiz", "cyclone", "rhythm", "simon", "reaction", "zwarte_piet", "code"]
 
 
 def _db_now(d):

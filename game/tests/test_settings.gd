@@ -20,7 +20,7 @@ func _ready() -> void:
 	var schema := game.settings_schema()
 	var groups: Array = schema.map(func(g): return g.group)
 	print("    groups: ", groups)
-	check(groups == ["game", "cyclone", "quiz", "reaction", "rhythm", "simon", "zwarte_piet", "randomizer", "questions", "sound", "light", "voice"], "a group for the game and every round type")
+	check(groups == ["game", "cyclone", "quiz", "reaction", "rhythm", "simon", "zwarte_piet", "code", "randomizer", "questions", "sound", "light", "voice"], "a group for the game and every round type")
 	var quiz_items: Array = schema[2].items
 	var qt: Dictionary = quiz_items.filter(func(t): return t.key == "question_time")[0]
 	check(qt.default == 15.0 and qt.value == 15.0 and qt.unit == "s", "quiz answer time: default 15 s")
@@ -76,13 +76,13 @@ func _ready() -> void:
 	var quiz_t: Script = QuizRound
 	var ch := game.round_chances(null)
 	print("    chances: ", _names(game, ch))
-	check(ch.size() == 6 and is_equal_approx(ch.values().reduce(func(a, b): return a + b, 0.0), 1.0), "6 types, chances add up to 1")
+	check(ch.size() == 7 and is_equal_approx(ch.values().reduce(func(a, b): return a + b, 0.0), 1.0), "7 types, chances add up to 1")
 	game.apply_settings({"randomizer": {"weight_quiz": 0}})
 	var picks := {}
 	for n in 300:
 		var t := game._pick_round_type(null, 0)
 		picks[t] = picks.get(t, 0) + 1
-	check(not picks.has(quiz_t) and picks.size() == 5, "weight 0: never a quiz")
+	check(not picks.has(quiz_t) and picks.size() == 6, "weight 0: never a quiz")
 	game.apply_settings({"randomizer": {"mercy": 0}})
 	game._history.assign([CycloneRound, SimonRound, ReactionRound, ZwartePietRound, CycloneRound, SimonRound])
 	game.upcoming.clear()

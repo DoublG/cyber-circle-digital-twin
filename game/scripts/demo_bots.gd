@@ -17,6 +17,7 @@ var protected_wrong := false       # shielded players answer wrong: the shield b
 var arena: Node3D
 var _t := 0.0
 var _next_join := 0.0
+var _code_bots := {}                # Code kraken: tile -> {next: when it presses, key: [level, tries], plan: [lanes]}
 var _letting_go := {}               # Ritme hold notes: tile -> {lane: when the bot lets go}
 
 
@@ -51,6 +52,8 @@ func _process(delta: float) -> void:
 				arena.tiles[id - 1].press_button(CyberTile.BUTTONS.pick_random())
 		elif round is RhythmRound:
 			_rhythm(round, id)
+		elif round is CodeRound:
+			_code(round, id)
 		elif randf() < delta * 1.6:          # tile games: press now and then
 			arena.tiles[id - 1].press_button(CyberTile.BUTTONS.pick_random())
 
@@ -85,6 +88,43 @@ func _rhythm(round: RhythmRound, id: int) -> void:
 				holding[n.lane] = n.t + n.hold + (-n.hold * 0.5 if early else off_end)
 			else:
 				arena.tiles[id - 1].press_button(CyberTile.BUTTONS[n.lane])
+
+
+## Code kraken: a bot types a code that fits every hint so far (sometimes a
+## careless one), one icon every 0.5-1 s, and looks at the hints a moment.
+func _code(round: CodeRound, id: int) -> void:
+	var st: Dictionary = round.state.get(id, {})
+	if st.is_empty() or st.level >= round.codes.size():
+		return
+	var bot: Dictionary = _code_bots.get_or_add(id, {"next": 0.0, "key": [], "plan": []})
+	if round.clock < bot.next or (st.hint_until > 0.0 and round.clock < st.hint_until - 0.6):
+		return
+	var key := [st.level, st.tries.size()]
+	if bot.key != key:
+		var c: Dictionary = round.codes[st.level]
+		var fits := code_candidates(c.length, c.repeats, st.tries)
+		bot.plan = fits.pick_random() if not fits.is_empty() and randf() < SKILL + 0.2 else code_candidates(c.length, c.repeats, []).pick_random()
+		bot.key = key
+	var k: int = st.guess.size()
+	if k < bot.plan.size():
+		arena.tiles[id - 1].press_button(CyberTile.BUTTONS[bot.plan[k]])
+	bot.next = round.clock + randf_range(0.5, 1.0)
+
+
+## Every code (length, repeats) that gives the same hints as these tries.
+static func code_candidates(length: int, repeats: bool, tries: Array) -> Array:
+	var out := []
+	for n in int(pow(4, length)):
+		var code := []
+		var v := n
+		for k in length:
+			code.append(v % 4)
+			v /= 4
+		if not repeats and code.duplicate().any(func(x): return code.count(x) > 1):
+			continue
+		if tries.all(func(t): return CodeRound.marks(code, t.guess) == t.marks):
+			out.append(code)
+	return out
 
 
 func _join() -> void:
