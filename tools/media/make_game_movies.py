@@ -17,7 +17,8 @@ The game: the operator opens it, gamemaster Erik scans the first visitors' QR
 cards with the app (filmed), Lies the others (the visitors walk to their tile
 and press the 4 icons); Lies puts a mobile player
 on a drone, starts it from the web interface; a quiz, Cyclone (on the tile),
-Ritme and a quiz again, with the scoreboards in between; the operator stops it.
+Ritme (hold notes) and Code kraken, with the scoreboards in between; the
+operator stops it.
 
 Setups (--setup, each its own folder and file names, so the others stay):
   full      every place: 7 visitors on the floor + 1 mobile player     -> out/movies/game/
@@ -46,7 +47,7 @@ FPS = 30                     # the game's frames
 WEB_EVERY = 2                # a web page frame every 2 game frames: 15 fps
 CARDS = [("CC-0101", "Anna", 11), ("CC-0102", "Bram", 13), ("CC-0103", "Cleo", 10), ("CC-0104", "Daan", 9),
          ("CC-0105", "Eva", 12), ("CC-0106", "Finn", 14), ("CC-0107", "Gust", 12)]
-ROUNDS = ["quiz", "cyclone", "rhythm", "quiz"]
+ROUNDS = ["quiz", "cyclone", "rhythm", "code"]
 # the first quiz: a question from 12 years - the younger visitors and mobile players get a
 # shield (tile, drone, the quiz screen) and answer wrong: the shield blocks the robot's shot
 SHIELD_QUESTION = "Welk getal is 1010 in binair?"
@@ -294,7 +295,7 @@ def main():
     call("PUT", "/api/settings", {"game": {"auto_start_delay": 0, "intro_time": 7, "result_time": 8,
                                            "scoreboard_time": 8},
                                   "quiz": {"question_time": 12, "read_time": 3}, "cyclone": {"duration": 30},
-                                  "rhythm": {"duration": 30}})
+                                  "rhythm": {"duration": 30}, "code": {"duration": 50}})
     game = subprocess.Popen(["godot-4", "--path", GODOT, "--resolution", "960x540", "--fixed-fps", str(FPS),
                              "--disable-vsync", "--write-movie", os.path.join(TMP, "main.avi"),
                              "res://movie/game_movie.tscn", "--", f"--rec={TMP}",
