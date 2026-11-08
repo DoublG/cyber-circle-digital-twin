@@ -22,6 +22,12 @@ func _init(font_size := 72) -> void:
 	add_theme_color_override("font_outline_color", Color(Retro.ORANGE, 0.6))
 	add_theme_constant_override("outline_size", 10)
 	_index = -1
+
+
+## The first slogan when it goes on screen - not in _init: the caller sets
+## offset after new(), and a slogan picked before that (offset 0, the same on
+## every tile) flashed for one frame each time a tile's view was rebuilt.
+func _ready() -> void:
 	_process(0.0)
 
 
