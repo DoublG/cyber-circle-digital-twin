@@ -57,6 +57,7 @@ var _ring_colors: Array[Color] = []
 var _hearts: Array[MeshInstance3D] = []
 var _anchors := {}       # button -> Node3D at the icon centre on the glass
 var _pressure := {}      # button -> float 0..1
+var _hold_seq := {}                       # button -> the latest press / hold (hold_button's safety release)
 var _clicked: StringName = &""
 var _button_leds := {}   # button -> symbol MeshInstance3D (RGB LED below it)
 var _status_led: MeshInstance3D
@@ -860,8 +861,27 @@ func is_pressed(button: StringName) -> bool:
 
 ## Simulated tap (full press, released after `hold` seconds).
 func press_button(button: StringName, hold := 0.15) -> void:
+	_hold_seq[button] = _hold_seq.get(button, 0) + 1
 	set_pressure(button, 1.0)
 	get_tree().create_timer(hold).timeout.connect(set_pressure.bind(button, 0.0))
+
+
+## Standing on an icon until release_button (a real tile: its "release"
+## message; Ritme's hold notes). If that never comes (a lost message), it
+## lets go by itself after max_hold seconds.
+func hold_button(button: StringName, max_hold := 15.0) -> void:
+	var seq: int = _hold_seq.get(button, 0) + 1
+	_hold_seq[button] = seq
+	set_pressure(button, 1.0)
+	get_tree().create_timer(max_hold).timeout.connect(func():
+		if _hold_seq.get(button, 0) == seq and is_pressed(button):
+			set_pressure(button, 0.0))
+
+
+func release_button(button: StringName) -> void:
+	_hold_seq[button] = _hold_seq.get(button, 0) + 1
+	if is_pressed(button):
+		set_pressure(button, 0.0)
 
 
 ## Mouse test: hold the left button on an etched symbol to "stand" on it.

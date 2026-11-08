@@ -108,12 +108,16 @@ try:
     call("POST", "/api/cmd", {"tile": 1, "register": "Anna", "color": "#ff44cc", "age": 12})
     until(lambda: any(p["tile"] == 1 for p in live()["state"]["pending"]))
     time.sleep(1.5); pump(); tiles[0].save("emu_pending"); shot("web_pending")
+    act_seq = call("GET", "/api/mqtt/log?filter=tile/1/event")["seq"]
     for k, name in zip("1234", ["Square", "Triangle", "Cross", "Circle"]):
         if page: click_icon(name)                 # clicked on the tile's top in the browser
         else: tiles[0].key(k)
         time.sleep(0.3); pump()
     check(until(lambda: any(p["tile"] == 1 and p["name"] == "Anna" for p in live()["state"]["players"])),
           "Anna plays on T01: activated with the emulated tile's sensors")
+    ev = [m["payload"] for m in call("GET", f"/api/mqtt/log?since={act_seq}&filter=tile/1/event")["messages"]]
+    check(any('"press"' in e and '"hold":1' in e for e in ev) and any('"release"' in e for e in ev),
+          "the tile sends its presses as holds and its releases (Ritme's hold notes): %s" % [e for e in ev if "release" in e][:1])
     time.sleep(1); pump(); tiles[0].save("emu_playing"); shot("web_playing")
     print("--- a Reactie round: the program runs on the emulated tile, its results reach the game")
     call("POST", "/api/plan", {"slot": 0, "round": "reaction"})

@@ -55,6 +55,29 @@ func _init() -> void:
 	check(r.state[3].judged.get(k, null) == null and r.stamped == 1, "another program's stamp: on arrival")
 	check(arena.press_stamp().is_empty(), "the stamp is gone after the press")
 
+	# a hold note: the tile's press says a release follows ({"hold": 1}), the
+	# release counts at the tile's stamp too (its end on the line, 0.5 s late)
+	var h := -1
+	for i in range(r._first, r.notes.size()):
+		if r.notes[i].hold > 0.0:
+			h = i
+			break
+	check(h >= 0, "the chart has a hold note")
+	if h >= 0:
+		var hn: Dictionary = r.notes[h]
+		var hicon := str(CyberTile.BUTTONS[hn.lane])
+		r.clock = hn.t
+		arena.apply_command({"tile": 1, "press": hicon, "hold": 1, "t": roundi(hn.t * 1000.0), "program": r.tile_clock.id})
+		check(r.state[1].holds.get(h, "") == "on", "hold note pressed: holding")
+		r.clock = hn.t + 0.4
+		await process_frame
+		check(arena.tiles[0].is_pressed(StringName(hicon)), "the icon stays down until the tile's release (not a tap)")
+		r.clock = hn.t + hn.hold + 0.5
+		arena.apply_command({"tile": 1, "release": hicon, "t": roundi((hn.t + hn.hold) * 1000.0), "program": r.tile_clock.id})
+		check(r.state[1].holds.get(h, "") == "ok" and r.state[1].last[hn.lane].points == r.points_line,
+			"stamped release, 0.5 s late on the network: let go on the line (%s)" % r.state[1].last[hn.lane])
+		check(not arena.tiles[0].is_pressed(StringName(hicon)), "released")
+
 	game.stop_game()
 	await process_frame
 	check((sent.get(1, []) as Array).any(func(m): return m.has("stop")), "the clock stopped at the end")

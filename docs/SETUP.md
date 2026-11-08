@@ -590,8 +590,10 @@ your left neighbour with square/cross, right with triangle/circle; when a
 hidden countdown ends, whoever has it loses a point) and **Ritme** (a dance
 game: the tile icons fall down 4 lanes on the player's own screen; press the
 icon when it reaches the bottom: in the yellow band +1, on the line +3, a
-press on nothing −1. Slow and one at a time first, then faster and two at
-once. The game judges the presses, not the tile: set *Vertraging tegel →
+press on nothing −1. Three steps: slow taps one at a time; then also hold
+notes – the icon with a band up to a second icon: stand on it and let go when
+that end reaches the line (the same points again; too early or too late: 0);
+then faster and two at once. The game judges the presses, not the tile: set *Vertraging tegel →
 spel* to the network delay of the installation). The quiz is the backbone;
 the randomizer fills the plan of the next 3 rounds and puts the other games
 in between (those never twice in a row, quiz after quiz can; with fewer than 4
@@ -685,7 +687,7 @@ Prefix `cybercircle` (setting `topic_prefix` on the *Mqtt* node). Payloads are J
 | `cybercircle/sounds` | master → all | retained `{"events": {"attack": ["laser1.ogg", …], …}}`: the sounds `{"sound": …}` can play |
 | `cybercircle/tile/<n>/cmd` | game → tile | `{"program": {...}}`, `{"start": "<id>"}`, `{"stop": true}`, `{"pause": true}`, `{"piet": {"on": true, "speed": 20, "color": "#ff2a00"}}`, effects `{"fx": "attack" \| "hit" \| "block" \| "life" \| "doomed" \| "death", "color": "#rrggbb"}` |
 | `cybercircle/tile/<n>/state` | game → tile | retained: what the tile shows – `{"mode": "off" \| "setup" \| "pending" \| "idle" \| "dead" \| "playing", "number": n, "color": "#…" (pending), "lives", "max_lives", "shield", "buttons": {"Square": "#…" \| "", …}}` |
-| `cybercircle/tile/<n>/event` | tile → game | `{"press": "Cross"}` (a program running: `+ "t": ms since its start, "program": id`), `{"pressure": {...}}`, `{"result": {...}}` |
+| `cybercircle/tile/<n>/event` | tile → game | `{"press": "Cross", "hold": 1}` and when let go `{"release": "Cross"}` (firmware 0.2+; `hold`: the game keeps the icon down until the release – Ritme's hold notes; without it a press is a tap), a program running: `+ "t": ms since its start, "program": id` on both, `{"pressure": {...}}`, `{"result": {...}}` |
 | `cybercircle/registered` | game → app | `{"tile": 3, "player": "Erik", "color": "#ff8800"}` |
 | `cybercircle/activated` | game → app | `{"tile": 3, "player": "Erik"}` |
 | `cybercircle/status` | game → all | `online` / `offline` (retained) |
@@ -791,9 +793,9 @@ Reactie, Simon, Cyclone and Zwarte Piet, a 1:1 port of
 round, on its own clock (crystal drift: about 1 ms per round), so the network
 never decides a result. Reaction, Simon and Cyclone measure on the tile; for
 the games the game judges itself – Ritme and Zwarte Piet – the tiles run a
-`clock` program and stamp every press with its time in the round (`"t"`), and
-the game scores the press at that moment: Ritme on the line however late it
-arrives, Zwarte Piet waits *Wachten op late schop* (0.3 s) at the end of a
+`clock` program and stamp every press and release with its time in the round
+(`"t"`), and the game scores it at that moment: Ritme on the line however late
+it arrives (a hold note's release too), Zwarte Piet waits *Wachten op late schop* (0.3 s) at the end of a
 countdown for a kick stamped before it. Without a stamp (simulated tiles, an
 older firmware) a press counts when it arrives (Ritme: minus *Vertraging tegel
 → spel*). Deadlines are wrap-safe (`millis()` wraps after 49.7 days).
@@ -1195,7 +1197,7 @@ or a new master continues in the same mode.
   red / yellow / a miss; Reactie: reaction window, chance of red, all points;
   Simon: start length, show time, speed-up, points; Zwarte Piet: hidden time,
   light speed, penalty; Ritme: fall time and spacing at the start / end, when
-two at once start, band and line size, points, tile delay), *Randomizer* and *Vragen* (weights per round type and
+hold notes start (chance, how long), when two at once start, band and line size, points, tile delay), *Randomizer* and *Vragen* (weights per round type and
   per question category, see below) and *Geluid* (volume, random
   sound interval) and *Licht* (the brightness of the virtual lights in the
   room, flashes on / off – also sent to the real lights).

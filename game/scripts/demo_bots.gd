@@ -17,6 +17,7 @@ var protected_wrong := false       # shielded players answer wrong: the shield b
 var arena: Node3D
 var _t := 0.0
 var _next_join := 0.0
+var _letting_go := {}               # Ritme hold notes: tile -> {lane: when the bot lets go}
 
 
 func _ready() -> void:
@@ -55,11 +56,17 @@ func _process(delta: float) -> void:
 
 
 ## Rhythm: every bot has its own timing per symbol (from a hash, so it is
-## stable): mostly in the band, often on the line, sometimes not at all.
+## stable): mostly in the band, often on the line, sometimes not at all; a
+## hold note: it stands on it and lets go around its end (sometimes too early).
 func _rhythm(round: RhythmRound, id: int) -> void:
 	var st: Dictionary = round.state.get(id, {})
 	if st.is_empty():
 		return
+	var holding: Dictionary = _letting_go.get_or_add(id, {})   # lane -> when this bot lets go
+	for lane in holding.keys():
+		if round.clock >= holding[lane]:
+			arena.tiles[id - 1].release_button(CyberTile.BUTTONS[lane])
+			holding.erase(lane)
 	for i in range(round._first, round.notes.size()):
 		var n: Dictionary = round.notes[i]
 		if n.t - round.clock > n.fall * round.band:
@@ -71,7 +78,13 @@ func _rhythm(round: RhythmRound, id: int) -> void:
 			continue                         # this one the bot misses
 		var off: float = (float((h / 1000) % 1000) / 1000.0 - 0.5) * 1.6 * round.band * n.fall
 		if round.clock >= n.t + off:
-			arena.tiles[id - 1].press_button(CyberTile.BUTTONS[n.lane])
+			if n.get("hold", 0.0) > 0.0:     # hold note: stand on it, let go around its end (1 in 5 too early)
+				arena.tiles[id - 1].hold_button(CyberTile.BUTTONS[n.lane])
+				var early := (h / 1000000) % 5 == 0
+				var off_end: float = (float((h / 7) % 1000) / 1000.0 - 0.5) * 1.6 * round.band * n.fall
+				holding[n.lane] = n.t + n.hold + (-n.hold * 0.5 if early else off_end)
+			else:
+				arena.tiles[id - 1].press_button(CyberTile.BUTTONS[n.lane])
 
 
 func _join() -> void:

@@ -24,6 +24,7 @@ func _ready() -> void:
 	check(not Texts.values.has("x"), "an empty text: the default")
 	check(Texts.calls() == ["KOM SPELEN!", "WIN VAN DE ROBOT!"], "the slogans, one per line")
 	var cta := CallToAction.new()
+	add_child(cta)                                  # (it picks its slogan when it goes on screen)
 	check(cta.text in Texts.calls(), "a call to action shows one of them (%s)" % cta.text)
 	cta.free()
 	arena.join(1, "Anna", 12)

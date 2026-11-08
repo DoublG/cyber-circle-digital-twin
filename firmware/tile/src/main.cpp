@@ -6,7 +6,7 @@
 //   find it             device/<mac>/identify {"seconds": 6}
 //   then, as tile n     tile/<n>/state  (retained) what to show - display.cpp
 //                       tile/<n>/cmd    programs, effects - programs.cpp, display.cpp
-//                       tile/<n>/event  -> {"press": "Cross"}, {"result": {...}}
+//                       tile/<n>/event  -> {"press": "Cross", "hold": 1}, {"release": "Cross"}, {"result": {...}}
 //                                          (a program running: "t" = ms since its start, "program" = its id)
 // Settings: include/config.h. The protocol's reference: the game's
 // game/scripts/net/mqtt_bridge.gd and game/scripts/tile_firmware.gd.
@@ -149,6 +149,16 @@ void setup() {
     Serial.printf("cyber circle challenge tile %s, fw %s\n", deviceId.c_str(), FW_VERSION);
 }
 
+// The moment in the round's clock program (Ritme scores presses and releases on it).
+static void stampEvent(JsonDocument &ev) {
+    String program;
+    uint32_t ms;
+    if (programs::clockNow(program, ms)) {
+        ev["t"] = ms;
+        ev["program"] = program;
+    }
+}
+
 void loop() {
     ota::loop();
     loops++;
@@ -164,14 +174,17 @@ void loop() {
         if (display::sendsPresses()) {
             JsonDocument ev;
             ev["press"] = ICON_NAMES[pressed];
-            String program;
-            uint32_t ms;
-            if (programs::clockNow(program, ms)) {      // the press's time in the round (Ritme scores on it)
-                ev["t"] = ms;
-                ev["program"] = program;
-            }
+            ev["hold"] = 1;                             // (a "release" follows: the game holds the icon down until then)
+            stampEvent(ev);
             sendEvent(ev);
         }
+    }
+    int released = sensors::released();
+    if (released >= 0 && display::sendsPresses()) {     // let go (Ritme: the end of a hold note)
+        JsonDocument ev;
+        ev["release"] = ICON_NAMES[released];
+        stampEvent(ev);
+        sendEvent(ev);
     }
     if (SENSOR_REPORT_MS > 0 && now - lastSensorReport > SENSOR_REPORT_MS) {
         lastSensorReport = now;

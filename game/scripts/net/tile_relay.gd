@@ -86,3 +86,13 @@ func set_button_led(button: StringName, color: Color) -> void:
 func press_button(button: StringName, hold := 0.15) -> void:
 	_r(&"press_button", [button, hold])
 	tile.press_button(button, hold)
+
+
+func hold_button(button: StringName) -> void:
+	_r(&"hold_button", [button])
+	tile.hold_button(button)
+
+
+func release_button(button: StringName) -> void:
+	_r(&"release_button", [button])
+	tile.release_button(button)

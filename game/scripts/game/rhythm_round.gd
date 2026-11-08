@@ -7,8 +7,12 @@ extends GameRound
 ##   in the yellow band    1 point  (points_band)
 ##   no symbol there       -1 point (points_wrong: no use pressing everything)
 ## A symbol that falls through the band is missed (0 points, the combo ends).
-## It starts slow with one symbol at a time; the symbols fall faster and come
-## closer together, and from `parallel_from` of the round on two at once.
+## Three steps: first one symbol at a time, slow (tap); from `hold_from` of
+## the round also hold notes - the symbol with a band behind it up to a second
+## (hollow) symbol: press when the first reaches the line, keep standing on it
+## and let go when the second reaches the line (on the line / in the band:
+## the same points again; too early or too late: 0, the combo ends); from
+## `parallel_from` on two at once. Faster and closer together all the time.
 ## Places by the points (shared when equal): the 1st places gain a life, the
 ## last places lose one.
 ##
@@ -28,7 +32,11 @@ var fall_start := 2.6            # s from the top to the line at the start ...
 var fall_end := 1.3              # ... and at the end of the round
 var gap_start := 1.5             # s between symbols at the start ...
 var gap_end := 0.45              # ... and at the end
-var parallel_from := 0.35        # part of the round after which two at once can come ...
+var hold_from := 0.25            # part of the round after which hold notes come (step 2) ...
+var hold_chance := 0.4           # ... with this chance per symbol
+var hold_min := 0.8              # s a hold note lasts (from the press to letting go) ...
+var hold_max := 1.6              # ... at most
+var parallel_from := 0.55        # part of the round after which two at once can come (step 3) ...
 var parallel_chance := 0.45      # ... with this chance at the end (growing)
 var band := 0.13                 # half the yellow band, as a part of the fall
 var line := 0.035                # half the line zone, as a part of the fall
@@ -38,9 +46,10 @@ var points_wrong := -1
 var latency_ms := 0.0
 var music_bpm := 120.0           # the Ritme music's tempo (0: no beat grid)
 
-var notes := []                  # {t: hit time (s since the start), lane: 0..3, fall: s}
+var notes := []                  # {t: hit time (s since the start), lane: 0..3, fall: s, hold: s (0: tap)}
 var clock := 0.0                 # s since the round started (stops when paused)
-var state := {}                  # tile_id -> {judged: {note index: points}, combo, best_combo, lines, last: [lane flashes]}
+var state := {}                  # tile_id -> {judged: {note index: points}, holds: {note index: "on" / "ok" / "fail"},
+                                 #   combo, best_combo, lines, last: [lane flashes]}
 var _first := 0                  # index of the first note that can still be judged by anyone
 
 
@@ -52,7 +61,7 @@ func _init() -> void:
 
 
 func _rules() -> String:
-	return ("Iconen vallen naar beneden op je scherm, elk in de kleur van zijn knop.\nDruk dat icoon op je tegel als het onderaan aankomt:\nin de gele band +%d, precies op de lijn +%d punten. Zomaar drukken: %d.\nEerst traag en één per keer, dan sneller en meerdere tegelijk!\nNa de ronde: meeste punten +1 leven, minste punten -1 leven."
+	return ("Iconen vallen naar beneden op je scherm, elk in de kleur van zijn knop.\nDruk dat icoon op je tegel als het onderaan aankomt:\nin de gele band +%d, precies op de lijn +%d punten. Zomaar drukken: %d.\nEerst tikken. Dan ook vasthouden: een icoon met een balk erachter?\nBlijf erop staan en laat los als het einde van de balk op de lijn komt!\nDaarna sneller en twee tegelijk.\nNa de ronde: meeste punten +1 leven, minste punten -1 leven."
 		% [points_band, points_line, points_wrong])
 
 
@@ -68,6 +77,10 @@ func tunables() -> Array:
 		setting("fall_end", "Valtijd einde", 0.4, 6.0, 0.1, "s"),
 		setting("gap_start", "Tijd tussen iconen begin", 0.2, 4.0, 0.05, "s"),
 		setting("gap_end", "Tijd tussen iconen einde", 0.2, 4.0, 0.05, "s"),
+		setting("hold_from", "Vasthouden vanaf (deel ronde)", 0.0, 1.0, 0.05),
+		setting("hold_chance", "Kans op vasthouden", 0.0, 1.0, 0.05),
+		setting("hold_min", "Vasthouden minstens", 0.3, 4.0, 0.1, "s"),
+		setting("hold_max", "Vasthouden hoogstens", 0.3, 4.0, 0.1, "s"),
 		setting("parallel_from", "Meerdere tegelijk vanaf (deel ronde)", 0.0, 1.0, 0.05),
 		setting("parallel_chance", "Kans op twee tegelijk (einde)", 0.0, 1.0, 0.05),
 		setting("band", "Gele band (halve hoogte, deel val)", 0.03, 0.4, 0.01),
@@ -85,11 +98,12 @@ func _start() -> void:
 	notes = make_chart()
 	start_tile_clock()
 	for id in players:
-		state[id] = {"judged": {}, "combo": 0, "best_combo": 0, "lines": 0, "last": [{}, {}, {}, {}]}
+		state[id] = {"judged": {}, "holds": {}, "combo": 0, "best_combo": 0, "lines": 0, "last": [{}, {}, {}, {}]}
 
 
-## The chart: one symbol at a time first, then faster and closer together,
-## later sometimes two at once (always on different icons).
+## The chart: one symbol at a time first (taps), then hold notes too (nothing
+## else comes while one lasts), later sometimes two at once (always on
+## different icons, never a hold); faster and closer together all the time.
 func make_chart() -> Array:
 	var out := []
 	var t := fall_start + 1.0              # the first symbol falls the whole way
@@ -108,16 +122,21 @@ func make_chart() -> Array:
 			var chance := parallel_chance * clampf((p - parallel_from) / (1.0 - parallel_from) * 1.5, 0.0, 1.0)
 			if randf() < chance:
 				count = 2
+		var hold := 0.0
+		if count == 1 and p >= hold_from and hold_from < 1.0 and randf() < hold_chance:
+			hold = randf_range(hold_min, maxf(hold_max, hold_min))
 		var at := t
 		if step > 0.0:                     # on the music's grid, never two moments on one half beat
 			at = maxf(roundf(t / step) * step, last_t + step)
-			if at >= duration - 0.6:
-				break
-		last_t = at
+			if hold > 0.0:                 # (letting go on the grid too)
+				hold = maxf(roundf(hold / step), 2.0) * step
+		if at + hold >= duration - 0.6:
+			break
+		last_t = at + hold
 		for k in count:
-			out.append({"t": at, "lane": lanes[k], "fall": fall})
+			out.append({"t": at, "lane": lanes[k], "fall": fall, "hold": hold})
 		last_lane = lanes[0]
-		t += lerpf(gap_start, gap_end, pow(p, 0.8)) * (1.4 if count > 1 else 1.0)
+		t = at + hold + lerpf(gap_start, gap_end, pow(p, 0.8)) * (1.4 if count > 1 else 1.0)
 	return out
 
 
@@ -133,6 +152,54 @@ func _update(delta: float) -> void:
 					st.combo = 0
 					st.last[notes[_first].lane] = {"at": clock, "text": "GEMIST", "points": 0}
 		_first += 1
+	# hold notes still held after their end went through the band: too late
+	for id in players:
+		var st: Dictionary = state[id]
+		for i in st.holds:
+			if st.holds[i] == "on" and (clock - _hold_end(notes[i])) / notes[i].fall > band:
+				_hold_result(id, i, "fail", "TE LAAT", 0)
+
+
+func _hold_end(note: Dictionary) -> float:
+	return note.t + note.get("hold", 0.0)
+
+
+## A hold note done: let go in time (points) or not (0, the combo ends).
+func _hold_result(id: int, i: int, result: String, text: String, pts: int) -> void:
+	var st: Dictionary = state[id]
+	st.holds[i] = result
+	if result == "ok":
+		st.combo += 1
+		st.best_combo = maxi(st.best_combo, st.combo)
+		if pts >= points_line:
+			st.lines += 1
+			_flash(id, CyberTile.BUTTON_COLORS[CyberTile.BUTTONS[notes[i].lane]])
+	elif not tile(id).is_dead:
+		st.combo = 0
+	st.last[notes[i].lane] = {"at": clock, "text": text, "points": pts}
+	if pts != 0:
+		add_points(id, pts)
+
+
+## Let go: the end of a hold note being held on this icon (other releases
+## don't count: no points lost for stepping off).
+func button_up(id: int, b: StringName) -> void:
+	var lane := CyberTile.BUTTONS.find(b)
+	if lane < 0 or not state.has(id):
+		return
+	var st: Dictionary = state[id]
+	for i in st.holds:
+		if st.holds[i] != "on" or notes[i].lane != lane:
+			continue
+		var at := press_time(clock - latency_ms / 1000.0)
+		var d: float = (at - _hold_end(notes[i])) / notes[i].fall
+		if d < -band:
+			_hold_result(id, i, "fail", "TE VROEG", 0)
+		elif absf(d) <= line:
+			_hold_result(id, i, "ok", "LIJN!", points_line)
+		else:
+			_hold_result(id, i, "ok", "GOED", points_band)
+		return
 
 
 func _past(note: Dictionary) -> bool:
@@ -163,6 +230,8 @@ func button(id: int, b: StringName) -> void:
 		pts = points_line if best_d <= line else points_band
 		text = "LIJN!" if best_d <= line else "GOED"
 		st.judged[best] = pts
+		if notes[best].get("hold", 0.0) > 0.0:
+			st.holds[best] = "on"          # now keep standing on it, until its end reaches the line
 		st.combo += 1
 		st.best_combo = maxi(st.best_combo, st.combo)
 		if best_d <= line:

@@ -900,6 +900,15 @@ func on_button(tile_id: int, button: StringName) -> void:
 			current.button(tile_id, button)
 
 
+## Let go of an icon (Ritme's hold notes): like on_button.
+func on_button_up(tile_id: int, button: StringName) -> void:
+	if mode != Mode.OPEN:
+		return
+	if state == State.PLAYING and current and tile_id in current.players:
+		if not arena.tiles[tile_id - 1].is_dead:
+			current.button_up(tile_id, button)
+
+
 ## Playing in the current round (not: joined during it - they wait for the
 ## scoreboard, where new players come in).
 func in_round(tile_id: int) -> bool:

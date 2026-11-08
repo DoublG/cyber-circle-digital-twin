@@ -4,7 +4,7 @@
 // server tells it which place it stands on (device/<mac>/config {"tile": n}).
 #pragma once
 
-#define FW_VERSION "0.1.0"
+#define FW_VERSION "0.2.0"
 
 // ---- network: wired Ethernet - the ESP32 module socketed on the tile's
 // carrier board, an RMII PHY (LAN8720). The pins of the module; defaults: the

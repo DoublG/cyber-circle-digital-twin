@@ -1,8 +1,8 @@
 // Pressure sensors: an FSR per icon in a voltage divider on an ADC1 pin. At
 // power-up the resting value is measured; pressed = SENSOR_PRESS counts above
 // it, released below SENSOR_RELEASE (hysteresis), a change must last
-// SENSOR_DEBOUNCE ms. A press is the moment it goes down (the game counts
-// presses, not holding).
+// SENSOR_DEBOUNCE ms. A press is the moment it goes down, a release the moment
+// it comes up again (Ritme's hold notes: hold on, let go at the right moment).
 #include "sensors.h"
 #include "config.h"
 
@@ -12,6 +12,7 @@ static int rest[4];
 static float level[4];                   // filtered reading
 static bool down[4];
 static uint32_t changing[4];             // since when the reading wants another state (0 = not)
+static int lastReleased = -1;
 
 void begin() {
     analogReadResolution(12);
@@ -31,8 +32,11 @@ int raw(int i) { return (int)level[i] - rest[i]; }
 
 bool isDown(int i) { return down[i]; }
 
+int released() { return lastReleased; }
+
 int update() {
     int pressed = -1;
+    lastReleased = -1;
     uint32_t now = millis();
     for (int i = 0; i < 4; i++) {
         level[i] = level[i] * 0.6f + analogRead(SENSOR_PINS[i]) * 0.4f;   // a little smoothing
@@ -48,6 +52,7 @@ int update() {
             down[i] = want;
             changing[i] = 0;
             if (want && pressed < 0) pressed = i;
+            if (!want && lastReleased < 0) lastReleased = i;
         }
     }
     return pressed;

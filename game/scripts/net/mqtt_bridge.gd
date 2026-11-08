@@ -6,7 +6,8 @@ extends MqttClient
 ##                                            one-off effects {"fx": "hit", "color": "#ff1a0d"}
 ##   <prefix>/tile/<n>/state   game -> tile   retained: what it shows (CyberTile.display_state:
 ##                                            mode, lives, shield, icon colours, number)
-##   <prefix>/tile/<n>/event   tile -> game   {"result": {...}}, {"press": "Cross"},
+##   <prefix>/tile/<n>/event   tile -> game   {"result": {...}}, {"press": "Cross", "hold": 1},
+##                                            {"release": "Cross"} (hold: a release follows),
 ##                                            {"pressure": {"Cross": 0.8}}, ...
 ##                                            (any apply_command fields; "tile" is added)
 ##   <prefix>/cmd              app/operator -> game   any apply_command message,
@@ -301,7 +302,12 @@ func _on_display_message(topic: String, payload: PackedByteArray) -> void:
 	if parts[2] == "cmd":
 		arena.replica_tile_msg(id, data)               # (its tile logic: the same program as the real tile)
 	elif parts[2] == "event" and data.has("press"):
-		arena.tiles[id - 1].press_button(StringName(data.press))   # (shows at once; the master scores it)
+		if data.get("hold", 0):                    # (shows at once; the master scores it)
+			arena.tiles[id - 1].hold_button(StringName(data.press))
+		else:
+			arena.tiles[id - 1].press_button(StringName(data.press))
+	elif parts[2] == "event" and data.has("release"):
+		arena.tiles[id - 1].release_button(StringName(data.release))
 
 
 ## Master: a display node's metrics, on MQTT for it (it has none itself).

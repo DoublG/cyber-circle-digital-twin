@@ -6,6 +6,8 @@ namespace sensors {
 void begin();                            // calibrates the resting values: nobody on the tile at power-up!
 // Call every loop; returns the icon that was just pressed (0-3) or -1.
 int update();
+// The icon let go of in the last update() (0-3) or -1 (Ritme's hold notes).
+int released();
 bool isDown(int icon);
 int raw(int icon);                       // ADC counts above the resting value
 }

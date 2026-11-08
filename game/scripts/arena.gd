@@ -159,6 +159,7 @@ func _ready() -> void:
 	tiles.sort_custom(func(x, y): return x.tile_id < y.tile_id)
 	for tile in tiles:
 		tile.button_pressed.connect(_on_button_pressed)
+		tile.button_released.connect(_on_button_released)
 		tile.died.connect(_on_tile_died)
 		tile.health_changed.connect(func(id, _h): screen_wall.update_player(id))
 		tile.idle = true
@@ -346,7 +347,7 @@ func replica_target(target: String) -> Object:
 func replica_skip(target: String, method: StringName, args: Array) -> bool:
 	if not own_tiles_live:
 		return false
-	if target.begins_with("tile:") and method == &"press_button":
+	if target.begins_with("tile:") and method in [&"press_button", &"hold_button", &"release_button"]:
 		return is_own_tile(int(target.substr(5)))
 	if target == "npc" and method == &"press":
 		return is_own_tile(int(args[0]))
@@ -1159,6 +1160,13 @@ func _on_button_pressed(tile_id: int, button: StringName) -> void:
 	game.on_button(tile_id, button)
 
 
+## Let go of an icon (Ritme's hold notes): only for a player in the game.
+func _on_button_released(tile_id: int, button: StringName) -> void:
+	if Replica.client or is_pending(tile_id) or tiles[tile_id - 1].idle:
+		return
+	game.on_button_up(tile_id, button)
+
+
 ## Last life lost: queue the robot's death animation; the tile plays its effect
 ## when the shot lands. Several tiles can die at the same moment.
 ## 0 lives: exterminated. The tile blinks red until the robot has turned to
@@ -1376,7 +1384,14 @@ func apply_command(cmd: Dictionary) -> void:
 			rt(tile).set_ring_led(int(cmd.led), Color(cmd.color))
 		if cmd.has("press"):
 			_press_stamp = cmd if cmd.has("t") else {}    # (a real tile's time stamp: the round reads it now)
-			rt(tile).press_button(StringName(cmd.press))
+			if cmd.get("hold", 0):                       # (a real tile: down until its "release")
+				rt(tile).hold_button(StringName(cmd.press))
+			else:
+				rt(tile).press_button(StringName(cmd.press))
+			_press_stamp = {}
+		if cmd.has("release"):
+			_press_stamp = cmd if cmd.has("t") else {}
+			rt(tile).release_button(StringName(cmd.release))
 			_press_stamp = {}
 		if cmd.has("pressure"):
 			for b in cmd.pressure:

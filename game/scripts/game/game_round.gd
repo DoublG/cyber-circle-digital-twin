@@ -77,6 +77,12 @@ func button(_tile_id: int, _button: StringName) -> void:
 	pass
 
 
+## Called when a player lets go of an icon (only Ritme's hold notes use it;
+## press_time() gives its moment, like for a press).
+func button_up(_tile_id: int, _button: StringName) -> void:
+	pass
+
+
 ## Clean up LEDs etc. when the round ends.
 func finish() -> void:
 	pass
