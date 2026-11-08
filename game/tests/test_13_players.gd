@@ -1,6 +1,6 @@
 extends Node
 ## 13 players through the end-of-round screens, with their animations:
-##   quiz      every player's icon, then card by card ✔ / ✘ / shield
+##   quiz      every player's icon, then card by card its frame: right / wrong / shield
 ##   scoreboard after the quiz: the lives change, one player exterminated
 ##   Ritme     UITSLAG: 13 places (shared ones), +♥ / -♥ / ☠, then the
 ##             scoreboard with the lives change and an extermination
@@ -84,12 +84,13 @@ func _ready() -> void:
 	check(view._shown_ok.size() == 13, "reveal: every card turned (%d)" % view._shown_ok.size())
 	check(view._player_cards.values().all(func(c): return is_zero_approx(c.panel.rotation) \
 		and c.panel.scale.is_equal_approx(Vector2.ONE)), "reveal: the shake / pop ended (no card tilted or scaled)")
-	var marks := {}
-	for id in view._player_cards:
-		marks[id] = view._player_cards[id].mark.text
-	check(RIGHT.all(func(id): return marks[id] == "✔"), "reveal: the right ones ✔")
-	check(WRONG.all(func(id): return marks[id] == "✘") and marks[11] == "✘", "reveal: wrong / no answer ✘")
-	check(SHIELDED.all(func(id): return marks[id] == "♥"), "reveal: shielded ♥")
+	check(RIGHT.all(func(id): return _card_is(view, id, Retro.GOOD, true, false) and _card_width(view, id) >= 10),
+		"reveal: the right ones: a thick glowing green border")
+	check((WRONG + [11]).all(func(id): return _card_is(view, id, Retro.BAD, false, true) and _card_width(view, id) <= 5),
+		"reveal: wrong / no answer: a thin red border, dimmed")
+	check(SHIELDED.all(func(id): return _card_is(view, id, Retro.SHIELD, true, false) and view._player_cards[id].shield.visible),
+		"reveal: shielded: blue, the shield, not dimmed")
+	check(view._player_cards.values().all(func(c): return c.mark.text == "" or c.mark.text == "GEEN"), "reveal: no ✔ / ✘ marks")
 	check(view._slide_status.visible and view._slide_status.modulate.a > 0.99 and view._slide_status.text.begins_with("6 VAN 13"),
 		"reveal: '%s'" % view._slide_status.text)
 	_inside(view, [view._slide_status, view._legend], "reveal: status / legend")
@@ -238,3 +239,15 @@ func check(ok: bool, what: String) -> void:
 	else:
 		_fails += 1
 		print("    [FAIL] ", what)
+
+
+## A quiz card's frame after the reveal: its border colour, a glow or not, dimmed or not.
+func _card_is(view, id: int, color: Color, glow: bool, dimmed: bool) -> bool:
+	var c: Dictionary = view._player_cards[id]
+	var st: StyleBoxFlat = c.panel.get_theme_stylebox("panel")
+	return st.border_color.is_equal_approx(color) and (st.shadow_size > 0) == glow and (c.panel.modulate.a < 0.99) == dimmed
+
+
+func _card_width(view, id: int) -> int:
+	var st: StyleBoxFlat = view._player_cards[id].panel.get_theme_stylebox("panel")
+	return st.border_width_top

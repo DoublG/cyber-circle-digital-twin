@@ -6,8 +6,9 @@ extends Control
 ##             who answered (not what)
 ##   timeup    "TIJD OM!"
 ##   answers   every player's chosen icon (big player cards) ...
-##   reveal    ... then on the same slide, card by card: right (green ✔) or
-##             wrong (red ✘, the card shakes; shield = protected) - the right
+##   reveal    ... then on the same slide, card by card, shown by the card's
+##             frame (no ✔ / ✘): right = thick glowing green border; wrong =
+##             thin red border, dimmed, it shakes; shielded = blue - the right
 ##             answer itself is never shown (visitors could memorise it)
 ## The answers are laid out like the icons on the glass plate, as seen by a
 ## player standing on the tile and facing the robot:
@@ -346,32 +347,54 @@ func _show_players_slide(phase: String, players: Array) -> void:
 			c.icon.queue_redraw()
 		var fill := col.darkened(0.7)
 		var border := col
-		var mark := "" if answered else "GEEN"
+		var width := 5
+		var glow := 0.0
+		var dim := false
 		c.shield.visible = false
-		if phase == "reveal" and _shown_ok.has(p.id):
-			if p.ok == true:
-				fill = Retro.GOOD.darkened(0.6)
+		if phase == "reveal" and _shown_ok.has(p.id):     # (right / wrong: the card itself, no ✔ / ✘)
+			if p.ok == true:                             # right: thick bright border, glowing
+				fill = Retro.GOOD.darkened(0.45)
 				border = Retro.GOOD
-				mark = "✔"
-			elif p.protected:
+				width = 12
+				glow = 0.7
+			elif p.protected:                            # wrong but shielded: blue, keeps its life
 				fill = Retro.SHIELD.darkened(0.6)
 				border = Retro.SHIELD
-				mark = "♥"
+				width = 9
+				glow = 0.4
 				c.shield.visible = true
-			else:
-				fill = Retro.BAD.darkened(0.6)
+			else:                                        # wrong: thin red border, the card dimmed
+				fill = Retro.BAD.darkened(0.75)
 				border = Retro.BAD
-				mark = "✘"
-		c.panel.add_theme_stylebox_override("panel", Retro.panel(fill, border, 5, 20, 22))
-		c.mark.text = mark
-		c.mark.add_theme_color_override("font_color", border if _shown_ok.has(p.id) else Retro.DIM)
+				width = 4
+				dim = true
+		c.panel.add_theme_stylebox_override("panel", _card_style(fill, border, width, glow))
+		c.panel.modulate = Color(1, 1, 1, 0.5) if dim else Color.WHITE
+		c.mark.text = "" if answered else "GEEN"
+		c.mark.visible = not answered
+		c.mark.add_theme_color_override("font_color", Retro.DIM)
 	_slide_status.modulate.a = 1.0 if phase == "reveal" and _shown_ok.size() >= shown.size() else 0.0
 	var right := shown.filter(func(p): return p.ok == true).size()
 	_slide_status.text = "%d VAN %d SPELERS HADDEN HET GOED" % [right, shown.size()]
 
 
-## The reveal, one card after the other: the card pops, the mark (✔ / ✘ /
-## shield) stamps in big; wrong: the card shakes.
+## A player card's frame: a border wider than the usual 5 grows outwards (the
+## card's content and size stay put), glow > 0: a halo in the border's colour.
+static func _card_style(fill: Color, border: Color, width: int, glow: float) -> StyleBoxFlat:
+	var st := Retro.panel(fill, border, width, 20, 22)
+	var out := maxf(width - 5, 0.0)
+	st.expand_margin_left = out
+	st.expand_margin_right = out
+	st.expand_margin_top = out
+	st.expand_margin_bottom = out
+	if glow > 0.0:
+		st.shadow_color = Color(border, glow)
+		st.shadow_size = 26
+	return st
+
+
+## The reveal, one card after the other: the card pops into its result (right:
+## a thick glowing border; wrong: dimmed, thin red, it shakes; shielded: blue).
 func _reveal_cards(players: Array) -> void:
 	_shown_ok.clear()
 	var shown := players.filter(func(p): return not p.dead)
@@ -382,18 +405,13 @@ func _reveal_cards(players: Array) -> void:
 		if c.is_empty():
 			continue
 		var panel: PanelContainer = c.panel
-		var mark: Label = c.mark
 		var id: int = p.id
 		var right: bool = p.ok == true
 		var tw := panel.create_tween()
 		tw.tween_interval(0.35 + step * k)
 		tw.tween_callback(func():
 			_shown_ok[id] = true
-			panel.pivot_offset = panel.size / 2.0
-			mark.pivot_offset = mark.size / 2.0
-			mark.scale = Vector2(3, 3)
-			mark.create_tween().tween_property(mark, "scale", Vector2.ONE, 0.3) \
-				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT))
+			panel.pivot_offset = panel.size / 2.0)
 		tw.tween_property(panel, "scale", Vector2(1.12, 1.12), 0.12)
 		tw.tween_property(panel, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK)
 		if not right:
