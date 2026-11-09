@@ -397,9 +397,6 @@ func update_player(tile_id: int) -> void:
 		hud.score.text = "VOLGENDE RONDE"
 	else:
 		hud.score.text = Retro.rounds(game.survived.get(tile_id, 0))
-	var place := game.overall_rank(tile_id)
-	hud.rank.text = "#%d" % place if place > 0 else ""
-	hud.rank.visible = place > 0
 	hud.dead.visible = (tile.is_dead or tile.health == 0) and not hud.get("clip", false)
 
 
@@ -446,7 +443,8 @@ func _player_view(tile_id: int) -> Control:
 			hint.lifetime = tilt_delay + tilt_time + 2.0
 			hud.add_child(hint)
 
-	# one compact line in the top-left corner: [T03] NAME ♥♥♥ 3 RONDES #4 (overall place)
+	# one compact line in the top-left corner: [T03] NAME ♥♥♥ 3 RONDES (no overall place:
+	# the countdown is in the top-right corner; the place is on the scoreboard)
 	var plate := Retro.panel_container(Color(Retro.PANEL, 0.85), Retro.ORANGE, 3, 14, 14)
 	plate.position = Vector2(30, 26)    # inside the chamfered frame
 	var row := HBoxContainer.new()
@@ -461,8 +459,6 @@ func _player_view(tile_id: int) -> Control:
 	row.add_child(lives)
 	var score := Retro.label(38, Retro.AMBER, "", HORIZONTAL_ALIGNMENT_LEFT)
 	row.add_child(score)
-	var rank := Retro.label(34, Retro.TEAL, "", HORIZONTAL_ALIGNMENT_LEFT)
-	row.add_child(rank)
 	hud.add_child(plate)
 
 	var dead := Retro.label(80, Retro.BAD, "GEËXTERMINEERD!")
@@ -476,7 +472,6 @@ func _player_view(tile_id: int) -> Control:
 		if overlay:
 			hud.add_child(overlay)
 	_huds[tile_id] = {"cell": cell, "hud": hud, "tile": tile_label, "name": name_label, "lives": lives,
-		"rank": rank,
 		"score": score, "dead": dead}
 	return cell
 
