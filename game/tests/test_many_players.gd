@@ -39,7 +39,8 @@ func _ready() -> void:
 	var cards: Array = quiz._player_cards.values().map(func(c): return c.panel)
 	check(cards.size() == N, "quiz: %d cards (%d)" % [N, cards.size()])
 	_inside(quiz, cards, "quiz answers: every card on the screen")
-	var clipped := quiz._player_cards.values().all(func(c): return c.name.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS)
+	var clipped := quiz._player_cards.values().all(
+		func(c): return c.name.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS)
 	check(clipped, "quiz: names clip with … (the card keeps its width)")
 	await _shot("60_many_quiz_answers")
 	for p in players:
@@ -50,7 +51,8 @@ func _ready() -> void:
 	check(cards.all(func(c): return is_zero_approx(c.rotation) and c.scale.is_equal_approx(Vector2.ONE)),
 		"reveal: no card left tilted or scaled")
 	_inside(quiz, cards + [quiz._slide_status, quiz._legend], "reveal: cards, status and legend on the screen")
-	check(quiz._slide_status.visible and quiz._slide_status.modulate.a > 0.99, "reveal: status shown: %s" % quiz._slide_status.text)
+	check(quiz._slide_status.visible and quiz._slide_status.modulate.a > 0.99,
+		"reveal: status shown: %s" % quiz._slide_status.text)
 	await _shot("61_many_quiz_reveal")
 
 	print("--- UITSLAG with %d players" % N)

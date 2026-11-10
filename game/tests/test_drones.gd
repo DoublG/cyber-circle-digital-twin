@@ -11,12 +11,13 @@ const ARENA := preload("res://scenes/arena.tscn")
 const FRAMES := "user://frames_drones/"
 const FPS := 30
 
+var game: GameManager
+var arena: Arena
+
 var _fails := 0
 var _frame := 0
 var _vp: SubViewport
 var _cam: Camera3D
-var game: GameManager
-var arena: Node3D
 
 
 func _ready() -> void:
@@ -34,8 +35,8 @@ func _ready() -> void:
 	game.result_time = 3.0
 	game.scoreboard_time = 4.0
 	game.auto_start_delay = 0.0
-	game.random_rounds = false
-	game.round_types = [QuizRound, CycloneRound]
+	game.picker.random_rounds = false
+	game.picker.round_types = [QuizRound, CycloneRound]
 	# a camera in the room, rendered on its own (the window shows the screens)
 	_vp = SubViewport.new()
 	_vp.size = Vector2i(1280, 720)
@@ -52,23 +53,25 @@ func _ready() -> void:
 	print("--- 18 places: 13 floor tiles, 5 drones")
 	check(arena.tiles.size() == 18, "18 tiles (%d)" % arena.tiles.size())
 	check(arena.tiles.slice(13).all(func(t): return t is DroneTile), "14-18 are drones")
-	check(Retro.tile_label(13) == "T13" and Retro.tile_label(14) == "M1" and Retro.tile_label(18) == "M5", "labels T13 / M1 / M5")
+	check(Retro.tile_label(13) == "T13" and Retro.tile_label(14) == "M1" and Retro.tile_label(18) == "M5",
+		"labels T13 / M1 / M5")
 	var parked: Vector3 = arena.tiles[13].global_position
 	check(parked.y > 3.0, "a free drone is parked high up (%.1f m)" % parked.y)
 
 	print("--- 3 floor players, 2 mobile players")
 	for p in [[1, "Anna"], [5, "Bram"], [9, "Cleo"]]:
-		arena.join(p[0], p[1], 12)
+		arena.players.join(p[0], p[1], 12)
 	arena.apply_command({"register": "Zoe", "color": "#ffffff", "age": 12})          # (no tile: a floor tile)
-	var zoe: int = arena.tiles.filter(func(t): return arena.is_pending(t.tile_id)).front().tile_id
+	var zoe: int = arena.tiles.filter(func(t): return arena.players.is_pending(t.tile_id)).front().tile_id
 	check(zoe <= 13, "a registration without a tile never gets a drone (T%02d)" % zoe)
-	arena.leave(zoe)
+	arena.players.leave(zoe)
 	arena.apply_command({"tile": 14, "register": "Mila", "color": "#ff44cc", "age": 12})   # the operator picks the drone
 	arena.apply_command({"tile": 15, "register": "Ravi", "color": "#44ffaa", "age": 7})
-	var mobile: Array = arena.tiles.filter(func(t): return t is DroneTile and arena.is_pending(t.tile_id)) \
+	var mobile: Array = arena.tiles.filter(func(t): return t is DroneTile and arena.players.is_pending(t.tile_id)) \
 		.map(func(t): return t.tile_id)
 	check(mobile == [14, 15], "mobile players on the drones the operator chose: %s" % [mobile])
-	var floor_free: int = arena.tiles.filter(func(t): return not (t is DroneTile) and arena.is_pending(t.tile_id)).size()
+	var floor_free: int = arena.tiles.filter(
+		func(t): return not (t is DroneTile) and arena.players.is_pending(t.tile_id)).size()
 	check(floor_free == 0, "no floor tile taken by a mobile player")
 	await _record(1.5)
 	for id in mobile:                               # activation: the 4 icons on their handheld tile
@@ -77,7 +80,7 @@ func _ready() -> void:
 	await _record(3.5)
 	var m1: DroneTile = arena.tiles[mobile[0] - 1]
 	var m2: DroneTile = arena.tiles[mobile[1] - 1]
-	check(arena.is_playing(m1.tile_id) and arena.is_playing(m2.tile_id), "both mobile players playing")
+	check(arena.players.is_playing(m1.tile_id) and arena.players.is_playing(m2.tile_id), "both mobile players playing")
 	var r := Vector2(m1.global_position.x, m1.global_position.z).length()
 	check(absf(r - DroneTile.ORBIT_R) < 0.2 and absf(m1.global_position.y - DroneTile.ORBIT_Y) < 0.3,
 		"in the ring: %.2f m out, %.2f m up" % [r, m1.global_position.y])
@@ -98,20 +101,23 @@ func _ready() -> void:
 			return v.x > 0.1 and v.x < 0.9 and v.y > 0.05 and v.y < 0.95
 		check(on_screen.call(robot_head), "%s's camera sees the robot" % Retro.tile_label(d.tile_id))
 		var robot_base: Vector3 = arena.robot.global_position
-		check(on_screen.call(robot_base) and on_screen.call(d.global_position), "%s's camera: the whole robot and its own drone in view" % Retro.tile_label(d.tile_id))
+		check(on_screen.call(robot_base) and on_screen.call(d.global_position),
+			"%s's camera: the whole robot and its own drone in view" % Retro.tile_label(d.tile_id))
 		var vs := Vector2(cam.get_viewport().size)
 		var drone_top: float = cam.unproject_position(d.global_position + Vector3(0, 0.1, 0)).y / vs.y
-		var drone_r: float = absf(cam.unproject_position(d.global_position + cam.global_basis.x * 0.5).x - cam.unproject_position(d.global_position).x) / vs.y
+		var drone_side := cam.unproject_position(d.global_position + cam.global_basis.x * 0.5)
+		var drone_r: float = absf(drone_side.x - cam.unproject_position(d.global_position).x) / vs.y
 		var base_y: float = cam.unproject_position(robot_base).y / vs.y
-		check(drone_top - drone_r * 0.4 > base_y, "%s: the drone under the robot, not in front of it (drone %.2f, robot foot %.2f)"
+		check(drone_top - drone_r * 0.4 > base_y,
+			"%s: the drone under the robot, not in front of it (drone %.2f, robot foot %.2f)"
 			% [Retro.tile_label(d.tile_id), drone_top, base_y])
 	await _shot_view(wall._screens[5], "74_mobile_screen_two")
 	var noor := 16
-	arena.join(noor, "Noor", 12)                   # alone on the other mobile screen: the whole screen
+	arena.players.join(noor, "Noor", 12)                   # alone on the other mobile screen: the whole screen
 	await _record(2.0)
 	_check_mobile_screen(wall, 6)
 	await _shot_view(wall._screens[6], "75_mobile_screen_one")
-	arena.leave(noor)
+	arena.players.leave(noor)
 
 	print("--- attack together with the floor players")
 	var sides_hit := []
@@ -123,7 +129,8 @@ func _ready() -> void:
 	print("--- the robot hits back: Mila -1 life, Ravi's shield blocks")
 	m2.shielded = true
 	var lives := m1.health
-	_look(Vector3(m1.global_position.x, 0, m1.global_position.z).normalized() * 5.4 + Vector3(0, 3.0, 0), Vector3(0, 1.9, 0))
+	_look(Vector3(m1.global_position.x, 0, m1.global_position.z).normalized() * 5.4
+		+ Vector3(0, 3.0, 0), Vector3(0, 1.9, 0))
 	arena.robot_attack([m1.tile_id], Color(1.0, 0.1, 0.05), [m2.tile_id])
 	await _record(3.5)
 	check(m1.health == lives - 1, "Mila hit: %d -> %d lives" % [lives, m1.health])
@@ -148,7 +155,8 @@ func _ready() -> void:
 	await _until(func(): return game.state == GameManager.State.SCOREBOARD and game._lives_shown, 30.0)
 	var board: ScoreboardView = game.screen_wall.shared_views[0]
 	var labels: Array = board._rows.map(func(e): return (e.panel.get_child(0).get_child(2) as Label).text)
-	check(Retro.tile_label(m1.tile_id) in labels and Retro.tile_label(m2.tile_id) in labels, "scoreboard tiles: %s" % [labels])
+	check(Retro.tile_label(m1.tile_id) in labels and Retro.tile_label(m2.tile_id) in labels,
+		"scoreboard tiles: %s" % [labels])
 	await _shot_view(board, "72_drones_scoreboard")
 	print("--- Cyclone (on the tile): the drone camera swings over the drone and looks down")
 	game.skip()
@@ -166,10 +174,11 @@ func _ready() -> void:
 
 	print("--- Mila exterminated: the drone spirals down and explodes")
 	await _wait(0.5)
-	if not arena.is_playing(m1.tile_id):           # (the stopped game let everyone go)
-		arena.join(m1.tile_id, "Mila", 12)
+	if not arena.players.is_playing(m1.tile_id):           # (the stopped game let everyone go)
+		arena.players.join(m1.tile_id, "Mila", 12)
 		await _record(3.0)
-	_look(Vector3(m1.global_position.x, 0, m1.global_position.z).normalized().rotated(Vector3.UP, 0.5) * 5.6 + Vector3(0, 3.6, 0), Vector3(0, 1.0, 0))
+	_look(Vector3(m1.global_position.x, 0, m1.global_position.z).normalized().rotated(Vector3.UP, 0.5) * 5.6
+		+ Vector3(0, 3.6, 0), Vector3(0, 1.0, 0))
 	arena.exterminate([m1.tile_id])
 	m1.health = 0
 	await _record_until(func(): return m1._falling)
@@ -178,7 +187,7 @@ func _ready() -> void:
 	await _record_until(func(): return m1._gone, 15.0)
 	check(m1._gone and not m1.visible, "crashed and gone")
 	await _record(1.5)
-	arena.leave(m1.tile_id)
+	arena.players.leave(m1.tile_id)
 	await _record(1.0)
 	check(m1.visible and m1.idle, "back in the park after the player left")
 	await _record(2.0)
@@ -191,7 +200,7 @@ func _ready() -> void:
 ## (nobody: the free slots), side by side from left to right, equal, filling the screen.
 func _check_mobile_screen(wall: ScreenWall, k: int) -> void:
 	var ids: Array = wall.groups()[k]
-	var playing := ids.filter(func(id): return arena.is_playing(id))
+	var playing := ids.filter(func(id): return arena.players.is_playing(id))
 	var cells := playing.filter(func(id): return wall._huds.has(id)).map(func(id): return wall._huds[id].cell)
 	var others := ids.filter(func(id): return wall._huds.has(id) and id not in playing)
 	check(cells.size() == playing.size() and others.is_empty(), "screen %d %s: views for %s only" % [k + 1, ids, playing])
@@ -199,7 +208,8 @@ func _check_mobile_screen(wall: ScreenWall, k: int) -> void:
 		return
 	var w: float = (1920.0 - 10.0 * (cells.size() + 1)) / cells.size()
 	check(cells.all(func(c): return absf(c.size.x - w) < 3.0 and c.size.y > 1050.0),
-		"screen %d: %d view(s) side by side, %.0f px wide, full height (%s)" % [k + 1, cells.size(), w, cells.map(func(c): return c.size.round())])
+		"screen %d: %d view(s) side by side, %.0f px wide, full height (%s)" % [k + 1, cells.size(), w,
+			cells.map(func(c): return c.size.round())])
 
 
 func _look(from: Vector3, at: Vector3) -> void:

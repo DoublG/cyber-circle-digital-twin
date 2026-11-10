@@ -10,6 +10,8 @@ extends Node
 const INTERVAL := 2.0
 const BUDGET_MS := 1000.0 / 30.0              # a frame slower than this is a "slow frame"
 
+static var _tick_hz := 100.0                  # (USER_HZ: 100 on Linux, ARM included)
+
 var mqtt: MqttClient
 var topic := ""
 var node_id := ""
@@ -26,7 +28,6 @@ var _cpu_last := -1.0                          # process CPU ticks (utime + stim
 var _cpu_wall := 0.0
 var _mqtt_last := {}
 var _started := Time.get_unix_time_from_system()
-static var _tick_hz := 100.0                  # (USER_HZ: 100 on Linux, ARM included)
 
 
 func _process(delta: float) -> void:

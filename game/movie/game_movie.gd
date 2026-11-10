@@ -14,7 +14,7 @@ extends Node
 
 const ARENA := preload("res://scenes/arena.tscn")
 
-var arena: Node3D
+var arena: Arena
 var game: GameManager
 var _dir := ""
 var _panes: Array[SubViewport] = []
@@ -44,7 +44,7 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	for id in arena.tiles.size():
 		var t: int = id + 1
-		if arena.is_pending(t) and not _activating.has(t):
+		if arena.players.is_pending(t) and not _activating.has(t):
 			_activating[t] = true
 			_activate(t)
 
@@ -53,7 +53,7 @@ func _process(_delta: float) -> void:
 func _activate(tile_id: int) -> void:
 	await get_tree().create_timer(randf_range(4.0, 7.0)).timeout
 	for b in CyberTile.BUTTONS:
-		if not arena.is_pending(tile_id):
+		if not arena.players.is_pending(tile_id):
 			break
 		arena.tiles[tile_id - 1].press_button(b)
 		await get_tree().create_timer(randf_range(0.5, 1.0)).timeout
@@ -67,7 +67,8 @@ func _compose() -> void:
 	_names = ["overzicht"]
 	for k in wall._screens.size():
 		_panes.append(wall._screens[k].get_viewport())
-		_names.append("scherm_%d" % (k + 1) if k < wall.screen_groups.size() else "mobiel_%d" % (k + 1 - wall.screen_groups.size()))
+		_names.append("scherm_%d" % (k + 1) if k < wall.screen_groups.size()
+			else "mobiel_%d" % (k + 1 - wall.screen_groups.size()))
 	wall.visible = false
 	for vp in _panes:
 		vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS

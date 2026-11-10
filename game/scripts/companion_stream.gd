@@ -22,7 +22,7 @@ signal state_changed(tile_id: int, on: bool, info: Dictionary)
 const TIMEOUT := 30.0               # s without a keep-alive: stop
 const LEFT_TIMEOUT := 10.0          # s the player is gone (left the game): stop
 
-var arena: Node3D
+var arena: Arena
 var tile_id := 0
 var url := ""                       # rtsp://user:pass@host:8554/<path> (MediaMTX)
 var fps := 15
@@ -126,7 +126,7 @@ func _process(delta: float) -> void:
 		stop("no keep-alive")
 		queue_free()
 		return
-	_gone = 0.0 if (arena.is_playing(tile_id) or arena.is_pending(tile_id)) else _gone + delta
+	_gone = 0.0 if (arena.players.is_playing(tile_id) or arena.players.is_pending(tile_id)) else _gone + delta
 	if _gone > LEFT_TIMEOUT:
 		stop("the player left")
 		queue_free()

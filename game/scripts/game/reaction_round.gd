@@ -28,9 +28,18 @@ var points_wrong := -2           # wrong icon
 var points_red := -5             # pressed on red
 
 var program := {}
+var stats: Dictionary[int, PlayerState] = {}   # per tile
+
 var _sent := {}                  # tile_id -> true once the program is on the tile
 var _results := {}               # tile_id -> {step index: outcome}
-var stats := {}                  # tile_id -> {hits, best_ms, streak, best_streak}
+
+
+## One player's round.
+class PlayerState extends RoundState:
+	var hits := 0                # right presses
+	var best_ms := 0             # the fastest of them (0: none yet)
+	var streak := 0              # steps right in a row now
+	var best_streak := 0
 
 
 func _init() -> void:
@@ -39,7 +48,10 @@ func _init() -> void:
 	mode = "personal"
 	on_tile = true
 	duration = 30.0
-	rules = "Er licht een kleur op je tegel op: druk zo snel mogelijk op dat icoon.\nROOD is een val: niet drukken! Wacht of druk een ander icoon.\nElke treffer gaat het sneller, een fout en je begint weer traag.\nNa de ronde: langste reeks treffers +1 leven, kortste -1 leven."
+	rules = ("Er licht een kleur op je tegel op: druk zo snel mogelijk op dat icoon.\n"
+		+ "ROOD is een val: niet drukken! Wacht of druk een ander icoon.\n"
+		+ "Elke treffer gaat het sneller, een fout en je begint weer traag.\n"
+		+ "Na de ronde: langste reeks treffers +1 leven, kortste -1 leven.")
 
 
 ## During the intro: generate the program and upload it to the tiles.
@@ -97,7 +109,7 @@ func _start() -> void:
 		program = make_program()
 	for id in players:
 		_results[id] = {}
-		stats[id] = {"hits": 0, "best_ms": 0, "streak": 0, "best_streak": 0}
+		stats[id] = PlayerState.new()
 		_upload(id)
 	for id in players:  # all tiles start together
 		if not tile(id).is_dead:
@@ -153,7 +165,7 @@ func _animate(id: int, outcome: String, color: Color) -> void:
 			var c := color if outcome == "hit" else Retro.SHIELD
 			arena.npc.feedback(id, c, 0.2)
 		"wrong", "nogo_fail":
-			arena.send_packet(id, Color.RED, Callable(), false)
+			arena.cables.send_packet(id, Color.RED, Callable(), false)
 
 
 func finish() -> void:
@@ -170,9 +182,14 @@ func replica_keys() -> Array:              # (what its overlay reads: Replica)
 	return ["stats"]
 
 
+## (Its per-player state goes to the display nodes as plain data: RoundState.)
+func state_fields() -> Dictionary:
+	return {"stats": PlayerState}
+
+
 func make_player_overlay(id: int) -> Control:
 	var line := StatusLine.new()
 	line.source = func():
-		var best: int = stats.get(id, {}).get("best_ms", 0)
+		var best := stats[id].best_ms if stats.has(id) else 0
 		return "BESTE %d MS" % best if best > 0 else ""
 	return line

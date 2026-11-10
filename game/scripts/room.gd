@@ -21,6 +21,8 @@ const DOOR_TRAVEL := 0.75
 @export var ring_energy := 1.6
 @export var baked := true
 
+var door_open := false
+
 var _model: Node3D
 var _lamps: Array[MeshInstance3D] = []
 var _lamp_timers: Array[float] = []
@@ -30,7 +32,6 @@ var _door_parts: Array[Node3D] = []    # Door_L, Door_R and their stripes
 var _door_rest := {}                   # part -> closed position
 var _door_dir := {}                    # part -> sliding direction
 var _door_light: MeshInstance3D
-var door_open := false
 
 
 func _ready() -> void:

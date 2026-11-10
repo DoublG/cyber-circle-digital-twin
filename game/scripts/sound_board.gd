@@ -35,6 +35,7 @@ signal sounds_changed                  # after reload(): the catalog may be diff
 const SOUND_DIR := "res://data/sounds/"
 const EXTENSIONS := ["ogg", "wav", "mp3"]
 const VOICES := 8                      # sounds at the same time
+const MUSIC_LOOPS := [&"music_lobby", &"music_ritme"]
 
 var enabled := true                    # --no-sound: false
 var volume := 80                       # %
@@ -44,8 +45,7 @@ var extra_dir := ""                    # --sounds=DIR
 var where_to := 0                      # 0 automatic (on the displays when any are connected, else here),
                                        # 1 here (the master), 2 the displays, 3 both
 var music_volume := 60                 # % (music_lobby, music_ritme)
-
-const MUSIC_LOOPS := [&"music_lobby", &"music_ritme"]
+var arena: Arena                       # (setup: the game's state decides the loops)
 
 var _sounds := {}                      # event -> [AudioStream]
 var _files := {}                       # event -> [file name], in the same order as _sounds
@@ -56,6 +56,11 @@ var _last := {}                        # event -> msec it last started (no stack
 var _loops := {}                       # master: key -> {event, file, since (_clock at its 0 s)}
 var _loop_players := {}                # key -> AudioStreamPlayer (here)
 var _hooked := false                   # master: listening for displays that connect
+
+
+## Before it enters the tree: the arena it plays for.
+func setup(arena_node: Arena) -> void:
+	arena = arena_node
 
 
 func _ready() -> void:
@@ -236,8 +241,7 @@ func _loop_volume(p: AudioStreamPlayer) -> void:
 
 ## Master: which loops the game wants now (the music, the drones' hum).
 func _update_loops() -> void:
-	var arena := get_parent()
-	var game: GameManager = arena.game
+	var game: GameManager = arena.game if arena else null
 	if game == null:
 		return
 	var music := &""
@@ -305,7 +309,7 @@ func _process(delta: float) -> void:
 	if _clock < _next_random:
 		return
 	_next_random = _clock + randf_range(random_min, maxf(random_min, random_max))
-	var game: GameManager = get_parent().game
+	var game := arena.game
 	if game.mode == GameManager.Mode.OPEN and game.state != GameManager.State.SCOREBOARD:
 		play(&"random")
 

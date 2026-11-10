@@ -13,13 +13,11 @@ const BADGE_DELAY := 0.4         # s after the rows: the lives badges
 
 var _badges: Array[Label] = []
 var _gap := 30                   # between the cells of a row (tighter in two columns)
+var _row_panels := []              # [{tile, panel}]
 
 
 func _init() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-
-
-var _row_panels := []              # [{tile, panel}]
 
 
 ## The players at this screen's tiles: their row marked (ScoreboardView.mark_own).
@@ -70,7 +68,8 @@ func show_ranking(title: String, label: String, rows: Array) -> void:
 		if not first:
 			h.get_child(3).add_theme_color_override("font_color", Retro.AMBER)
 		var badge: Label = h.get_child(4)
-		badge.add_theme_color_override("font_color", Retro.GOOD if r.change > 0 else (Retro.BAD if r.change < 0 else Retro.DIM))
+		badge.add_theme_color_override("font_color",
+			Retro.GOOD if r.change > 0 else (Retro.BAD if r.change < 0 else Retro.DIM))
 		if first and r.change > 0:
 			badge.add_theme_color_override("font_color", Retro.BG)
 		badge.modulate.a = 0.0

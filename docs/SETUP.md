@@ -619,7 +619,7 @@ choose any of them in the web interface.
 
 The same over MQTT on `cybercircle/cmd`: `{"game": "start"}`, `{"game": "next"}`,
 `{"game": "stop"}` – and every command listed at the top of
-`game/scripts/arena.gd`.
+`game/scripts/arena_commands.gd`.
 
 ### The real robot (firmware/robot/)
 
@@ -887,10 +887,12 @@ godot-4 --headless --path . --fixed-fps 60 res://tests/test_flow.tscn   # whole 
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_db.tscn     # database, ranking
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_piet.tscn   # Zwarte Piet
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_exterminated.tscn  # everyone exterminated: no new round, the lobby
+godot-4 --headless --path . --fixed-fps 60 res://tests/test_pause.tscn  # the paused mode: the game's waits stand still
 godot-4 --path . --disable-vsync res://tests/test_rhythm_shot.tscn      # Ritme (chart, judging, screenshot)
 godot-4 --path . --disable-vsync res://tests/test_code.tscn             # Code kraken (hints, codes, a round, screenshots)
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_settings.tscn  # settings, tempo, sounds
 godot-4 --headless --path . --script res://tests/check_sound_triggers.gd   # sound triggers, loops, the Ritme beat grid
+godot-4 --headless --path . --script res://tests/check_round_state.gd      # a round's state per player, to a display node and back
 godot-4 --path . --disable-vsync --fixed-fps 30 res://tests/test_drones.tscn       # mobile players (video frames)
 godot-4 --path . --disable-vsync --fixed-fps 30 res://tests/test_13_players.tscn   # end-of-round screens, 13 players
 godot-4 --path . --disable-vsync --fixed-fps 30 res://tests/test_many_players.tscn # the same views with 24
@@ -902,6 +904,7 @@ tests/run_replica_test.sh       # display nodes: a master + a display node, stat
 tests/run_display_perf.sh       # what a display node (a Pi) renders: fps, draw calls, triangles, with 2 full screens
 python3 tests/mqtt_test_broker.py 9011 &                                 # then:
 godot-4 --headless --path . res://tests/test_mqtt.tscn                   # MQTT end to end
+tests/lint.sh                   # GDScript style (gdlint, settings in game/gdlintrc); once: pipx install "gdtoolkit==4.*"
 ```
 
 Screenshot scenes (`tests/test_*_shot.tscn`) and the demo movies need a
@@ -1218,7 +1221,7 @@ hold notes start (chance, how long), when two at once start, band and line size,
 ### The randomizer
 
 The randomizer fills the round queue the way games steer their dice
-(`GameManager.round_chances`); the plan in *Spel* shows each round's chance.
+(`RoundPicker.round_chances`); the plan in *Spel* shows each round's chance.
 
 0. **In or out** per round type – *Spel › Randomizer* (a checkbox per game,
    with its chance now; also *Instellingen › Randomizer*, "In de randomizer").
@@ -1243,7 +1246,7 @@ The randomizer fills the round queue the way games steer their dice
 
 A round chosen by hand in the plan is never changed.
 
-**Questions** are drawn the same way (`GameManager.category_chances`), per
+**Questions** are drawn the same way (`QuestionPicker.category_chances`), per
 question: first a category – its **weight** (settings *Vragen*, one per
 category in the question list; 0 = never) × (1 + *drought* × the number of
 questions since that category was last asked), so a category that has not

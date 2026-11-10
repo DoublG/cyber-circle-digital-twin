@@ -28,7 +28,7 @@ const SAVE_GAP := 0.5
 
 @export var enabled := true
 @export var max_age := 3600.0              # s
-var game                                   # GameManager
+var game: GameManager
 var _dirty := false
 var _wait := 0.0
 var _restoring := false
@@ -59,41 +59,39 @@ func local_file() -> String:
 
 
 func _db_key() -> String:
-	if game.db and game.db.has_method("db_id"):
-		return game.db.db_id()
-	return game.db_path
+	return game.db.db_id() if game.db else game.db_path
 
 
 func snapshot() -> Dictionary:
-	var a = game.arena
+	var a := game.arena
 	var players := []
-	for id in a.player_ids():
+	for id in a.players.player_ids():
 		var t: CyberTile = a.tiles[id - 1]
 		var lives: int = game._target_lives.get(id, a.lives_after_hits(id))
-		players.append({"tile": id, "name": a.player_name(id), "age": a.player_age(id),
-			"player_id": a.player_db_id(id), "lives": lives, "max_lives": t.max_health,
+		players.append({"tile": id, "name": a.players.player_name(id), "age": a.players.player_age(id),
+			"player_id": a.players.player_db_id(id), "lives": lives, "max_lives": t.max_health,
 			"dead": t.is_dead or lives <= 0, "started": game._started.has(id),
 			"score": game.scores.get(id, 0), "survived": game.survived.get(id, 0),
 			"streak": game.streaks.get(id, 0), "saved": game._result_saved.has(id)})
 	var invites := []
-	for id in a._pending:
-		var p: Dictionary = a._pending[id]
+	for id in a.players.pending_ids():
+		var p := a.players.pending_info(id)
 		invites.append({"tile": id, "name": p.name, "color": p.color.to_html(false), "age": p.age,
 			"player_id": p.player_id})
 	var cur := {}
 	if game.current and not game._current_entry.is_empty():
-		cur = {"type": game.round_type_name(game._current_entry.type),
+		cur = {"type": RoundPicker.type_name(game._current_entry.type),
 			"options": game._current_entry.get("options", {}), "forced": game._current_entry.get("forced", false)}
 	var gid: int = game.game_id
-	if gid < 0 and game.db and game.db.has_method("server_game_id"):
+	if gid < 0 and game.db:
 		gid = game.db.server_game_id(gid)       # (the server's id once known)
 	return {"version": VERSION, "time": Time.get_unix_time_from_system(), "db": _db_key(),
 		"state": GameManager.State.keys()[game.state], "game_id": gid, "round": game.round_number,
 		"current": cur, "pending_lives": game._pending_lives, "players": players, "invites": invites,
-		"upcoming": game.upcoming.map(func(e): return {"type": game.round_type_name(e.type),
+		"upcoming": game.picker.upcoming.map(func(e): return {"type": RoundPicker.type_name(e.type),
 			"forced": e.get("forced", false), "options": e.get("options", {})}),
-		"planned": game._planned, "history": game._history.map(func(t): return game.round_type_name(t)),
-		"question_memory": game.question_memory}
+		"planned": game.picker.planned, "history": game.picker.history.map(func(t): return RoundPicker.type_name(t)),
+		"question_memory": game.questions.memory}
 
 
 func save() -> void:
@@ -106,7 +104,7 @@ func save() -> void:
 		f.flush()
 		f.close()
 		DirAccess.rename_absolute(ProjectSettings.globalize_path(path + ".tmp"), ProjectSettings.globalize_path(path))
-	if game.db and game.db.has_method("save_checkpoint"):
+	if game.db:
 		game.db.save_checkpoint(data)
 
 
@@ -119,7 +117,7 @@ func restore() -> void:
 	if FileAccess.file_exists(local_file()):
 		local = JSON.parse_string(FileAccess.get_file_as_string(local_file()))
 	var cp = local if local is Dictionary else null
-	if game.db and game.db.has_method("fetch_checkpoint"):
+	if game.db:
 		var remote = await game.db.fetch_checkpoint()   # {db, checkpoint} or null: not reachable
 		if remote is Dictionary:
 			if cp and cp.get("db") != remote.get("db"):
@@ -144,32 +142,32 @@ func restore() -> void:
 
 func apply(cp: Dictionary) -> void:
 	_restoring = true
-	var a = game.arena
+	var a := game.arena
 	var st: String = cp.state
 	print("recovery: back to %s, round %d, %d players, %d invites (%d s ago)" % [st, int(cp.round),
 		cp.players.size(), cp.invites.size(), int(Time.get_unix_time_from_system() - float(cp.time))])
-	game.upcoming = []
+	game.picker.upcoming = []
 	for e in cp.upcoming:
-		var t: Script = game._round_type(e.type)
+		var t: Script = RoundPicker.type_named(e.type)
 		if t:
-			game.upcoming.append({"type": t, "forced": e.forced, "options": e.options})
-	game._planned = int(cp.planned)
-	game._history.clear()
+			game.picker.upcoming.append({"type": t, "forced": e.forced, "options": e.options})
+	game.picker.planned = int(cp.planned)
+	game.picker.history.clear()
 	for n in cp.history:
-		var t: Script = game._round_type(n)
+		var t: Script = RoundPicker.type_named(n)
 		if t:
-			game._history.append(t)
+			game.picker.history.append(t)
 	var qm: Dictionary = cp.question_memory
-	game.question_memory = {"count": int(qm.get("count", 0)), "since": _ints(qm.get("since", {})),
+	game.questions.memory = {"count": int(qm.get("count", 0)), "since": _ints(qm.get("since", {})),
 		"asked": _ints(qm.get("asked", {}))}
 	for p in cp.players:
-		a.restore_player(int(p.tile), p.name, int(p.age), int(p.player_id), maxi(int(p.lives), 1), int(p.max_lives))
+		a.players.restore_player(int(p.tile), p.name, int(p.age), int(p.player_id), maxi(int(p.lives), 1), int(p.max_lives))
 	for p in cp.invites:
-		a.restore_invite(int(p.tile), p.name, Color(p.color), int(p.age), int(p.player_id))
+		a.players.restore_invite(int(p.tile), p.name, Color(p.color), int(p.age), int(p.player_id))
 	var in_game := st != "LOBBY"
 	if in_game:
 		var gid := int(cp.game_id)
-		if gid < 0 and not (game.db and game.db.has_method("knows_game") and game.db.knows_game(gid)):
+		if gid < 0 and not (game.db and game.db.knows_game(gid)):
 			gid = game.db.start_game() if game.db else 0   # (it never reached the database: a new one)
 		game.game_id = gid
 		game.round_number = int(cp.round)
@@ -186,21 +184,21 @@ func apply(cp: Dictionary) -> void:
 	for p in cp.players:                                   # exterminated: their play ends now
 		if p.dead:
 			a.tiles[int(p.tile) - 1].is_dead = true
-			a.leave(int(p.tile))
+			a.players.leave(int(p.tile))
 	var changes := {}
 	if st == "INTRO" or st == "PLAYING":                   # interrupted: that round again
 		game.round_number -= 1
 		if not cp.current.is_empty():
-			var t: Script = game._round_type(cp.current.type)
+			var t: Script = RoundPicker.type_named(cp.current.type)
 			if t:
-				game.upcoming.push_front({"type": t, "forced": true, "options": cp.current.options})
+				game.picker.upcoming.push_front({"type": t, "forced": true, "options": cp.current.options})
 	elif st == "SCOREBOARD":
 		for k in cp.pending_lives:
-			if a.is_playing(int(k)):
+			if a.players.is_playing(int(k)):
 				changes[int(k)] = int(cp.pending_lives[k])
 	game.on_players_changed()
 	_restoring = false
-	if in_game and not a.player_ids().is_empty():
+	if in_game and not a.players.player_ids().is_empty():
 		game.resume(changes)
 	else:
 		if in_game:

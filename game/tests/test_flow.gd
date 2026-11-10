@@ -4,7 +4,7 @@ extends Node
 
 const ARENA := preload("res://scenes/arena.tscn")
 
-var arena: Node3D
+var arena: Arena
 var game: GameManager
 var failures := 0
 
@@ -31,10 +31,10 @@ func _run() -> void:
 	arena.apply_command({"tile": 5, "register": "Bram", "color": "#00ffcc"})  # age unknown
 	arena.apply_command({"register": "Cleo", "color": "#aa00ff", "age": 7})  # free tile chosen
 	await _wait(0.5)
-	check(arena.player_ids().is_empty(), "nobody playing before activation")
+	check(arena.players.player_ids().is_empty(), "nobody playing before activation")
 	var cleo_tile := 0
 	for t in arena.tiles:
-		if arena.is_pending(t.tile_id) and t.tile_id not in [1, 5]:
+		if arena.players.is_pending(t.tile_id) and t.tile_id not in [1, 5]:
 			cleo_tile = t.tile_id
 	check(cleo_tile > 0, "Cleo got a free tile")
 
@@ -47,13 +47,13 @@ func _run() -> void:
 		arena.tiles[cleo_tile - 1].press_button(b)
 		await _wait(0.25)
 	await _wait(1.0)
-	check(arena.player_ids() == [1, 5], "Anna and Bram active, Cleo still pending")
-	check(arena.is_pending(cleo_tile), "Cleo pending")
+	check(arena.players.player_ids() == [1, 5], "Anna and Bram active, Cleo still pending")
+	check(arena.players.is_pending(cleo_tile), "Cleo pending")
 
 	print("--- game start")
 	game.intro_time = 2.0
 	game.scoreboard_time = 2.0
-	game.random_rounds = false            # the 4 round types in order
+	game.picker.random_rounds = false            # the 4 round types in order
 	game.start_game()
 	await _until(func(): return game.state == GameManager.State.PLAYING)
 	check(game.current is CycloneRound, "round 1 is Cyclone")
@@ -62,7 +62,7 @@ func _run() -> void:
 	for b in CyberTile.BUTTONS.slice(2, 4):
 		arena.tiles[cleo_tile - 1].press_button(b)
 		await _wait(0.25)
-	check(arena.is_playing(cleo_tile), "Cleo active")
+	check(arena.players.is_playing(cleo_tile), "Cleo active")
 	check(cleo_tile not in game.current.players, "Cleo not in the current round")
 
 	print("--- Cyclone: press when the green light is on the red LED (tile firmware)")
@@ -91,7 +91,8 @@ func _run() -> void:
 		await get_tree().process_frame
 	arena.tiles[0].press_button(&"Cross")
 	await _wait(0.3)
-	check(cyc.state[1].level == 0 and cyc.state[1].best == anna_best, "a miss: Anna back to level 1 (best stays %d)" % (anna_best + 1))
+	check(cyc.state[1].level == 0 and cyc.state[1].best == anna_best,
+		"a miss: Anna back to level 1 (best stays %d)" % (anna_best + 1))
 	check(cyc.state[5].last == "ERNAAST" and cyc.points[5] < 0, "Bram's presses are misses (round points below 0)")
 	print("    round points: ", game.current.points)
 	await _until(func(): return game.state == GameManager.State.SCOREBOARD)
@@ -150,7 +151,8 @@ func _run() -> void:
 	check(game.state == GameManager.State.SCOREBOARD, "one question, then the scoreboard")
 	check(arena.tiles[4].health == 1 and not arena.tiles[4].is_dead, "end of the quiz: Bram (wrong) -1 life")
 	check(game.screen_wall.shared_views[0] is ScoreboardView, "after the quiz straight to the scoreboard (no UITSLAG)")
-	check(arena.tiles[0].health == 4 and arena.tiles[cleo_tile - 1].health == 5, "Anna right, Cleo shielded: lives unchanged")
+	check(arena.tiles[0].health == 4 and arena.tiles[cleo_tile - 1].health == 5,
+		"Anna right, Cleo shielded: lives unchanged")
 	check(game.survived[1] == 2 and game.survived[5] == 2 and game.survived[cleo_tile] == 1,
 		"rounds survived: Anna 2, Bram 2, Cleo 1 (joined in round 2)")
 	game.scoreboard_time = 2.0
@@ -176,7 +178,8 @@ func _run() -> void:
 	print("    %d steps (%d red), round points: %s, Anna best %d ms" % [steps, reds,
 		react.points, react.stats[1].best_ms])
 	check(react._results[1].size() == steps, "a result for every step (Anna)")
-	check(react._results[1].values().all(func(o): return o in ["hit", "nogo_ok"]), "Anna: all hits / good waits %s" % react._results[1])
+	check(react._results[1].values().all(func(o): return o in ["hit", "nogo_ok"]),
+		"Anna: all hits / good waits %s" % react._results[1])
 	check(reds == 0 or react._results[cleo_tile].values().has("nogo_fail"), "Cleo pressed red")
 	check(react.points[1] > react.points[cleo_tile], "Anna beats Cleo")
 	print("    longest runs: Anna %d, Cleo %d, Bram %d" % [react.stats[1].best_streak,
@@ -186,14 +189,15 @@ func _run() -> void:
 	print("--- Bram (no presses, 1 life) has the lowest score: exterminated, tile free again")
 	await _until(func(): return arena.tiles[4].is_dead, 30.0)
 	check(arena.tiles[4].is_dead, "Bram's tile blinks red / death animation")
-	await _until(func(): return not arena.is_playing(5), 60.0)
-	check(not arena.is_playing(5) and arena.tiles[4].idle and not arena.tiles[4].is_dead,
+	await _until(func(): return not arena.players.is_playing(5), 60.0)
+	check(not arena.players.is_playing(5) and arena.tiles[4].idle and not arena.tiles[4].is_dead,
 		"Bram exterminated, T05 free again")
 
 	print("--- round 4: Simon, run by the (simulated) tile firmware")
 	await _until(func(): return game.current is SimonRound and game.state == GameManager.State.PLAYING)
 	var simon: SimonRound = game.current
-	check(simon.program.sequence.all(func(s): return s.color == "#" + CyberTile.BUTTON_COLORS[StringName(s.button)].to_html(false)),
+	check(simon.program.sequence.all(func(s):
+		return s.color == "#" + CyberTile.BUTTON_COLORS[StringName(s.button)].to_html(false)),
 		"every icon keeps its own colour")
 	# bots: Anna repeats every sequence; Cleo is fine up to level 4, then
 	# presses a wrong icon once, after that lets the timer run out
@@ -236,7 +240,7 @@ func _run() -> void:
 	game.stop_game()                     # operator: end the game
 	await _wait(1.0)
 	check(game.state == GameManager.State.LOBBY, "stopped: back to the lobby")
-	check(arena.player_ids().is_empty(), "everyone left after the game")
+	check(arena.players.player_ids().is_empty(), "everyone left after the game")
 	check(arena.tiles.all(func(t): return t.idle), "all tiles idle again")
 	check(arena.tiles.all(func(t): return not t.shielded), "no shields left")
 

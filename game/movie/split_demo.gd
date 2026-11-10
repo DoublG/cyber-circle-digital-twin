@@ -13,7 +13,7 @@ extends Node
 
 const ARENA := preload("res://scenes/arena.tscn")
 
-var arena: Node3D
+var arena: Arena
 var game: GameManager
 
 
@@ -25,8 +25,8 @@ func _ready() -> void:
 	game.auto_start_delay = 0.0
 	game.intro_time = 5.0
 	game.scoreboard_time = 30.0
-	game.random_rounds = false
-	game.round_types = [QuizRound, RhythmRound]
+	game.picker.random_rounds = false
+	game.picker.round_types = [QuizRound, RhythmRound]
 	# film screen 1 only: its own SubViewport, shown full window
 	var wall: ScreenWall = arena.screen_wall
 	var screen_vp: SubViewport = wall._screens[0].get_viewport()

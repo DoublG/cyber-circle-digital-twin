@@ -1,5 +1,5 @@
 extends Node
-## A partial installation (Arena.set_installed): only T01-T07 and M1-M2.
+## A partial installation (PlayerRegistry.set_installed): only T01-T07 and M1-M2.
 ## The room from above (the other tiles, their ducts and cables hidden) and
 ## the screens (no slots for the missing places; a screen without any: how
 ## to join). tests/shots/86_installed_*.
@@ -17,7 +17,7 @@ func check(ok: bool, what: String) -> void:
 
 func _ready() -> void:
 	get_window().size = Vector2i(1920, 1080)
-	var arena: Node3D = ARENA.instantiate()
+	var arena: Arena = ARENA.instantiate()
 	add_child(arena)
 	arena.game.use_database("")
 	arena.sound.enabled = false
@@ -34,10 +34,10 @@ func _ready() -> void:
 	await get_tree().create_timer(1.0).timeout
 	arena.apply_command({"tile": 9, "join": "Weg"})          # a player on a place that goes
 	await get_tree().create_timer(0.5).timeout
-	arena.set_installed([1, 2, 3, 4, 5, 6, 7, 14, 15])
+	arena.players.set_installed([1, 2, 3, 4, 5, 6, 7, 14, 15])
 	await get_tree().create_timer(1.0).timeout
-	check(not arena.is_installed(9) and not arena.is_enabled(9), "T09 not installed, not usable")
-	check(not arena.is_playing(9), "the player on T09 left")
+	check(not arena.players.is_installed(9) and not arena.players.is_enabled(9), "T09 not installed, not usable")
+	check(not arena.players.is_playing(9), "the player on T09 left")
 	check(not arena.tiles[8].visible and arena.tiles[0].visible, "T09 hidden, T01 shown")
 	check(not arena.tiles[15].visible, "M3 (drone) hidden")
 	var floor_model: Node = arena.get_node("Room") if arena.get_node("Room").baked else arena.get_node("Floor")
@@ -49,14 +49,17 @@ func _ready() -> void:
 	var ring6 := floor_model.find_child("Ring_06", true, false)
 	check(ring7 != null and not ring7.visible and ring6.visible, "the duct T07-T08 hidden, T06-T07 shown")
 	var groups: Array = arena.screen_wall.groups()
-	check(groups[0] == [1, 2, 3] and groups[2] == [7] and groups[3].is_empty(), "screens: only installed tiles (%s)" % [groups])
+	check(groups[0] == [1, 2, 3] and groups[2] == [7] and groups[3].is_empty(),
+		"screens: only installed tiles (%s)" % [groups])
 	arena.apply_command({"tile": 2, "register": "Anna", "color": "#ff8800"})
 	await get_tree().create_timer(0.5).timeout
 	vp.get_texture().get_image().save_png(ProjectSettings.globalize_path("res://tests/shots/86_installed_room.png"))
-	get_viewport().get_texture().get_image().save_png(ProjectSettings.globalize_path("res://tests/shots/86_installed_screens.png"))
+	get_viewport().get_texture().get_image().save_png(
+		ProjectSettings.globalize_path("res://tests/shots/86_installed_screens.png"))
 	print("saved 86_installed_room, 86_installed_screens")
-	arena.set_installed(range(1, 19))
+	arena.players.set_installed(range(1, 19))
 	await get_tree().create_timer(0.5).timeout
-	check(arena.tiles[8].visible and floor_model.find_child("Ring_07", true, false).visible, "all back: T09 and its ducts shown")
+	check(arena.tiles[8].visible and floor_model.find_child("Ring_07", true, false).visible,
+		"all back: T09 and its ducts shown")
 	print("DONE: %d failure(s)" % fails)
 	get_tree().quit()

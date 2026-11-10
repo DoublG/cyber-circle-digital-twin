@@ -44,14 +44,11 @@ const GUTTER := 10                          # px of screen background between sp
 ## The mobile players' screens (drones M1-M5 = ids 14-18), after the floor screens.
 @export var mobile_groups: Array = [[14, 15], [16, 17, 18]]
 ## multi_window: the monitor (OS numbering) of screen 1, 2, ... (the floor
-## screens, then the mobile screens) and then the overview page. Empty / too short: screen k on monitor k-1, the overview next.
+## screens, then the mobile screens) and then the overview page. Empty / too
+## short: screen k on monitor k-1, the overview next.
 @export var monitors: Array = []
 ## Screen numbers (1-based) rendered by display nodes, not here.
 @export var remote_screens: Array = []
-var windowed := false                   # a display node: windows, not full screen (testing on one monitor)
-var view_scale := 1.0                   # the 3D views' resolution (a display node: lighter, Arena --view-scale)
-var view_msaa := Viewport.MSAA_2X
-var view_lod := 1.0                     # mesh LOD threshold (higher: coarser models further away)
 @export var eye_height := 1.45          # camera height above the tile (m)
 @export var player_fov := 70.0
 @export var look_at := Vector3(0, 1.0, 0)  # robot point the players look at
@@ -64,7 +61,15 @@ var view_lod := 1.0                     # mesh LOD threshold (higher: coarser mo
 @export var drone_cam_up := 1.6         # ... and above it: looking down steeply, the drone under the robot
 @export var drone_cam_aim := 0.45       # aim between the robot (0) and the drone (1)
 
-var arena: Node3D                       # set by arena.gd
+var windowed := false                   # a display node: windows, not full screen (testing on one monitor)
+var view_scale := 1.0                   # the 3D views' resolution (a display node: lighter, Arena --view-scale)
+var view_msaa := Viewport.MSAA_2X
+var view_lod := 1.0                     # mesh LOD threshold (higher: coarser models further away)
+var arena: Arena                       # set by arena.gd
+var diag := {}                    # SETUP: the installation's state for the test screens (MqttBridge.diagnosis)
+var last_press := {}              # SETUP: tile id -> {"button", "msec"}: the test screens light it up
+var shared_views: Array = []            # current shared views, one per screen
+
 var _screens: Array[Control] = []       # one root Control per physical screen
 var _huds := {}                         # tile_id -> {cell, name, lives, score, dead}
 var _mode := "players"
@@ -74,10 +79,7 @@ var _tilt_done := false                 # the tilt already played (refresh: star
 var _shared_factory := Callable()       # shared mode: () -> Control
 var _timer_text := ""
 var _timer_labels: Array[Label] = []
-var diag := {}                    # SETUP: the installation's state for the test screens (MqttBridge.diagnosis)
 var _diag_at := 0
-var last_press := {}              # SETUP: tile id -> {"button", "msec"}: the test screens light it up
-var shared_views: Array = []            # current shared views, one per screen
 var _observer_screen: Control           # the overview page's screen (observer_page)
 var _followers: Array[Camera3D] = []    # cameras that show the floating observer rig
 var _offstage: SubViewport              # remote screens live here: in the tree, never rendered
@@ -86,7 +88,7 @@ var _link: Array[Label] = []            # a display node: the connection notice 
 var _offline_since := -1.0              # a display node: msec the link to the master went (-1: online)
 
 
-func setup(arena_node: Node3D) -> void:
+func setup(arena_node: Arena) -> void:
 	arena = arena_node
 	if not remote_screens.is_empty():
 		_offstage = SubViewport.new()
@@ -216,7 +218,7 @@ func play_clip(tile_id: int, path: String, from := 0.0) -> float:
 func popup(tile_id: int, text: String, color: Color, log := true) -> void:
 	Replica.relay("wall", &"popup", [tile_id, text, color, false])
 	if log:
-		arena.game.log_event("%s  %s" % [arena.player_name(tile_id).to_upper(), text], color)
+		arena.game.log_event("%s  %s" % [arena.players.player_name(tile_id).to_upper(), text], color)
 	if not _huds.has(tile_id):
 		return
 	var cell: Control = _huds[tile_id].hud
@@ -305,10 +307,10 @@ func refresh() -> void:
 		screen.add_child(row)
 		var ids: Array = groups()[k]
 		if mobile:                                # mobile screen: only who plays / is invited, scaled up
-			var shown := ids.filter(func(id): return arena.is_playing(id) or arena.is_pending(id))
+			var shown := ids.filter(func(id): return arena.players.is_playing(id) or arena.players.is_pending(id))
 			ids = shown if not shown.is_empty() else ids
 		for id in ids:                            # floor screens: fixed, one equal slot per tile
-			row.add_child(_player_view(id) if arena.is_playing(id) else _tile_slot(id))
+			row.add_child(_player_view(id) if arena.players.is_playing(id) else _tile_slot(id))
 		if ids.is_empty():                        # no installed place on this screen: how to join
 			row.add_child(_join_panel())
 		_add_timer_label(screen)
@@ -388,7 +390,7 @@ func update_player(tile_id: int) -> void:
 	var hud: Dictionary = _huds[tile_id]
 	var tile: CyberTile = arena.tiles[tile_id - 1]
 	hud.tile.text = Retro.tile_label(tile_id)
-	hud.name.text = arena.player_name(tile_id).to_upper().left(10)
+	hud.name.text = arena.players.player_name(tile_id).to_upper().left(10)
 	hud.lives.text = "♥".repeat(tile.health) + "♡".repeat(tile.max_health - tile.health)
 	var game: GameManager = arena.game
 	if game.state == GameManager.State.LOBBY:
@@ -402,6 +404,8 @@ func update_player(tile_id: int) -> void:
 
 # ---------------------------------------------------------------- views
 
+## One player's part of a screen: the view from their tile (a drone: from
+## behind it) with their name plate and the round's overlay over it.
 func _player_view(tile_id: int) -> Control:
 	var tile: CyberTile = arena.tiles[tile_id - 1]
 	var to_robot := (Vector3(0, tile.global_position.y, 0) - tile.global_position).normalized()
@@ -412,39 +416,71 @@ func _player_view(tile_id: int) -> Control:
 	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cell.add_child(hud)
 	cell.resized.connect(func(): _fit_hud(cell, hud))
-	if tile is DroneTile:             # the camera flies with the drone
-		var rig := DroneCam.new()
-		rig.wall = self
-		rig.drone = tile
-		rig.cam = cell.get_meta(&"camera")
-		cell.add_child(rig)
-		rig.follow()
-		if _look_down and not tile.is_dead and not arena.dying.has(tile_id) and arena.game.in_round(tile_id):
-			if _tilt_done:
-				rig.down = 1.0
-			else:
-				var tw := rig.create_tween()
-				tw.tween_interval(tilt_delay)
-				tw.tween_property(rig, "down", 1.0, tilt_time).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-				var hint := LookDownHint.new()
-				hint.lifetime = tilt_delay + tilt_time + 2.0
-				hud.add_child(hint)
-	elif _look_down and not tile.is_dead and not arena.dying.has(tile_id) and arena.game.in_round(tile_id):
-		# (dying, or waiting for the next round: the view stays on the robot)
+	# (dying, or waiting for the next round: the view stays on the robot)
+	var look_down: bool = _look_down and not tile.is_dead and not arena.dying.has(tile_id) \
+			and arena.game.in_round(tile_id)
+	var tilting := false
+	if tile is DroneTile:
+		tilting = _drone_camera(cell, tile, look_down)
+	elif look_down:
 		var tile_view := Transform3D(Basis(), eye).looking_at(
 			tile.global_position + to_robot * tile_look_ahead, robot_view.basis.y)
-		var cam: Camera3D = cell.get_meta(&"camera")
-		if _tilt_done:
-			cam.transform = tile_view
-			cam.fov = tile_fov
-		else:
-			cam.ready.connect(_tilt.bind(cam, robot_view, tile_view), CONNECT_ONE_SHOT)
-			var hint := LookDownHint.new()
-			hint.lifetime = tilt_delay + tilt_time + 2.0
-			hud.add_child(hint)
+		tilting = _tile_camera(cell.get_meta(&"camera"), robot_view, tile_view)
+	if tilting:
+		var hint := LookDownHint.new()
+		hint.lifetime = tilt_delay + tilt_time + 2.0
+		hud.add_child(hint)
+	var labels := _name_plate(hud)
+	var dead := Retro.label(80, Retro.BAD, "GEËXTERMINEERD!")
+	dead.add_theme_stylebox_override("normal", Retro.panel(Color(0.1, 0.0, 0.0, 0.85), Retro.BAD, 6, 24, 40))
+	dead.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	dead.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	dead.grow_vertical = Control.GROW_DIRECTION_BOTH
+	hud.add_child(dead)
+	if _overlay_factory.is_valid():
+		var overlay: Control = _overlay_factory.call(tile_id)
+		if overlay:
+			hud.add_child(overlay)
+	_huds[tile_id] = {"cell": cell, "hud": hud, "tile": labels.tile, "name": labels.name, "lives": labels.lives,
+		"score": labels.score, "dead": dead}
+	return cell
 
-	# one compact line in the top-left corner: [T03] NAME ♥♥♥ 3 RONDES (no overall place:
-	# the countdown is in the top-right corner; the place is on the scoreboard)
+
+## A drone's view: the camera flies with the drone, and tilts over it when the
+## players look down. Returns true while that tilt plays (the look-down hint).
+func _drone_camera(cell: Control, drone: DroneTile, look_down: bool) -> bool:
+	var rig := DroneCam.new()
+	rig.wall = self
+	rig.drone = drone
+	rig.cam = cell.get_meta(&"camera")
+	cell.add_child(rig)
+	rig.follow()
+	if not look_down:
+		return false
+	if _tilt_done:
+		rig.down = 1.0
+		return false
+	var tw := rig.create_tween()
+	tw.tween_interval(tilt_delay)
+	tw.tween_property(rig, "down", 1.0, tilt_time).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	return true
+
+
+## A floor player's camera looks down at their tile. Returns true while the
+## tilt plays (the look-down hint); already played: it starts looking down.
+func _tile_camera(cam: Camera3D, robot_view: Transform3D, tile_view: Transform3D) -> bool:
+	if _tilt_done:
+		cam.transform = tile_view
+		cam.fov = tile_fov
+		return false
+	cam.ready.connect(_tilt.bind(cam, robot_view, tile_view), CONNECT_ONE_SHOT)
+	return true
+
+
+## One compact line in the top-left corner: [T03] NAME ♥♥♥ 3 RONDES (no overall
+## place: the countdown is in the top-right corner; the place is on the
+## scoreboard). Returns its labels: {tile, name, lives, score}.
+func _name_plate(hud: Control) -> Dictionary:
 	var plate := Retro.panel_container(Color(Retro.PANEL, 0.85), Retro.ORANGE, 3, 14, 14)
 	plate.position = Vector2(30, 26)    # inside the chamfered frame
 	var row := HBoxContainer.new()
@@ -460,20 +496,7 @@ func _player_view(tile_id: int) -> Control:
 	var score := Retro.label(38, Retro.AMBER, "", HORIZONTAL_ALIGNMENT_LEFT)
 	row.add_child(score)
 	hud.add_child(plate)
-
-	var dead := Retro.label(80, Retro.BAD, "GEËXTERMINEERD!")
-	dead.add_theme_stylebox_override("normal", Retro.panel(Color(0.1, 0.0, 0.0, 0.85), Retro.BAD, 6, 24, 40))
-	dead.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	dead.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	dead.grow_vertical = Control.GROW_DIRECTION_BOTH
-	hud.add_child(dead)
-	if _overlay_factory.is_valid():
-		var overlay: Control = _overlay_factory.call(tile_id)
-		if overlay:
-			hud.add_child(overlay)
-	_huds[tile_id] = {"cell": cell, "hud": hud, "tile": tile_label, "name": name_label, "lives": lives,
-		"score": score, "dead": dead}
-	return cell
+	return {"tile": tile_label, "name": name_label, "lives": lives, "score": score}
 
 
 ## A screen without installed places (a partial installation): the call to
@@ -499,9 +522,9 @@ func _join_panel() -> Control:
 func _tile_slot(tile_id: int) -> Control:
 	var slot := TileSlot.new()
 	slot.tile_id = tile_id
-	slot.out_of_service = not arena.is_enabled(tile_id)
+	slot.out_of_service = not arena.players.is_enabled(tile_id)
 	slot.mode = arena.game.mode_name()
-	var invite: Dictionary = arena.pending_info(tile_id)
+	var invite: Dictionary = arena.players.pending_info(tile_id)
 	if not invite.is_empty():
 		slot.player = invite.name
 		slot.color = invite.color
@@ -558,11 +581,11 @@ func _tilt(cam: Camera3D, from: Transform3D, to: Transform3D) -> void:
 
 ## The floor screens and then the mobile screens: the tile ids of each screen.
 ## The tiles on each screen (floor screens, then the mobile screens), without
-## the places that are not installed (Arena.set_installed).
+## the places that are not installed (PlayerRegistry.set_installed).
 func groups() -> Array:
 	if arena == null:
 		return screen_groups + mobile_groups
-	return (screen_groups + mobile_groups).map(func(g): return g.filter(func(id): return arena.is_installed(id)))
+	return (screen_groups + mobile_groups).map(func(g): return g.filter(func(id): return arena.players.is_installed(id)))
 
 
 ## A drone player's camera, third person: behind and well above the drone,

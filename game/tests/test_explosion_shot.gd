@@ -8,7 +8,7 @@ extends Node
 
 const ARENA := preload("res://scenes/arena.tscn")
 
-var arena: Node3D
+var arena: Arena
 var cam: Camera3D
 var vp: SubViewport
 

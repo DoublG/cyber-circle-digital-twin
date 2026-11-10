@@ -10,6 +10,9 @@ extends Control
 
 const HEADER_HEIGHT := 168       # title + subtitle; the GEËXTERMINEERD banner replaces them
 const TWO_COLUMNS := 17          # from this many rows (mobile tiles): two columns side by side
+const LIVES_CELL := 3
+const NAME_PAD := "  "                 # every name starts with this room: "▶ " on this screen's players (mark_own)
+const LIVES := Color(1.0, 0.2, 0.3)
 
 var _rows := []                  # [{data, panel, name, lives}]
 var _gap := 30                   # between the cells of a row (tighter in two columns)
@@ -152,7 +155,8 @@ func reveal_lives() -> void:
 		var lives: RichTextLabel = e.lives
 		if d > 0:                                  # the hearts they had stay, only the new one (and the +) green
 			var had: int = r.get("lives_before", r.lives - d)
-			_set_lives(lives, "♥".repeat(had) + "[color=#%s]%s[/color]" % [Retro.GOOD.to_html(false), "♥".repeat(r.lives - had)], "+")
+			_set_lives(lives, "♥".repeat(had) + "[color=#%s]%s[/color]"
+				% [Retro.GOOD.to_html(false), "♥".repeat(r.lives - had)], "+")
 		else:                                      # the hearts left stay, the lost one greyed out, then "-"
 			var had: int = r.get("lives_before", r.lives - d)
 			_set_lives(lives, "♥".repeat(r.lives) + "[color=#%s]%s[/color]" % [Retro.DIM.to_html(false),
@@ -205,7 +209,8 @@ func _exterminate_banner(names: Array) -> void:
 
 
 func _mark_exterminated(e: Dictionary) -> void:
-	e.name.text = e.name.text.left(NAME_PAD.length()) + "☠ %s ☠" % e.data.name.to_upper()   # (keeps ▶; the banner says GEËXTERMINEERD)
+	# (keeps ▶; the banner says GEËXTERMINEERD)
+	e.name.text = e.name.text.left(NAME_PAD.length()) + "☠ %s ☠" % e.data.name.to_upper()
 	e.name.add_theme_color_override("font_color", Retro.BG)
 	_set_lives(e.lives, "-")
 	e.panel.add_theme_stylebox_override("panel", Retro.panel(Retro.BAD, Retro.CREAM, 3, 14, 20))
@@ -238,11 +243,6 @@ static func mark_own(panel: PanelContainer) -> void:
 		name_label.text = "▶ " + name_label.text.trim_prefix(NAME_PAD)
 	if style.bg_color.v < 0.5:                     # (not on the 1st place's amber: unreadable)
 		(h.get_child(2) as Label).add_theme_color_override("font_color", Retro.TEAL)
-
-
-const LIVES_CELL := 3
-const NAME_PAD := "  "                 # every name starts with this room: "▶ " on this screen's players (mark_own)
-const LIVES := Color(1.0, 0.2, 0.3)
 
 
 ## sign: "+" (green) after a gained heart, "-" (red) after a lost one; without

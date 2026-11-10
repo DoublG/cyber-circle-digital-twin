@@ -5,6 +5,8 @@ extends RefCounted
 ##                    (make_player_overlay adds round info on top of it)
 ##   mode "shared":   one view, the same on all 5 screens (make_shared_view)
 
+const SYNC_BASE := ["title", "rules", "mode", "on_tile", "players", "points", "duration", "progress_label", "ranked"]
+
 var title := ""
 var rules := ""
 var mode := "personal"
@@ -18,6 +20,8 @@ var game: GameManager
 var players: Array[int] = []      # tile ids taking part in this round
 var points := {}                  # tile_id -> points scored this round
 var time_left := 0.0
+var tile_clock := {}                 # {"game": "clock", "id": ...} while it runs
+var stamped := 0                     # presses timed by their stamp (the rest: on arrival)
 
 
 ## Settings for this round from the round plan (web interface), e.g.
@@ -33,7 +37,7 @@ func configure(options: Dictionary) -> void:
 
 
 ## The settings the operator can change for this round type (web interface
-## "Instellingen", GameManager.settings_schema): [{key, label, min, max, step,
+## "Instellingen", GameSettings.schema): [{key, label, min, max, step,
 ## unit}]. Values with unit "s" follow the game's tempo.
 func tunables() -> Array:
 	return [setting("duration", "Speeltijd", 10, 300, 5, "s")]
@@ -96,10 +100,6 @@ func finish() -> void:
 # stamp when there is one (no network jitter; crystal drift over a round
 # ~1 ms), else the moment it arrived.
 
-var tile_clock := {}                 # {"game": "clock", "id": ...} while it runs
-var stamped := 0                     # presses timed by their stamp (the rest: on arrival)
-
-
 func start_tile_clock() -> void:
 	tile_clock = {"game": "clock", "id": "%s-%d" % [title.to_lower().replace(" ", "-"), Time.get_ticks_usec()],
 		"length": roundi(duration * 1000.0)}
@@ -150,9 +150,6 @@ func make_shared_view() -> Control:
 # master's data (replica_init) and fields (replica_sync, on change;
 # replica_live, every frame), and its views read those as here.
 
-const SYNC_BASE := ["title", "rules", "mode", "on_tile", "players", "points", "duration", "progress_label", "ranked"]
-
-
 ## A shared round's own countdown (the seconds its view shows, e.g. the quiz's
 ## answer time), for the overview's timer; -1: none.
 func shared_countdown() -> float:
@@ -174,11 +171,18 @@ func replica_live() -> Dictionary:
 	return {"time_left": time_left}
 
 
+## The fields that keep a RoundState per player ({field name: its class}):
+## they are sent as plain data and built again on the display node.
+func state_fields() -> Dictionary:
+	return {}
+
+
 func replica_sync() -> Dictionary:
 	var d := {}
+	var states := state_fields()
 	for k in SYNC_BASE + replica_keys():
 		if k in self:
-			d[k] = get(k)
+			d[k] = RoundState.pack(get(k)) if states.has(k) else get(k)
 	return d
 
 
@@ -207,11 +211,14 @@ func replica_tick(delta: float) -> void:
 
 
 func _replica_set(d: Dictionary) -> void:
+	var states := state_fields()
 	for k in d:
 		if not (k in self):
 			continue
 		var cur = get(k)
-		if cur is Array and (cur as Array).is_typed():
+		if states.has(k):
+			RoundState.unpack(cur, d[k], states[k])
+		elif cur is Array and (cur as Array).is_typed():
 			(cur as Array).assign(d[k])
 		else:
 			set(k, d[k])
@@ -258,7 +265,7 @@ func rank_result() -> Dictionary:
 		return result                      # everyone equally far
 	for place in range(1, levels + 1):
 		var names := alive.filter(func(id): return result[id] == place).map(
-			func(id): return game.arena.player_name(id).to_upper())
+			func(id): return game.arena.players.player_name(id).to_upper())
 		game.log_event("%dE PLAATS: %s" % [place, ", ".join(names)], Retro.AMBER if place == 1 else Retro.CREAM)
 	for id in alive:
 		var last: bool = result[id] == levels
@@ -273,7 +280,7 @@ func rank_result() -> Dictionary:
 func places() -> Dictionary:
 	if not ranked:
 		return {}
-	var alive := players.filter(func(id): return not tile(id).is_dead and game.arena.is_playing(id))
+	var alive := players.filter(func(id): return not tile(id).is_dead and game.arena.players.is_playing(id))
 	var levels := []
 	for id in alive:
 		if progress(id) not in levels:

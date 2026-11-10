@@ -7,13 +7,13 @@ const ARENA := preload("res://scenes/arena.tscn")
 
 func _ready() -> void:
 	get_window().size = Vector2i(1920, 1080)
-	var arena: Node3D = ARENA.instantiate()
+	var arena: Arena = ARENA.instantiate()
 	add_child(arena)
 	var game: GameManager = arena.game
 	game.use_database("")                 # screenshots: no database writes
 	game.intro_time = 1.0
 	game.auto_start_delay = 0.0
-	game.round_types = [ReactionRound]
+	game.picker.round_types = [ReactionRound]
 	for p in [[1, "Anna", 12], [2, "Bram", 7], [4, "Daan", 13], [7, "Eva", 8]]:
 		arena.apply_command({"tile": p[0], "join": p[1], "age": p[2]})
 	await get_tree().create_timer(1.0).timeout

@@ -79,7 +79,10 @@ func _init() -> void:
 
 
 func _rules(streak: int) -> String:
-	return ("Druk op je tegel op het icoon van je antwoord (zelfde vorm, kleur en plek).\nJe mag je antwoord veranderen tot de tijd om is: je laatste keuze telt.\nJuist: je blijft in het spel. Fout of te laat: je verliest een leven.\n%d juiste antwoorden op rij = +1 leven!" % streak)
+	return ("Druk op je tegel op het icoon van je antwoord (zelfde vorm, kleur en plek).\n"
+		+ "Je mag je antwoord veranderen tot de tijd om is: je laatste keuze telt.\n"
+		+ "Juist: je blijft in het spel. Fout of te laat: je verliest een leven.\n"
+		+ "%d juiste antwoorden op rij = +1 leven!") % streak
 
 
 func tunables() -> Array:            # (no duration: the round ends after the last question)
@@ -98,7 +101,7 @@ func prepare(game_manager: GameManager, _tile_ids: Array) -> void:
 
 
 func _start() -> void:
-	_questions = _pick_questions(game.all_questions())
+	_questions = _pick_questions(game.questions.all())
 	_next_question()
 
 
@@ -106,27 +109,27 @@ func _start() -> void:
 ## and screenshots can put several in it, played one after the other). Questions that are
 ## too hard for every player (all younger than min_age) are skipped when there
 ## are enough others. Per question a category is drawn (game style, as the
-## round types - GameManager.category_chances): its weight, plus drought
+## round types - QuestionPicker.category_chances): its weight, plus drought
 ## protection for categories not asked for a while; then within it a question
 ## that was not asked yet, or the longest ago.
 func _pick_questions(all: Array) -> Array:
 	if question != "":
 		var chosen := all.filter(func(q): return _qid(q) == question or str(q.get("question", "")) == question)
 		if not chosen.is_empty():
-			game.note_question(str(chosen[0].get("category", "")), _qid(chosen[0]))
+			game.questions.note(str(chosen[0].get("category", "")), _qid(chosen[0]))
 			return [chosen[0]]
 		push_warning("quiz: no question %s - one at random" % question)
 	var pool := all.filter(func(q): return categories.is_empty() or q.get("category", "") in categories)
-	var ages := players.map(func(id): return game.arena.player_age(id)).filter(func(a): return a > 0)
+	var ages := players.map(func(id): return game.arena.players.player_age(id)).filter(func(a): return a > 0)
 	if ages.size() == players.size() and not ages.is_empty():
 		var oldest: int = ages.max()
 		var fitting := pool.filter(func(q): return int(q.get("min_age", 0)) <= oldest)
 		if not fitting.is_empty():
 			pool = fitting
-	var memory: Dictionary = game.question_memory
+	var memory: Dictionary = game.questions.memory
 	var picked := []
 	for n in 1:
-		var chances := game.category_chances(pool)
+		var chances := game.questions.category_chances(pool)
 		if chances.is_empty():
 			break
 		var r := randf()
@@ -142,7 +145,7 @@ func _pick_questions(all: Array) -> Array:
 		var q: Dictionary = in_cat[0]
 		picked.append(q)
 		pool.erase(q)
-		game.note_question(cat, _qid(q))
+		game.questions.note(cat, _qid(q))
 	return picked
 
 
@@ -154,7 +157,7 @@ func _qid(q: Dictionary) -> String:
 func is_protected(id: int) -> bool:
 	if _index < 0 or _index >= _questions.size():
 		return false
-	var age: int = game.arena.player_age(id)
+	var age: int = game.arena.players.player_age(id)
 	return age > 0 and age < int(_questions[_index].get("min_age", 0))
 
 
@@ -296,7 +299,7 @@ func _update(delta: float) -> void:
 	var status := []
 	for id in players:
 		var answer: int = _answers[id].answer if _answers.has(id) else -1
-		status.append({"id": id, "name": game.arena.player_name(id), "dead": tile(id).is_dead,
+		status.append({"id": id, "name": game.arena.players.player_name(id), "dead": tile(id).is_dead,
 			"answer": answer, "protected": is_protected(id), "streak": game.streaks.get(id, 0),
 			"ok": answer == int(q.correct) if _phase == "reveal" else null})
 	var ages := ""
@@ -404,7 +407,7 @@ func _attacks(right: Array[int], wrong: Array[int], shielded: Array[int]) -> voi
 		game.arena.sound.play(&"quiz_right")
 	game.arena.players_attack(right, not any_wrong)
 	if not right.is_empty() and any_wrong:
-		await game.get_tree().create_timer(1.6).timeout
+		await game.wait(1.6)
 	if any_wrong:
 		game.arena.sound.play(&"quiz_wrong")
 	game.arena.robot_attack(wrong, Color(1.0, 0.1, 0.05), shielded, false)
@@ -418,7 +421,7 @@ func _count_streak(id: int, right: bool) -> void:
 	if right and n % game.streak_bonus == 0:
 		_streak_bonus[id] = true
 		game.screen_wall.popup(id, "%d OP RIJ!" % n, Retro.GOOD, false)
-		game.log_event("%s: %d JUIST OP RIJ - +1 LEVEN" % [game.arena.player_name(id).to_upper(), n], Retro.GOOD)
+		game.log_event("%s: %d JUIST OP RIJ - +1 LEVEN" % [game.arena.players.player_name(id).to_upper(), n], Retro.GOOD)
 
 
 ## End of the quiz: any wrong (or no) answer -1 life; a streak milestone +1
@@ -427,7 +430,7 @@ func _count_streak(id: int, right: bool) -> void:
 func life_changes() -> Dictionary:
 	var out := {}
 	for id in players:
-		if tile(id).is_dead or not game.arena.is_playing(id):
+		if tile(id).is_dead or not game.arena.players.is_playing(id):
 			continue
 		var d := (-1 if _wrong.get(id, 0) > 0 else 0) + (1 if _streak_bonus.has(id) else 0)
 		if d != 0:

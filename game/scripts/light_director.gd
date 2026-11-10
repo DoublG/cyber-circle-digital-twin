@@ -47,11 +47,13 @@ const EVENT_COLORS := {
 	"zap": Color(0.6, 0.8, 1.0), "explosion": Color(1.0, 0.5, 0.1), "charge": Color(1.0, 0.1, 0.05),
 	"attack": Color.WHITE, "scoreboard": Color(1.0, 0.75, 0.2), "countdown": Color(1.0, 0.6, 0.1),
 }
+const RING_R := 0.96                   # the ceiling ring (room.glb: Ceiling_Ring)
+const PILLAR_TOP := 3.3                # crackles run between the pillars up here
 
 var brightness := 100                  # % of the virtual lights
 var flashes := 1                       # 0: no flashing (virtual; and told to the real lights)
 
-var arena: Node3D
+var arena: Arena
 var scene := {}                        # the current base look (as published)
 var _wash: MultiMeshInstance3D
 var _angles := PackedFloat32Array()    # each wash's angle (deg, clockwise from T01 seen from above)
@@ -69,11 +71,9 @@ var _arc_mesh := ImmediateMesh.new()
 var _arcs: MeshInstance3D
 var _next_crackle := 3.0
 var _ring_centre := Vector3(0, 8.44, 0)
-const RING_R := 0.96                   # the ceiling ring (room.glb: Ceiling_Ring)
-const PILLAR_TOP := 3.3                # crackles run between the pillars up here
 
 
-func setup(arena_node: Node3D) -> void:
+func setup(arena_node: Arena) -> void:
 	arena = arena_node
 	_ring_default = arena.room.ring_color
 	_build_washes()
@@ -145,13 +145,15 @@ func on_cue(event: StringName, data: Dictionary) -> void:
 			_dark_rate = 1.0 / 13.0
 			for i in 6:
 				var a := randf() * TAU
-				_bolt(_ring_centre + Vector3(cos(a), 0, sin(a)) * RING_R, _robot_top(), Color(0.5, 0.8, 1.0), 0.5, 0.05, 1.5 + i * 0.6)
+				_bolt(_ring_centre + Vector3(cos(a), 0, sin(a)) * RING_R, _robot_top(), Color(0.5, 0.8, 1.0), 0.5,
+					0.05, 1.5 + i * 0.6)
 		&"boot_done":                            # awake: a flash, an arc around the room
 			_dark_target = 0.0
 			_dark_rate = 2.0
 			_add(-1.0, 0.0, Color(0.6, 0.85, 1.0), 1.0 if flashes else 0.5, 1.5)
 			for k in PILLARS:
-				_bolt(_pillar_point(k, PILLAR_TOP), _pillar_point((k + 1) % PILLARS, PILLAR_TOP), Color(0.6, 0.85, 1.0), 0.3, 0.05, k * 0.04)
+				_bolt(_pillar_point(k, PILLAR_TOP), _pillar_point((k + 1) % PILLARS, PILLAR_TOP), Color(0.6, 0.85, 1.0),
+					0.3, 0.05, k * 0.04)
 		&"shutdown":                             # the players' last attack: lightning from every pillar
 			for k in PILLARS:
 				_bolt(_pillar_point(k, 1.5), _robot_top(), Color(0.3, 1.0, 0.4), 0.8, 0.06, k * 0.08)
@@ -290,7 +292,7 @@ func _update_scene() -> void:
 		_: name = ["lobby", "intro", "playing", "scoreboard"][game.state]
 	var round_type := ""
 	if name in ["intro", "playing"] and game.current:
-		round_type = game.round_type_name(game.current.get_script())
+		round_type = RoundPicker.type_name(game.current.get_script())
 	var s := {"scene": name, "round": round_type, "color": "#" + _scene_color(name, round_type).to_html(false),
 		"flashes": flashes == 1}
 	if s != scene:
@@ -399,7 +401,8 @@ func _process(delta: float) -> void:
 		_wash.multimesh.set_instance_color(k, c * gain * (1.0 - _dark))
 	_crackle(delta)
 	_draw_arcs(delta)
-	arena.room.set_ring_color(((_ring_default.lerp(_base, 0.3) * (1.0 - 0.6 * _dim) + global * 0.5) * (1.0 - _dark)).clamp())
+	arena.room.set_ring_color(((_ring_default.lerp(_base, 0.3) * (1.0 - 0.6 * _dim)
+		+ global * 0.5) * (1.0 - _dark)).clamp())
 
 
 static func angle_diff(a: float, b: float) -> float:

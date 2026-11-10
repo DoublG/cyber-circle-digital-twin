@@ -12,7 +12,7 @@ func check(ok: bool, what: String) -> void:
 
 
 func _ready() -> void:
-	var arena: Node3D = ARENA.instantiate()
+	var arena: Arena = ARENA.instantiate()
 	add_child(arena)
 	arena.game.use_database("")
 	arena.sound.enabled = false

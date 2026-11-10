@@ -24,6 +24,9 @@ extends Node
 ## Master:  --serve-replicas[=7350]          a UDP beacon on BEACON_PORT says where
 ## Display: --replica --master=HOST[:PORT]   (no --master: the beacon)
 
+signal online_changed(on: bool)          # display: connected to the master / lost it
+signal peers_changed                     # master: a display came or went
+
 const PORT := 7350
 const BEACON_PORT := 7351
 const VERSION := 1
@@ -31,15 +34,12 @@ const LIVE_HZ := 15.0
 const FIELDS_HZ := 10.0
 const RECONNECT := [1.0, 2.0, 3.0, 5.0]   # s between attempts (then 5 s)
 
-signal online_changed(on: bool)          # display: connected to the master / lost it
-signal peers_changed                     # master: a display came or went
-
 static var server := false               # this is the master, serving displays
 static var client := false               # this is a display node
 static var _self: Replica
 static var debug := OS.get_environment("REPLICA_DEBUG") == "1"   # (tests: what it takes from where)
 
-var arena: Node3D
+var arena: Arena
 var port := PORT
 var master_host := ""                    # display: "" = from the beacon
 var node_id := ""
@@ -62,6 +62,7 @@ var _attempt := 0
 var _beacon: PacketPeerUDP
 var _since_snapshot := false             # display: a snapshot arrived on this connection
 var _rx_msec := 0                        # display: when the master's last message came in
+var _live_n := 0
 
 
 # ---------------------------------------------------------------- start
@@ -228,9 +229,6 @@ static func _same(a, b) -> bool:
 	return typeof(a) == typeof(b) and a == b
 
 
-var _live_n := 0
-
-
 func _send_live() -> void:
 	_live_n += 1
 	var force := _live_n % int(LIVE_HZ) == 0           # (once a second everything again: a lost one)
@@ -324,7 +322,8 @@ func peer_link(id: int) -> Dictionary:
 	var p := _peer.get_peer(id)
 	return {"rtt_ms": p.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME),
 		"rtt_var_ms": p.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME_VARIANCE),
-		"loss": snappedf(p.get_statistic(ENetPacketPeer.PEER_PACKET_LOSS) / float(ENetPacketPeer.PACKET_LOSS_SCALE) * 100.0, 0.01),
+		"loss": snappedf(
+			p.get_statistic(ENetPacketPeer.PEER_PACKET_LOSS) / float(ENetPacketPeer.PACKET_LOSS_SCALE) * 100.0, 0.01),
 		"throttle": p.get_statistic(ENetPacketPeer.PEER_PACKET_THROTTLE),
 		"host": peers.get(id, {}).get("host", ""),
 		"connected_s": int(Time.get_unix_time_from_system() - float(peers.get(id, {}).get("since", 0.0)))}
@@ -415,7 +414,8 @@ func link() -> Dictionary:
 	return {"online": online, "master": "%s:%d" % [master_host, port],
 		"rtt_ms": p.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME),
 		"rtt_var_ms": p.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME_VARIANCE),
-		"loss": snappedf(p.get_statistic(ENetPacketPeer.PEER_PACKET_LOSS) / float(ENetPacketPeer.PACKET_LOSS_SCALE) * 100.0, 0.01),
+		"loss": snappedf(
+			p.get_statistic(ENetPacketPeer.PEER_PACKET_LOSS) / float(ENetPacketPeer.PACKET_LOSS_SCALE) * 100.0, 0.01),
 		"events": stats.events, "deltas": stats.deltas, "snapshots": stats.snapshots, "live": stats.live,
 		"connects": stats.connects,
 		"last_rx_s": snappedf((Time.get_ticks_msec() - _rx_msec) / 1000.0, 0.1) if _rx_msec > 0 else -1.0,

@@ -16,7 +16,7 @@ func check(ok: bool, what: String) -> void:
 
 
 func _init() -> void:
-	var arena: Node3D = load("res://scenes/arena.tscn").instantiate()
+	var arena: Arena = load("res://scenes/arena.tscn").instantiate()
 	root.add_child(arena)
 	await process_frame
 	Engine.time_scale = 4.0                        # (the shows take ~20 s each)
@@ -44,7 +44,7 @@ func _init() -> void:
 
 	print("  -- closed during a round: after the round")
 	for i in 3:
-		arena.join(i + 1, "Speler %d" % (i + 1), 12)
+		arena.players.join(i + 1, "Speler %d" % (i + 1), 12)
 	game.set_planned_round(0, "reaction")
 	game.start_game()
 	await _until(func(): return game.state == GameManager.State.PLAYING, 20.0)
@@ -56,7 +56,7 @@ func _init() -> void:
 	game.skip()                                    # the round ends ...
 	await _until(func(): return game.mode == GameManager.Mode.CLOSED, 60.0)
 	check(game.mode == GameManager.Mode.CLOSED, "... and after its scoreboard: closed")
-	check(arena.player_ids().is_empty(), "everyone out")
+	check(arena.players.player_ids().is_empty(), "everyone out")
 	check(game.power_show == "shutdown" and game.view.kind == "power", "shutdown: PowerView")
 	check(hw.any(func(c): return c.has("shutdown")), "the real robot: shutdown")
 	await _until(func(): return not arena.robot.powered, 40.0)

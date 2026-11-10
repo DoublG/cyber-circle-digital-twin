@@ -12,9 +12,10 @@ const SKILL := 0.7                 # chance a bot answers / reacts right
 
 var players := 6                   # 0: nobody plays, the game idles
 var join_interval := 4.0
+var idle_time := 0.0               # --demo-idle: s before the first bot walks up
 var answer_quiz := true            # false: the quiz answers are given by someone else (a movie script)
 var protected_wrong := false       # shielded players answer wrong: the shield blocks the robot's shot (the movies)
-var arena: Node3D
+var arena: Arena
 var _t := 0.0
 var _next_join := 0.0
 var _code_bots := {}                # Code kraken: tile -> {next: when it presses, key: [level, tries], plan: [lanes]}
@@ -22,6 +23,7 @@ var _letting_go := {}               # Ritme hold notes: tile -> {lane: when the 
 
 
 func _ready() -> void:
+	_next_join = idle_time
 	var game: GameManager = arena.game
 	game.auto_start_delay = 5.0
 	if game.mode != GameManager.Mode.OPEN:
@@ -31,14 +33,14 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_t += delta
 	var game: GameManager = arena.game
-	if arena.player_ids().size() < players and _t >= _next_join:
+	if arena.players.player_ids().size() < players and _t >= _next_join:
 		_next_join = _t + join_interval
 		_join()
 	if game.state != GameManager.State.PLAYING or game.current == null:
 		return
 	var round = game.current
 	for id in round.players:
-		if not arena.is_playing(id) or arena.tiles[id - 1].is_dead:
+		if not arena.players.is_playing(id) or arena.tiles[id - 1].is_dead:
 			continue
 		if round is QuizRound:
 			if answer_quiz and round._phase == "question" and not round._answers.has(id) and randf() < delta * 0.5:
@@ -62,8 +64,8 @@ func _process(delta: float) -> void:
 ## stable): mostly in the band, often on the line, sometimes not at all; a
 ## hold note: it stands on it and lets go around its end (sometimes too early).
 func _rhythm(round: RhythmRound, id: int) -> void:
-	var st: Dictionary = round.state.get(id, {})
-	if st.is_empty():
+	var st: RhythmRound.PlayerState = round.state.get(id)
+	if st == null:
 		return
 	var holding: Dictionary = _letting_go.get_or_add(id, {})   # lane -> when this bot lets go
 	for lane in holding.keys():
@@ -93,8 +95,8 @@ func _rhythm(round: RhythmRound, id: int) -> void:
 ## Code kraken: a bot types a code that fits every hint so far (sometimes a
 ## careless one), one icon every 0.5-1 s, and looks at the hints a moment.
 func _code(round: CodeRound, id: int) -> void:
-	var st: Dictionary = round.state.get(id, {})
-	if st.is_empty() or st.level >= round.codes.size():
+	var st: CodeRound.PlayerState = round.state.get(id)
+	if st == null or st.level >= round.codes.size():
 		return
 	var bot: Dictionary = _code_bots.get_or_add(id, {"next": 0.0, "key": [], "plan": []})
 	if round.clock < bot.next or (st.hint_until > 0.0 and round.clock < st.hint_until - 0.6):
@@ -103,7 +105,8 @@ func _code(round: CodeRound, id: int) -> void:
 	if bot.key != key:
 		var c: Dictionary = round.codes[st.level]
 		var fits := code_candidates(c.length, c.repeats, st.tries)
-		bot.plan = fits.pick_random() if not fits.is_empty() and randf() < SKILL + 0.2 else code_candidates(c.length, c.repeats, []).pick_random()
+		bot.plan = (fits.pick_random() if not fits.is_empty() and randf() < SKILL + 0.2
+			else code_candidates(c.length, c.repeats, []).pick_random())
 		bot.key = key
 	var k: int = st.guess.size()
 	if k < bot.plan.size():
@@ -128,9 +131,10 @@ static func code_candidates(length: int, repeats: bool, tries: Array) -> Array:
 
 
 func _join() -> void:
-	var free: Array = arena.tiles.filter(func(t): return t.idle and not arena.is_pending(t.tile_id) and arena.is_enabled(t.tile_id) and not t is DroneTile)
+	var free: Array = arena.tiles.filter(func(t): return (t.idle and not arena.players.is_pending(t.tile_id)
+		and arena.players.is_enabled(t.tile_id) and not t is DroneTile))
 	if free.is_empty():
 		return
-	var used: Array = arena.player_ids().map(func(id): return arena.player_name(id))
+	var used: Array = arena.players.player_ids().map(func(id): return arena.players.player_name(id))
 	var name: String = NAMES.filter(func(n): return n not in used).pick_random()
-	arena.join(free.pick_random().tile_id, name, randi_range(7, 14))
+	arena.players.join(free.pick_random().tile_id, name, randi_range(7, 14))

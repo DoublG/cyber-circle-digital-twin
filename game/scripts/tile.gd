@@ -42,6 +42,8 @@ const SHIELD_COLOR := Color(0.3, 0.75, 1.0)
 const SHIELD_SHADER := preload("res://shaders/shield.gdshader")
 const LED_SHADER := preload("res://shaders/led.gdshader")
 
+static var _shadow_mat: StandardMaterial3D   # the contact shadow's, shared by every tile
+
 @export var tile_id := 1
 @export_range(0.0, 1.0) var press_threshold := 0.3  # normalised sensor value = "pressed"
 @export_range(1, HEART_COUNT) var max_health := HEART_COUNT  # lives this player started with (age)
@@ -50,6 +52,14 @@ const LED_SHADER := preload("res://shaders/led.gdshader")
 ## Out of service (taken out of the game during setup or play): all dark,
 ## status LED red, no idle animation.
 @export var out_of_service := false: set = set_out_of_service
+
+var is_dead := false
+var pending := false
+var show_number := false: set = set_show_number   # setup: the hearts show tile_id in binary
+## Protected (e.g. the question is too hard for the player's age): attacks are
+## blocked. In the game: energy dome over the tile. Real tile: the LED ring glows blue.
+var shielded := false: set = set_shielded
+var installed := true            # false: this place is not part of the installation (hidden, never used)
 
 var _model: Node3D
 var _ring: MultiMesh                 # the 48 ring LEDs: one draw call (instance colour = LED)
@@ -61,19 +71,12 @@ var _hold_seq := {}                       # button -> the latest press / hold (h
 var _clicked: StringName = &""
 var _button_leds := {}   # button -> symbol MeshInstance3D (RGB LED below it)
 var _status_led: MeshInstance3D
-var is_dead := false
 var _doomed := false     # exterminated, blinking red until the death animation
 var _idle_time := 0.0
-var pending := false
 var _activation_pressed: Array[StringName] = []
 var _activation_color := Color.WHITE
 var _button_colors := {}          # button -> the colour its LED shows now (display_state)
-var show_number := false: set = set_show_number   # setup: the hearts show tile_id in binary
-## Protected (e.g. the question is too hard for the player's age): attacks are
-## blocked. In the game: energy dome over the tile. Real tile: the LED ring glows blue.
-var shielded := false: set = set_shielded
 var _fx_root: Node3D = null      # see _fx_node()
-var installed := true            # false: this place is not part of the installation (hidden, never used)
 var _shield: MeshInstance3D
 var _shield_mat: ShaderMaterial
 var _shield_tween: Tween
@@ -487,8 +490,6 @@ func _debris(count: int, size: float, speed: float, hot: float, y: float) -> voi
 ## A soft dark disc on the floor under the tile: it stands on the floor (the
 ## baked room has no tile shadows, so a place that is not installed leaves no
 ## dark spot - bake_models.py), and it goes when the tile is hidden.
-static var _shadow_mat: StandardMaterial3D
-
 func _contact_shadow() -> void:
 	if _shadow_mat == null:
 		_shadow_mat = StandardMaterial3D.new()

@@ -15,7 +15,7 @@ var _fails := 0
 func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://tests/shots"))
 	get_window().size = Vector2i(1920, 1080)
-	var arena: Node3D = ARENA.instantiate()
+	var arena: Arena = ARENA.instantiate()
 	add_child(arena)
 	var game: GameManager = arena.game
 	game.use_database("")
@@ -23,24 +23,27 @@ func _ready() -> void:
 	game.result_time = 0.0
 	game.scoreboard_time = 6.0
 	game.auto_start_delay = 0.0
-	game.random_rounds = false
-	game.round_types = [QuizRound]
+	game.picker.random_rounds = false
+	game.picker.round_types = [QuizRound]
 	# the right column keeps its width: nobody, an invite (ACTIVEREN), long round counts
 	var page0: ObserverView = _find_page(arena.screen_wall)
 	await get_tree().create_timer(0.5).timeout
 	var col: Control = page0._list_panel.get_parent()
 	check(not page0._list_panel.is_visible_in_tree(), "overview: no player list while nobody plays")
-	check(is_equal_approx(col.size.x, ObserverView.RIGHT_WIDTH), "overview: right column %.0f wide with nobody" % col.size.x)
+	check(is_equal_approx(col.size.x, ObserverView.RIGHT_WIDTH),
+		"overview: right column %.0f wide with nobody" % col.size.x)
 	arena.apply_command({"tile": 13, "register": NAMES[12], "color": "#33ccff", "age": 12})
 	await get_tree().create_timer(0.5).timeout
 	check(page0._list_panel.is_visible_in_tree(), "overview: player list with an invite")
-	check(is_equal_approx(col.size.x, ObserverView.RIGHT_WIDTH), "overview: right column %.0f wide with an invite" % col.size.x)
+	check(is_equal_approx(col.size.x, ObserverView.RIGHT_WIDTH),
+		"overview: right column %.0f wide with an invite" % col.size.x)
 	arena.apply_command({"tile": 13, "leave": true})
 	for i in NAMES.size():
 		arena.apply_command({"tile": i + 1, "join": NAMES[i], "age": 12})
 	game.survived[1] = 12
 	await get_tree().create_timer(0.5).timeout
-	check(is_equal_approx(col.size.x, ObserverView.RIGHT_WIDTH), "overview: right column %.0f wide with 13 players, 12 RONDES" % col.size.x)
+	check(is_equal_approx(col.size.x, ObserverView.RIGHT_WIDTH),
+		"overview: right column %.0f wide with 13 players, 12 RONDES" % col.size.x)
 	game.survived.erase(1)
 	for i in 14:                                         # a full event feed with long lines
 		game.log_event("EEN HEEL LANGE GEBEURTENIS OM HET AFKAPPEN TE TESTEN NUMMER %d" % i, Retro.CREAM)
@@ -74,7 +77,8 @@ func _ready() -> void:
 		await get_tree().process_frame
 	var after := _rects(view)
 	for k in before:
-		check(before[k].is_equal_approx(after[k]), "quiz: %s stays put when the answers appear (%s -> %s)" % [k, before[k], after[k]])
+		check(before[k].is_equal_approx(after[k]),
+			"quiz: %s stays put when the answers appear (%s -> %s)" % [k, before[k], after[k]])
 	await get_tree().create_timer(0.6).timeout
 	await _shot("42_quiz_question")
 
@@ -94,10 +98,12 @@ func _ready() -> void:
 		if banner:
 			var head_row: Control = board._rows[0].panel.get_parent().get_child(0)
 			check(banner.get_global_rect().end.y <= head_row.get_global_rect().position.y + 0.5,
-				"scoreboard: banner (bottom %.0f) above the column headers (top %.0f)" % [banner.get_global_rect().end.y, head_row.get_global_rect().position.y])
+				"scoreboard: banner (bottom %.0f) above the column headers (top %.0f)" % [banner.get_global_rect().end.y,
+					head_row.get_global_rect().position.y])
 		var last: Control = board._rows.back().panel
 		check(last.get_global_rect().end.y <= board.get_global_rect().end.y + 0.5,
-			"scoreboard: all %d rows inside the board (last ends %.0f, board %.0f)" % [board._rows.size(), last.get_global_rect().end.y, board.get_global_rect().end.y])
+			"scoreboard: all %d rows inside the board (last ends %.0f, board %.0f)" % [board._rows.size(),
+				last.get_global_rect().end.y, board.get_global_rect().end.y])
 	page._board.visible = true                             # (hidden while the robot fires: show it for the shot)
 	await RenderingServer.frame_post_draw
 	page.get_viewport().get_texture().get_image().save_png("res://tests/shots/43_overview_board_banner.png")
@@ -126,7 +132,8 @@ func _no_overlap(page: ObserverView, what: String) -> void:
 	for k in keys:
 		var c: Control = parts[k]
 		if c.is_visible_in_tree():
-			check(page_rect.encloses(c.get_global_rect().grow(-1)), "%s: %s inside the page (%s in %s)" % [what, k, c.get_global_rect(), page_rect])
+			check(page_rect.encloses(c.get_global_rect().grow(-1)),
+				"%s: %s inside the page (%s in %s)" % [what, k, c.get_global_rect(), page_rect])
 
 
 func _rects(view: QuizView) -> Dictionary:

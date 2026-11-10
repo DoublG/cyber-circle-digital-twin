@@ -8,7 +8,7 @@ const ARENA := preload("res://scenes/arena.tscn")
 
 func _ready() -> void:
 	get_window().size = Vector2i(1920, 1080)
-	var arena: Node3D = ARENA.instantiate()
+	var arena: Arena = ARENA.instantiate()
 	add_child(arena)
 	arena.game.use_database("")
 	for p in [[1, "Anna"], [2, "Bram"], [3, "Cleo"]]:

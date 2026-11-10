@@ -20,6 +20,10 @@ extends Control
 ## picture ("image") left of the question.
 ## Players for whom the question is too hard (age) get a blue shield badge.
 
+const Q_SIZE := 62               # question (shrinks to fit)
+const BODY_SIZE := 38            # longer text under it
+const ANSWER_SIZE := 44
+
 var _header: Label
 var _question: Label
 var _body: Label                 # longer question text
@@ -50,28 +54,30 @@ var _answered: HFlowContainer    # question step: who answered already (not what
 var _answered_chips := {}        # tile_id -> Label
 var _last_phase := ""
 
-const Q_SIZE := 62               # question (shrinks to fit)
-const BODY_SIZE := 38            # longer text under it
-const ANSWER_SIZE := 44
-
 
 func _init() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(Retro.background())
-	var box := VBoxContainer.new()
-	box.set_anchors_preset(Control.PRESET_FULL_RECT)
-	box.offset_left = 44
-	box.offset_right = -44
-	box.offset_top = 36
-	box.offset_bottom = -36
-	box.add_theme_constant_override("separation", 16)
-	add_child(box)
-	_content = box
+	_content = VBoxContainer.new()
+	_content.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_content.offset_left = 44
+	_content.offset_right = -44
+	_content.offset_top = 36
+	_content.offset_bottom = -36
+	_content.add_theme_constant_override("separation", 16)
+	add_child(_content)
+	_content.add_child(_build_header())
+	_content.add_child(_build_players_slide())
+	_content.add_child(_build_question_panel())
+	_content.add_child(_build_answers())
+	_content.add_child(_build_time_bar())
+	_build_bottom()
 
-	# header: QUIZ plate + VRAAG, countdown on the right
+
+## Header: QUIZ plate + VRAAG, countdown on the right.
+func _build_header() -> Control:
 	var top := HBoxContainer.new()
 	top.add_theme_constant_override("separation", 24)
-	box.add_child(top)
 	var badge := Retro.panel_container(Retro.ORANGE, Retro.AMBER, 0, 14, 22)
 	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	badge.add_child(Retro.label(52, Retro.BG, "QUIZ"))
@@ -87,14 +93,16 @@ func _init() -> void:
 	_countdown = CountdownRing.new()
 	_countdown.custom_minimum_size = Vector2(140, 140)
 	top.add_child(_countdown)
+	return top
 
-	# players slide (time up / answers / who was right)
+
+## Players slide (time up / answers / who was right).
+func _build_players_slide() -> Control:
 	_slide = VBoxContainer.new()
 	_slide.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_slide.alignment = BoxContainer.ALIGNMENT_CENTER
 	_slide.add_theme_constant_override("separation", 36)
 	_slide.visible = false
-	box.add_child(_slide)
 	_slide_title = Retro.label(110, Retro.AMBER)
 	_slide.add_child(_slide_title)
 	_player_grid = GridContainer.new()
@@ -109,11 +117,27 @@ func _init() -> void:
 	_slide.add_child(_grid_room)
 	_slide_status = Retro.label(52, Retro.GOOD)
 	_slide.add_child(_slide_status)
+	_slide.add_child(_build_legend())
+	return _slide
 
-	# question on a console plate: [video] question + text
+
+## The players slide's explanation of the shield.
+func _build_legend() -> Control:
+	_legend = HBoxContainer.new()
+	_legend.alignment = BoxContainer.ALIGNMENT_CENTER
+	_legend.add_theme_constant_override("separation", 14)
+	var shield := Retro.ShieldIcon.new()
+	shield.custom_minimum_size = Vector2(40, 48)
+	_legend.add_child(shield)
+	_legend.add_child(Retro.label(36, Retro.SHIELD,
+		"BESCHERMD: VRAAG BOVEN JE LEEFTIJD  ▸  FOUT KOST GEEN LEVEN"))
+	return _legend
+
+
+## Question on a console plate: [video] question + text.
+func _build_question_panel() -> Control:
 	_q_panel = Retro.panel_container(Retro.PANEL, Retro.TEAL, 4, 28, 30)
 	_q_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	box.add_child(_q_panel)
 	var q_row := HBoxContainer.new()
 	q_row.add_theme_constant_override("separation", 30)
 	_q_panel.add_child(q_row)
@@ -134,75 +158,79 @@ func _init() -> void:
 	_body = Retro.label(BODY_SIZE, Retro.CREAM.darkened(0.15))
 	_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	q_texts.add_child(_body)
+	return _q_panel
 
-	# answers in the same layout as the icons on the tile
+
+## Answers in the same layout as the icons on the tile.
+func _build_answers() -> Control:
 	_grid = GridContainer.new()
 	_grid.columns = 2
 	_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_grid.size_flags_stretch_ratio = 0.62             # compact: the question gets the room
 	_grid.add_theme_constant_override("h_separation", 16)
 	_grid.add_theme_constant_override("v_separation", 14)
-	box.add_child(_grid)
 	for b in QuizRound.ANSWER_BUTTONS:
-		var col: Color = CyberTile.BUTTON_COLORS[b]
-		var card := PanelContainer.new()
-		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		card.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		var row := HBoxContainer.new()
-		row.add_theme_constant_override("separation", 18)
-		card.add_child(row)
-		# solid coloured key with the icon, like the lit icon on the glass
-		var key := Retro.panel_container(col, col.lightened(0.4), 3, 14, 6)
-		key.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		var icon := Retro.ButtonIcon.new()
-		icon.button = b
-		icon.glow = false
-		icon.color = Retro.BG
-		icon.custom_minimum_size = Vector2(84, 84)
-		key.add_child(icon)
-		row.add_child(key)
-		var texts := VBoxContainer.new()
-		texts.alignment = BoxContainer.ALIGNMENT_CENTER
-		row.add_child(_holder(texts))
-		var tag := Retro.label(22, col, Retro.BUTTON_NAMES[b], HORIZONTAL_ALIGNMENT_LEFT)
-		texts.add_child(tag)
-		var text := Retro.label(ANSWER_SIZE, Retro.CREAM, "", HORIZONTAL_ALIGNMENT_LEFT)
-		text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		texts.add_child(text)
-		_grid.add_child(card)
-		_cards.append(card)
-		_keys.append(key)
-		_icons.append(icon)
-		_answer_labels.append(text)
-		_tags.append(tag)
+		_grid.add_child(_build_answer_card(b))
+	return _grid
 
+
+## One answer: the icon's key (as on the tile) and the answer's text.
+func _build_answer_card(b: StringName) -> Control:
+	var col: Color = CyberTile.BUTTON_COLORS[b]
+	var card := PanelContainer.new()
+	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	card.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 18)
+	card.add_child(row)
+	# solid coloured key with the icon, like the lit icon on the glass
+	var key := Retro.panel_container(col, col.lightened(0.4), 3, 14, 6)
+	key.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var icon := Retro.ButtonIcon.new()
+	icon.button = b
+	icon.glow = false
+	icon.color = Retro.BG
+	icon.custom_minimum_size = Vector2(84, 84)
+	key.add_child(icon)
+	row.add_child(key)
+	var texts := VBoxContainer.new()
+	texts.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_child(_holder(texts))
+	var tag := Retro.label(22, col, Retro.BUTTON_NAMES[b], HORIZONTAL_ALIGNMENT_LEFT)
+	texts.add_child(tag)
+	var text := Retro.label(ANSWER_SIZE, Retro.CREAM, "", HORIZONTAL_ALIGNMENT_LEFT)
+	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	texts.add_child(text)
+	_cards.append(card)
+	_keys.append(key)
+	_icons.append(icon)
+	_answer_labels.append(text)
+	_tags.append(tag)
+	return card
+
+
+## The answer time running out.
+func _build_time_bar() -> Control:
 	_bar = ProgressBar.new()
 	_bar.max_value = 1.0
 	_bar.show_percentage = false
 	_bar.custom_minimum_size.y = 20
 	_bar.add_theme_stylebox_override("background", Retro.panel(Retro.PANEL, Retro.DIM, 2, 6, 0))
-	box.add_child(_bar)
+	return _bar
 
-	# bottom: status text, who answered already; the shield legend (players slide)
+
+## The bottom: status text and who answered already.
+func _build_bottom() -> void:
 	_status = Retro.label(36, Retro.CREAM)
 	_status.autowrap_mode = TextServer.AUTOWRAP_OFF
 	_status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_status.clip_text = true
-	box.add_child(_status)
+	_content.add_child(_status)
 	_answered = HFlowContainer.new()
 	_answered.alignment = FlowContainer.ALIGNMENT_CENTER
 	_answered.add_theme_constant_override("h_separation", 10)
 	_answered.add_theme_constant_override("v_separation", 8)
-	box.add_child(_answered)
-	_legend = HBoxContainer.new()
-	_legend.alignment = BoxContainer.ALIGNMENT_CENTER
-	_legend.add_theme_constant_override("separation", 14)
-	var shield := Retro.ShieldIcon.new()
-	shield.custom_minimum_size = Vector2(40, 48)
-	_legend.add_child(shield)
-	_legend.add_child(Retro.label(36, Retro.SHIELD,
-		"BESCHERMD: VRAAG BOVEN JE LEEFTIJD  ▸  FOUT KOST GEEN LEVEN"))
-	_slide.add_child(_legend)
+	_content.add_child(_answered)
 
 
 ## state keys: phase (video / read / question / timeup /
@@ -322,7 +350,8 @@ func _show_players_slide(phase: String, players: Array) -> void:
 	# (only faded in): the cards never move when they appear
 	_slide_status.visible = phase != "timeup"
 	_legend.visible = phase != "timeup" and players.any(func(p): return p.protected and not p.dead)
-	_legend.modulate.a = 1.0 if phase == "reveal" and players.any(func(p): return p.protected and not p.dead and p.ok == false) else 0.0
+	_legend.modulate.a = 1.0 if phase == "reveal" and players.any(
+		func(p): return p.protected and not p.dead and p.ok == false) else 0.0
 	var shown := players.filter(func(p): return not p.dead)
 	_player_grid.columns = _columns(shown.size())
 	var many := shown.size() > 10                  # (3 rows of cards: tighter, the legend stays on screen)

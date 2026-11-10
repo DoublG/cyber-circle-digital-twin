@@ -48,9 +48,18 @@ var music_bpm := 120.0           # the Ritme music's tempo (0: no beat grid)
 
 var notes := []                  # {t: hit time (s since the start), lane: 0..3, fall: s, hold: s (0: tap)}
 var clock := 0.0                 # s since the round started (stops when paused)
-var state := {}                  # tile_id -> {judged: {note index: points}, holds: {note index: "on" / "ok" / "fail"},
-                                 #   combo, best_combo, lines, last: [lane flashes]}
+var state: Dictionary[int, PlayerState] = {}   # per tile
 var _first := 0                  # index of the first note that can still be judged by anyone
+
+
+## One player's round.
+class PlayerState extends RoundState:
+	var judged := {}             # note index -> the points it gave (0: missed)
+	var holds := {}              # note index -> "on" (standing on it) / "ok" / "fail"
+	var combo := 0               # hits in a row now
+	var best_combo := 0
+	var lines := 0               # hits right on the line
+	var last: Array = [{}, {}, {}, {}]   # per lane: the last result {at, text, points}
 
 
 func _init() -> void:
@@ -61,8 +70,13 @@ func _init() -> void:
 
 
 func _rules() -> String:
-	return ("Iconen vallen naar beneden op je scherm, elk in de kleur van zijn knop.\nDruk dat icoon op je tegel als het onderaan aankomt:\nin de gele band +%d, precies op de lijn +%d punten. Zomaar drukken: %d.\nEerst tikken. Dan ook vasthouden: een icoon met een balk erachter?\nBlijf erop staan en laat los als het einde van de balk op de lijn komt!\nDaarna sneller en twee tegelijk.\nNa de ronde: meeste punten +1 leven, minste punten -1 leven."
-		% [points_band, points_line, points_wrong])
+	return ("Iconen vallen naar beneden op je scherm, elk in de kleur van zijn knop.\n"
+		+ "Druk dat icoon op je tegel als het onderaan aankomt:\n"
+		+ "in de gele band +%d, precies op de lijn +%d punten. Zomaar drukken: %d.\n"
+		+ "Eerst tikken. Dan ook vasthouden: een icoon met een balk erachter?\n"
+		+ "Blijf erop staan en laat los als het einde van de balk op de lijn komt!\n"
+		+ "Daarna sneller en twee tegelijk.\n"
+		+ "Na de ronde: meeste punten +1 leven, minste punten -1 leven.") % [points_band, points_line, points_wrong]
 
 
 ## During the intro: the rules with the points as set.
@@ -98,7 +112,7 @@ func _start() -> void:
 	notes = make_chart()
 	start_tile_clock()
 	for id in players:
-		state[id] = {"judged": {}, "holds": {}, "combo": 0, "best_combo": 0, "lines": 0, "last": [{}, {}, {}, {}]}
+		state[id] = PlayerState.new()
 
 
 ## The chart: one symbol at a time first (taps), then hold notes too (nothing
@@ -145,7 +159,7 @@ func _update(delta: float) -> void:
 	# symbols that fell through the band: missed by everyone who didn't press them
 	while _first < notes.size() and _past(notes[_first]):
 		for id in players:
-			var st: Dictionary = state[id]
+			var st := state[id]
 			if not st.judged.has(_first):
 				st.judged[_first] = 0
 				if not tile(id).is_dead:
@@ -154,7 +168,7 @@ func _update(delta: float) -> void:
 		_first += 1
 	# hold notes still held after their end went through the band: too late
 	for id in players:
-		var st: Dictionary = state[id]
+		var st := state[id]
 		for i in st.holds:
 			if st.holds[i] == "on" and (clock - _hold_end(notes[i])) / notes[i].fall > band:
 				_hold_result(id, i, "fail", "TE LAAT", 0)
@@ -166,7 +180,7 @@ func _hold_end(note: Dictionary) -> float:
 
 ## A hold note done: let go in time (points) or not (0, the combo ends).
 func _hold_result(id: int, i: int, result: String, text: String, pts: int) -> void:
-	var st: Dictionary = state[id]
+	var st := state[id]
 	st.holds[i] = result
 	if result == "ok":
 		st.combo += 1
@@ -187,7 +201,7 @@ func button_up(id: int, b: StringName) -> void:
 	var lane := CyberTile.BUTTONS.find(b)
 	if lane < 0 or not state.has(id):
 		return
-	var st: Dictionary = state[id]
+	var st := state[id]
 	for i in st.holds:
 		if st.holds[i] != "on" or notes[i].lane != lane:
 			continue
@@ -211,7 +225,7 @@ func button(id: int, b: StringName) -> void:
 	if lane < 0 or not state.has(id):
 		return
 	var at := press_time(clock - latency_ms / 1000.0)   # (the tile's stamp; none: on arrival)
-	var st: Dictionary = state[id]
+	var st := state[id]
 	var best := -1
 	var best_d := INF
 	for i in range(_first, notes.size()):
@@ -262,7 +276,7 @@ func finish() -> void:
 			best = state[id].best_combo
 			names = []
 		if state[id].best_combo == best:
-			names.append(game.arena.player_name(id).to_upper())
+			names.append(game.arena.players.player_name(id).to_upper())
 	if best >= 5:
 		game.log_event("LANGSTE COMBO %d: %s" % [best, ", ".join(names)], Retro.CREAM)
 
@@ -270,6 +284,11 @@ func finish() -> void:
 # (Replica: what RhythmView reads)
 func replica_keys() -> Array:
 	return ["state", "band", "line", "points_line", "latency_ms"]
+
+
+## (Its per-player state goes to the display nodes as plain data: RoundState.)
+func state_fields() -> Dictionary:
+	return {"state": PlayerState}
 
 
 func replica_init() -> Dictionary:

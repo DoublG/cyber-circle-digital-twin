@@ -1,5 +1,5 @@
 class_name GameDb
-extends RefCounted
+extends DataSource
 ## The Cyber Circle Challenge database (SQLite via the godot-sqlite extension), shared
 ## with the external app (see data/schema.sql and tools/ops/cybercircle_db.py):
 ##   players       put in by the app; the game reads name, colour and age when
@@ -12,10 +12,12 @@ extends RefCounted
 const SCHEMA_FILE := "res://data/schema.sql"
 
 var _db: Object                   # SQLite (created through ClassDB: no hard dependency)
+var _path := ""                   # the file (db_id)
 
 
 ## Open (and create if needed) the database file. false = not available.
 func open(path: String) -> bool:
+	_path = path
 	if not ClassDB.class_exists("SQLite"):
 		push_warning("database: godot-sqlite extension not found - questions from JSON, scores not saved")
 		return false
@@ -44,6 +46,11 @@ func open(path: String) -> bool:
 
 func is_open() -> bool:
 	return _db != null
+
+
+## The file is the database: its checkpoints belong to it.
+func db_id() -> String:
+	return _path
 
 
 ## Active questions, in the format QuizRound uses.
@@ -106,7 +113,8 @@ func select(sql: String, bindings := []) -> Array:
 func leaderboard() -> Array:
 	return select("SELECT player_id, name, best, lives, points, plays FROM ("
 		+ " SELECT p.id AS player_id, p.name AS name, r.score AS best, r.lives AS lives,"
-		+ " COALESCE((SELECT SUM(s.points) FROM round_scores s WHERE s.game_id = r.game_id AND s.player_id = r.player_id), 0) AS points,"
+		+ " COALESCE((SELECT SUM(s.points) FROM round_scores s"
+		+ " WHERE s.game_id = r.game_id AND s.player_id = r.player_id), 0) AS points,"
 		+ " COUNT(*) OVER (PARTITION BY p.id) AS plays,"
 		+ " ROW_NUMBER() OVER (PARTITION BY p.id ORDER BY r.score DESC, r.lives DESC,"
 		+ " (SELECT SUM(s.points) FROM round_scores s WHERE s.game_id = r.game_id AND s.player_id = r.player_id) DESC) AS n"
@@ -140,7 +148,7 @@ func save_result(game_id: int, r: Dictionary) -> void:
 		r.lives, 1 if r.exterminated else 0, r.get("rank")])
 
 
-func _id_or_null(id):
+func _id_or_null(id: Variant) -> Variant:
 	return null if int(id) <= 0 else int(id)
 
 

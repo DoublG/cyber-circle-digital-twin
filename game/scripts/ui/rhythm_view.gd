@@ -29,7 +29,7 @@ func _process(_delta: float) -> void:
 func _draw() -> void:
 	if round == null or not round.state.has(tile_id):
 		return
-	var st: Dictionary = round.state[tile_id]
+	var st := round.state[tile_id]
 	var w := minf(PANEL_WIDTH, size.x - 80.0)
 	var panel := Rect2((size.x - w) / 2, TOP, w, size.y - TOP - BOTTOM)
 	draw_rect(panel, Color(Retro.PANEL, 0.9))
@@ -105,7 +105,7 @@ func _draw() -> void:
 ## on the line, glowing, "HOUD VAST" in the band, and the band slides into it
 ## until the end symbol reaches the line. Let go well: gone; missed, let go too
 ## early or too late: grey, falling out.
-func _draw_hold(st: Dictionary, i: int, n: Dictionary, b: StringName, x: float, head_y: float,
+func _draw_hold(st: RhythmRound.PlayerState, i: int, n: Dictionary, b: StringName, x: float, head_y: float,
 		line_y: float, travel: float, field: Rect2, r: float) -> void:
 	var hs: String = st.holds.get(i, "")
 	if hs == "ok":
@@ -161,5 +161,6 @@ func _text(s: String, pos: Vector2, font_size: int, col: Color,
 		x -= width
 	elif align == HORIZONTAL_ALIGNMENT_CENTER:
 		x -= width / 2
-	draw_string_outline(font, Vector2(x, pos.y), s, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, 6, Color(Retro.BG, col.a * 0.9))
+	draw_string_outline(font, Vector2(x, pos.y), s, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, 6,
+		Color(Retro.BG, col.a * 0.9))
 	draw_string(font, Vector2(x, pos.y), s, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, col)

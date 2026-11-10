@@ -7,7 +7,7 @@ const ARENA := preload("res://scenes/arena.tscn")
 
 
 func _ready() -> void:
-	var arena: Node3D = ARENA.instantiate()
+	var arena: Arena = ARENA.instantiate()
 	add_child(arena)
 	var game: GameManager = arena.game
 	game.use_database("")

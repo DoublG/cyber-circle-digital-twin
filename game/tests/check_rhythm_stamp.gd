@@ -14,7 +14,7 @@ func check(ok: bool, what: String) -> void:
 
 
 func _init() -> void:
-	var arena: Node3D = load("res://scenes/arena.tscn").instantiate()
+	var arena: Arena = load("res://scenes/arena.tscn").instantiate()
 	root.add_child(arena)
 	await process_frame
 	var game: GameManager = arena.game
@@ -24,7 +24,7 @@ func _init() -> void:
 	var sent := {}                                 # tile -> the messages it got
 	arena.tile_message.connect(func(id, msg): sent.get_or_add(id, []).append(msg))
 	for i in 3:
-		arena.join(i + 1, "Speler %d" % (i + 1), 12)
+		arena.players.join(i + 1, "Speler %d" % (i + 1), 12)
 	game.set_planned_round(0, "rhythm")
 	game.start_game()
 	for n in 600:
@@ -47,7 +47,8 @@ func _init() -> void:
 	r.clock = note.t + 0.5
 	var stamp := roundi(note.t * 1000.0)
 	arena.apply_command({"tile": 1, "press": str(icon), "t": stamp, "program": r.tile_clock.id})
-	check(r.state[1].judged.get(k, null) == r.points_line, "stamped, 0.5 s late on the network: on the line (%s)" % r.state[1].last[note.lane])
+	check(r.state[1].judged.get(k, null) == r.points_line,
+		"stamped, 0.5 s late on the network: on the line (%s)" % r.state[1].last[note.lane])
 	check(r.stamped == 1, "counted as stamped")
 	arena.apply_command({"tile": 2, "press": str(icon)})
 	check(r.state[2].judged.get(k, null) == null, "no stamp, 0.5 s late: not a hit (%s)" % r.state[2].last[note.lane])
@@ -57,6 +58,10 @@ func _init() -> void:
 
 	# a hold note: the tile's press says a release follows ({"hold": 1}), the
 	# release counts at the tile's stamp too (its end on the line, 0.5 s late)
+	for n in 120:                                  # (the taps above are over: an icon that is still
+		if not CyberTile.BUTTONS.any(func(b): return arena.tiles[0].is_pressed(b)):   # down can't be pressed)
+			break
+		await process_frame
 	var h := -1
 	for i in range(r._first, r.notes.size()):
 		if r.notes[i].hold > 0.0:

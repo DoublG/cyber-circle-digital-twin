@@ -25,9 +25,17 @@ var points_yellow := 1
 var points_miss := -2
 var light_speed := 1.0        # x the speeds in LEVELS
 var program := {}
-var state := {}              # tile_id -> {level, yellow, best, last}
+var state: Dictionary[int, PlayerState] = {}   # per tile
 var _sent := {}
 var _last_n := {}
+
+
+## One player's round.
+class PlayerState extends RoundState:
+	var level := 0               # index in LEVELS
+	var yellow := 0              # yellow LEDs on each side of the red one, at this level
+	var best := 0                # the highest level reached
+	var last := ""               # the last stop in words: ROOD! / GEEL / ERNAAST
 
 
 func _init() -> void:
@@ -36,7 +44,11 @@ func _init() -> void:
 	mode = "personal"
 	on_tile = true
 	duration = 40.0
-	rules = "Een groen lampje draait rondjes op jouw tegel.\nDruk op een knop op het moment dat het op het RODE lampje staat.\nGeel mag ook, maar na elke treffer worden de gele stroken kleiner!\nErnaast? Dan begin je opnieuw bij het eerste niveau.\nNa de ronde: hoogste niveau +1 leven, laagste niveau -1 leven."
+	rules = ("Een groen lampje draait rondjes op jouw tegel.\n"
+		+ "Druk op een knop op het moment dat het op het RODE lampje staat.\n"
+		+ "Geel mag ook, maar na elke treffer worden de gele stroken kleiner!\n"
+		+ "Ernaast? Dan begin je opnieuw bij het eerste niveau.\n"
+		+ "Na de ronde: hoogste niveau +1 leven, laagste niveau -1 leven.")
 
 
 func tunables() -> Array:
@@ -80,7 +92,8 @@ func _start() -> void:
 	if program.is_empty():
 		program = make_program()
 	for id in players:
-		state[id] = {"level": 0, "yellow": LEVELS[0].yellow, "best": 0, "last": ""}
+		state[id] = PlayerState.new()
+		state[id].yellow = LEVELS[0].yellow
 		_last_n[id] = 0
 		_upload(id)
 	for id in players:
@@ -92,7 +105,7 @@ func result(id: int, r: Dictionary) -> void:
 	if r.get("program") != program.id or int(r.get("n", 0)) <= _last_n[id] or r.get("done", false):
 		return
 	_last_n[id] = int(r.n)
-	var st: Dictionary = state[id]
+	var st := state[id]
 	var level := int(r.level)
 	var pts := points_miss
 	var col := Retro.BAD
@@ -133,7 +146,12 @@ func replica_keys() -> Array:              # (what its overlay reads: Replica)
 	return ["state"]
 
 
+## (Its per-player state goes to the display nodes as plain data: RoundState.)
+func state_fields() -> Dictionary:
+	return {"state": PlayerState}
+
+
 func make_player_overlay(id: int) -> Control:
 	var line := StatusLine.new()
-	line.source = func(): return "NIVEAU %d" % (state.get(id, {}).get("level", 0) + 1)
+	line.source = func(): return "NIVEAU %d" % ((state[id].level if state.has(id) else 0) + 1)
 	return line

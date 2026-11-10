@@ -7,13 +7,15 @@ extends Node
 const ARENA := preload("res://scenes/arena.tscn")
 const URL := "ws://127.0.0.1:9011/mqtt"
 
-var arena: Node3D
+var arena: Arena
 var game: GameManager
 var tile: MqttClient          # plays the real tile 3 + the app
 var failures := 0
 var program := {}
 var started := false
 var app_heard := []
+var states := []
+var effects := []
 
 
 func _ready() -> void:
@@ -27,7 +29,7 @@ func _ready() -> void:
 	game.use_database("res://tests/_mqtt_test.db")
 	game.intro_time = 1.0
 	game.auto_start_delay = 0.0
-	game.round_types = [ReactionRound]
+	game.picker.round_types = [ReactionRound]
 
 	tile = MqttClient.new()
 	tile.url = URL
@@ -58,10 +60,6 @@ func _on_tile_message(topic: String, payload: PackedByteArray) -> void:
 		started = true
 
 
-var states := []
-var effects := []
-
-
 func _run() -> void:
 	await _until(func(): return tile.online and arena.get_node("Mqtt").online)
 	check(true, "game and tile connected to the broker")
@@ -70,13 +68,14 @@ func _run() -> void:
 	print("--- app puts a player in the database, then assigns her to tile 3 (over MQTT)")
 	var tess: int = game.db.add_player("Tess", "#00ff88", 10)
 	tile.publish_json("cybercircle/cmd", {"assign": tess, "tile": 3})
-	await _until(func(): return arena.is_pending(3))
-	check(arena.is_pending(3) and arena.pending_info(3).name == "Tess", "tile 3 waits for activation (Tess, from the database)")
+	await _until(func(): return arena.players.is_pending(3))
+	check(arena.players.is_pending(3) and arena.players.pending_info(3).name == "Tess",
+		"tile 3 waits for activation (Tess, from the database)")
 	await _wait(0.4)                                 # (the tile shows the invite)
 	for b in ["Square", "Triangle", "Cross", "Circle"]:  # the real tile reports presses
 		tile.publish_json("cybercircle/tile/3/event", {"press": b})
-	await _until(func(): return arena.is_playing(3))
-	check(arena.is_playing(3), "Tess activated by presses from the tile")
+	await _until(func(): return arena.players.is_playing(3))
+	check(arena.players.is_playing(3), "Tess activated by presses from the tile")
 	await _wait(0.5)
 	var modes := states.map(func(st): return st.mode)
 	check("pending" in modes and modes.back() == "playing", "tile/3/state: idle -> pending -> playing (%s)" % [modes])

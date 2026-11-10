@@ -18,6 +18,11 @@ extends Control
 ##   performance       fps, frame time, slow frames, renderer and GPU
 ## Plain 2D, cheap to draw.
 
+const SLOW_MS := 1000.0 / 30.0
+const LIT_MS := 1200               # a pressed button stays lit this long
+
+const BARS := [Color.WHITE, Color.YELLOW, Color.CYAN, Color.GREEN, Color.MAGENTA, Color.RED, Color.BLUE, Color.BLACK]
+
 var screen_number := 1
 var screen_count := 1
 var tiles: Array = []              # tile ids on this screen ([] = the overview)
@@ -26,11 +31,6 @@ var node_name := ""
 var wall: ScreenWall               # its diagnosis and the tiles' last presses
 var _t := 0.0
 var _frames: Array = []            # [msec, frame ms] of the last 2 s
-
-const SLOW_MS := 1000.0 / 30.0
-const LIT_MS := 1200               # a pressed button stays lit this long
-
-const BARS := [Color.WHITE, Color.YELLOW, Color.CYAN, Color.GREEN, Color.MAGENTA, Color.RED, Color.BLUE, Color.BLACK]
 
 
 func _init() -> void:
@@ -73,11 +73,14 @@ func _draw() -> void:
 	draw_rect(head, Retro.TEAL, false, 3.0)
 	var title := "SCHERM %d / %d" % [screen_number, screen_count] if not tiles.is_empty() else "OVERZICHT"
 	_text(title, Vector2(w / 2, 172), 72, Retro.TEAL)
-	var info := ("TEGELS " + "  ".join(tiles.map(func(id): return Retro.tile_label(id)))) if not tiles.is_empty() else "BEZOEKERSSCHERM"
+	var info := "BEZOEKERSSCHERM"
+	if not tiles.is_empty():
+		info = "TEGELS " + "  ".join(tiles.map(func(id): return Retro.tile_label(id)))
 	_text(info, Vector2(w / 2, 228), 30, Retro.CREAM)
 	# output / node / resolution
 	var win := get_window().size if get_window() else Vector2i.ZERO
-	var line := "%s   NODE %s   IP %s   BEELD 1920×1080   VENSTER %d×%d" % [output, node_name, MqttBridge.lan_address(), win.x, win.y]
+	var line := "%s   NODE %s   IP %s   BEELD 1920×1080   VENSTER %d×%d" % [output, node_name,
+		MqttBridge.lan_address(), win.x, win.y]
 	_text(line, Vector2(w / 2, h - 236), 24, Retro.DIM)
 	if wall:
 		_draw_network(w, h)
@@ -147,7 +150,8 @@ func _draw_tiles(w: float) -> void:
 		var y := r.position.y + 76
 		if not t.is_empty():
 			_text_left("TEGEL " + str(t.device).to_upper(), Vector2(left, y), 20, Retro.CREAM)
-			_text_left("FW %s   IP %s" % [t.fw if t.fw != "" else "?", t.ip if t.ip != "" else "?"], Vector2(left, y + 28), 20, Retro.DIM)
+			_text_left("FW %s   IP %s" % [t.fw if t.fw != "" else "?", t.ip if t.ip != "" else "?"],
+				Vector2(left, y + 28), 20, Retro.DIM)
 			var link: String = ("KABEL " + str(t.link).to_upper()) if t.link != "" else "KABEL ?"
 			var seen := "GEZIEN %d s" % int(t.age) if float(t.age) >= 0.0 else "NOOIT GEZIEN"
 			_text_left("%s   %s" % [link, seen], Vector2(left, y + 56), 20, Retro.DIM)
@@ -163,14 +167,15 @@ func _draw_tiles(w: float) -> void:
 			draw_rect(br, col, false, 2.0)
 		if not p.is_empty():
 			var name: String = Retro.BUTTON_NAMES.get(p.button, str(p.button))
-			_text_left("%s %d s" % [name, (now - int(p.msec)) / 1000], Vector2(left + 4 * (bs + 12) + 6, r.end.y - 32), 20, Retro.CREAM)
+			_text_left("%s %d s" % [name, (now - int(p.msec)) / 1000],
+				Vector2(left + 4 * (bs + 12) + 6, r.end.y - 32), 20, Retro.CREAM)
 		else:
 			_text_left("DRUK!", Vector2(left + 4 * (bs + 12) + 6, r.end.y - 32), 20, Retro.DIM)
 
 
 ## The overview: every place of the installation at a glance, and the display nodes.
 func _draw_overview(w: float) -> void:
-	var ids := range(1, wall.arena.tiles.size() + 1).filter(func(id): return wall.arena.is_installed(id))
+	var ids := range(1, wall.arena.tiles.size() + 1).filter(func(id): return wall.arena.players.is_installed(id))
 	var per_row := 9
 	var cw := 150.0
 	var ch := 70.0
@@ -193,7 +198,8 @@ func _draw_overview(w: float) -> void:
 	var y := 284 + rows * (ch + gap) + 30
 	var unplaced: Array = wall.diag.get("unplaced", [])
 	if not unplaced.is_empty():
-		_text("%d TEGEL(S) ZONDER PLAATS: %s" % [unplaced.size(), "  ".join(unplaced.slice(0, 6)).to_upper()], Vector2(w / 2, y), 22, Retro.AMBER)
+		_text("%d TEGEL(S) ZONDER PLAATS: %s" % [unplaced.size(), "  ".join(unplaced.slice(0, 6)).to_upper()],
+			Vector2(w / 2, y), 22, Retro.AMBER)
 		y += 34
 	var r: Replica = wall.arena.replica
 	if r and Replica.server:
@@ -250,8 +256,9 @@ func _draw_performance(w: float, h: float) -> void:
 			slow += 1
 	var avg := sum / maxi(_frames.size(), 1)
 	var col := Retro.GOOD if slow == 0 else (Retro.AMBER if slow < 10 else Retro.BAD)
-	var text := "FPS %d   FRAME %.1f ms (MAX %.0f)   TRAAG %d IN 2 s   %s   %s" % [Engine.get_frames_per_second(), avg, worst,
-		slow, str(ProjectSettings.get_setting("rendering/renderer/rendering_method", "")).to_upper(),
+	var text := "FPS %d   FRAME %.1f ms (MAX %.0f)   TRAAG %d IN 2 s   %s   %s" % [
+		Engine.get_frames_per_second(), avg, worst, slow,
+		str(ProjectSettings.get_setting("rendering/renderer/rendering_method", "")).to_upper(),
 		RenderingServer.get_video_adapter_name().to_upper().left(40)]
 	_text(text, Vector2(w / 2, h - 268), 22, col)
 

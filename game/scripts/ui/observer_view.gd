@@ -51,26 +51,8 @@ func _ready() -> void:
 	var cell := wall.make_observer_cell()
 	cell.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(cell)
-	# top-left: what is happening
-	var head := Retro.panel_container(Color(Retro.PANEL, 0.88), Retro.ORANGE, 4, 18, 26)
-	head.position = Vector2(40, 36)
-	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 22)
-	head.add_child(hb)
-	var logo := Retro.label(40, Retro.BG, "CYBER CIRCLE CHALLENGE")
-	logo.add_theme_stylebox_override("normal", Retro.panel(Retro.TEAL, Retro.TEAL, 0, 8, 14))
-	hb.add_child(logo)
-	_status = Retro.label(44, Retro.CREAM)
-	hb.add_child(_status)
-	add_child(head)
-	# top-right: timer
-	_timer = Retro.label(52, Retro.AMBER)              # (as tall as the status bar: above BODY_TOP)
-	_timer.add_theme_stylebox_override("normal", Retro.panel(Color(Retro.PANEL, 0.95), Retro.ORANGE, 4, 16, 20))
-	_timer.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	_timer.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_timer.offset_right = -MARGIN
-	_timer.offset_top = 36
-	add_child(_timer)
+	add_child(_build_status_bar())
+	add_child(_build_timer())
 	# under the status bar two columns that can't overlap: left the call to
 	# action and the rules, right (fixed width) the players and the events
 	var body := HBoxContainer.new()
@@ -81,10 +63,49 @@ func _ready() -> void:
 	body.offset_bottom = -MARGIN
 	body.add_theme_constant_override("separation", GAP)
 	add_child(body)
+	body.add_child(_build_left_column())
+	body.add_child(_build_right_column())
+	add_child(_build_center_panel())
+	_load_games()
+	_scene_left = scenes[0][1]
+	wall.arena.game.game_event.connect(_on_event)
+	wall.arena.game.scores_shown.connect(_show_board)
+	wall.arena.game.ranking_shown.connect(_show_ranking)
+	wall.arena.exterminated.connect(_exterminated_popup)
+	_update()
+
+
+## Top-left: what is happening.
+func _build_status_bar() -> Control:
+	var head := Retro.panel_container(Color(Retro.PANEL, 0.88), Retro.ORANGE, 4, 18, 26)
+	head.position = Vector2(40, 36)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 22)
+	head.add_child(hb)
+	var logo := Retro.label(40, Retro.BG, "CYBER CIRCLE CHALLENGE")
+	logo.add_theme_stylebox_override("normal", Retro.panel(Retro.TEAL, Retro.TEAL, 0, 8, 14))
+	hb.add_child(logo)
+	_status = Retro.label(44, Retro.CREAM)
+	hb.add_child(_status)
+	return head
+
+
+## Top-right: the timer.
+func _build_timer() -> Control:
+	_timer = Retro.label(52, Retro.AMBER)              # (as tall as the status bar: above BODY_TOP)
+	_timer.add_theme_stylebox_override("normal", Retro.panel(Color(Retro.PANEL, 0.95), Retro.ORANGE, 4, 16, 20))
+	_timer.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	_timer.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_timer.offset_right = -MARGIN
+	_timer.offset_top = 36
+	return _timer
+
+
+## Left: the call to action, room for the camera, and the rules at the bottom.
+func _build_left_column() -> Control:
 	var left := VBoxContainer.new()
 	left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left.add_theme_constant_override("separation", GAP)
-	body.add_child(left)
 	var cta_box := _holder(180)                    # (a wrapping label can't push the layout)
 	var cta := CallToAction.new(64)
 	cta.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -96,7 +117,14 @@ func _ready() -> void:
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	left.add_child(spacer)
-	# bottom-left: how the current game works
+	var rules := _build_rules()
+	left.add_child(rules)
+	_under.append(rules)
+	return left
+
+
+## Bottom-left: how the current game works.
+func _build_rules() -> Control:
 	var rules := Retro.panel_container(Color(Retro.PANEL, 0.85), Retro.ORANGE, 3, 16, 24)
 	var rb := VBoxContainer.new()
 	rules.add_child(rb)
@@ -105,20 +133,27 @@ func _ready() -> void:
 	_rules = Retro.label(28, Retro.CREAM, "", HORIZONTAL_ALIGNMENT_LEFT)
 	_rules.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	rb.add_child(_rules)
-	left.add_child(rules)
-	_under.append(rules)
-	# right: players, and the event feed under it (takes the rest, clipped)
+	return rules
+
+
+## Right: players, and the event feed under it (takes the rest, clipped).
+func _build_right_column() -> Control:
 	var col := VBoxContainer.new()
 	col.custom_minimum_size.x = RIGHT_WIDTH         # every row clips: the column never gets wider
 	col.add_theme_constant_override("separation", 16)
-	body.add_child(col)
-	_under.append(col)
 	var panel := Retro.panel_container(Color(Retro.PANEL, 0.82), Retro.ORANGE, 3, 16, 20)
 	_list = VBoxContainer.new()
 	_list.add_theme_constant_override("separation", 2)
 	panel.add_child(_list)
 	col.add_child(panel)
 	_list_panel = panel
+	col.add_child(_build_event_feed())
+	_under.append(col)
+	return col
+
+
+## The event feed: the newest events, older ones cut off.
+func _build_event_feed() -> Control:
 	var feed := Retro.panel_container(Color(Retro.PANEL, 0.82), Retro.ORANGE, 3, 16, 20)
 	feed.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var feed_box := _holder(0)                     # the rest of the column; older events cut off
@@ -130,8 +165,11 @@ func _ready() -> void:
 	_events = VBoxContainer.new()
 	_events.add_theme_constant_override("separation", 2)
 	fb.add_child(_events)
-	col.add_child(feed)
-	# middle: the games explained / how to join (the loop's big panel)
+	return feed
+
+
+## Middle: the games explained / how to join (the loop's big panel).
+func _build_center_panel() -> Control:
 	_center = Retro.panel_container(Color(Retro.PANEL, 0.92), Retro.ORANGE, 5, 20, 40)
 	_center.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	_center.custom_minimum_size = Vector2(1300, 0)
@@ -150,14 +188,7 @@ func _ready() -> void:
 	_center_body.custom_minimum_size.x = 1200
 	cb.add_child(_center_body)
 	_center.visible = false
-	add_child(_center)
-	_load_games()
-	_scene_left = scenes[0][1]
-	wall.arena.game.game_event.connect(_on_event)
-	wall.arena.game.scores_shown.connect(_show_board)
-	wall.arena.game.ranking_shown.connect(_show_ranking)
-	wall.arena.exterminated.connect(_exterminated_popup)
-	_update()
+	return _center
 
 
 ## A plain clipping Control of a fixed height (0: whatever its container
@@ -247,10 +278,10 @@ func _next_scene() -> void:
 func _load_games() -> void:
 	var game: GameManager = wall.arena.game
 	_games.clear()
-	for t in GameManager.ROUND_TYPES:
+	for t in RoundPicker.ROUND_TYPES:
 		var r: GameRound = t.new()
 		r.prepare(game, [])
-		Texts.dress(r, game.round_type_name(t))
+		Texts.dress(r, RoundPicker.type_name(t))
 		_games.append({"title": r.title, "rules": r.rules})
 
 
@@ -312,7 +343,7 @@ func _update() -> void:
 			GameManager.Mode.PAUSED: "PAUZE"}[game.mode]
 	else: match game.state:
 		GameManager.State.LOBBY:
-			_status.text = "WACHT OP SPELERS" if arena.player_ids().is_empty() else "SPEL START ZO"
+			_status.text = "WACHT OP SPELERS" if arena.players.player_ids().is_empty() else "SPEL START ZO"
 		GameManager.State.INTRO, GameManager.State.PLAYING:
 			_status.text = game.current.title.to_upper()
 		GameManager.State.SCOREBOARD:
@@ -322,7 +353,7 @@ func _update() -> void:
 	if _board:                     # an extermination: the board steps aside for the robot
 		_board.visible = arena.dying.is_empty()
 	_apply_scene()
-	var ranking := game.overall_ranking()
+	var ranking := game.standings.ranking()
 	if not ranking.is_empty():
 		_rules_title.text = "RANGLIJST - MEESTE RONDES OVERLEEFD"
 		var lines := PackedStringArray()
@@ -340,8 +371,9 @@ func _update() -> void:
 	_timer.visible = _timer.text != ""
 	for c in _list.get_children():
 		c.queue_free()
-	var ids: Array = arena.player_ids()
-	var count := ids.size() + range(1, arena.tiles.size() + 1).filter(func(id): return not arena.pending_info(id).is_empty()).size()
+	var ids: Array = arena.players.player_ids()
+	var invited := range(1, arena.tiles.size() + 1).filter(func(id): return not arena.players.pending_info(id).is_empty())
+	var count := ids.size() + invited.size()
 	_list_scale = clampf(13.0 / maxf(count, 13.0), 0.55, 1.0)   # more than 13 (mobile tiles): smaller rows
 	ids.sort_custom(func(a, b): return game.survived.get(a, 0) > game.survived.get(b, 0))
 	for i in ids.size():
@@ -350,12 +382,12 @@ func _update() -> void:
 		var col := Retro.AMBER if i == 0 and game.survived.get(id, 0) > 0 else Retro.CREAM
 		if tile.is_dead:
 			col = Retro.DIM
-		var place := game.overall_rank(id)
-		_row(Retro.tile_label(id), arena.player_name(id).to_upper().left(10),
+		var place := game.standings.rank(id)
+		_row(Retro.tile_label(id), arena.players.player_name(id).to_upper().left(10),
 			"♥".repeat(maxi(tile.health, 0)), Retro.rounds(game.survived.get(id, 0)), col, "#%d" % place if place > 0 else "")
 	var rows := ids.size()
 	for id in range(1, arena.tiles.size() + 1):
-		var invite: Dictionary = arena.pending_info(id)
+		var invite: Dictionary = arena.players.pending_info(id)
 		if not invite.is_empty():
 			rows += 1
 			_row(Retro.tile_label(id), str(invite.name).to_upper().left(10), "", "ACTIVEREN", invite.color)

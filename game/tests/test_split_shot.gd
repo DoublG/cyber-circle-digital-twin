@@ -9,13 +9,13 @@ const ARENA := preload("res://scenes/arena.tscn")
 
 func _ready() -> void:
 	get_window().size = Vector2i(1920, 1080)
-	var arena: Node3D = ARENA.instantiate()
+	var arena: Arena = ARENA.instantiate()
 	add_child(arena)
 	var game: GameManager = arena.game
 	game.use_database("")                 # screenshots: no database writes
 	game.intro_time = 1.0
 	game.auto_start_delay = 0.0
-	game.round_types = [SimonRound]
+	game.picker.round_types = [SimonRound]
 	for p in [[1, "Anna", 12], [2, "Bram", 7], [3, "Cleo", 9], [4, "Daan", 13],
 			[5, "Evelientje", 8], [7, "Fien", 10]]:
 		arena.apply_command({"tile": p[0], "join": p[1], "age": p[2]})

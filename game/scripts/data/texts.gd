@@ -11,7 +11,11 @@ class_name Texts
 ##                rhythm, simon, zwarte_piet, code); the default rules include the
 ##                current settings (points, times) - a changed text does not
 
-const JOIN_STEPS := "1. Haal een QR-codekaart.\n2. Registreer je met je gsm.\n3. Ga naar een gamemaster: die laat je toe tot het spel.\n4. Zoek de tegel in jouw kleur en druk op de 4 iconen.\n5. Blijf zo lang mogelijk in het spel!"
+const JOIN_STEPS := ("1. Haal een QR-codekaart.\n"
+	+ "2. Registreer je met je gsm.\n"
+	+ "3. Ga naar een gamemaster: die laat je toe tot het spel.\n"
+	+ "4. Zoek de tegel in jouw kleur en druk op de 4 iconen.\n"
+	+ "5. Blijf zo lang mogelijk in het spel!")
 const JOIN_TEXT := "HAAL EEN QR-KAART EN MELD JE BIJ DE GAMEMASTER"
 
 static var values := {}
@@ -52,10 +56,10 @@ static func dress(round: GameRound, type: String) -> void:
 ## The defaults (for the web interface: shown when a text is empty).
 static func defaults(game: GameManager) -> Dictionary:
 	var out := {"cta": "\n".join(Retro.CALLS_TO_ACTION), "join_steps": JOIN_STEPS, "join_text": JOIN_TEXT}
-	for t in GameManager.ROUND_TYPES:
+	for t in RoundPicker.ROUND_TYPES:
 		var r: GameRound = t.new()
 		r.prepare(game, [])
-		var type := game.round_type_name(t)
+		var type := RoundPicker.type_name(t)
 		out["title." + type] = r.title
 		out["rules." + type] = r.rules
 	return out

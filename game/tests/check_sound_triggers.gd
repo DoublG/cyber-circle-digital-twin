@@ -30,7 +30,7 @@ func _init() -> void:
 	rr.music_bpm = 0.0
 	check(rr.make_chart().any(func(n): return absf(fmod(n.t, 0.25)) > 0.01), "music_bpm 0: free timing")
 
-	var arena: Node3D = load("res://scenes/arena.tscn").instantiate()
+	var arena: Arena = load("res://scenes/arena.tscn").instantiate()
 	root.add_child(arena)
 	await process_frame
 	var game: GameManager = arena.game
@@ -45,14 +45,14 @@ func _init() -> void:
 	check(sound.playing_loop("drones") == &"", "no drone in the air: no hum")
 
 	# a mobile player: their drone flies in -> the hum
-	arena.join(14, "Mo", 30)
+	arena.players.join(14, "Mo", 30)
 	for i in 10:
 		await process_frame
 	check(sound.playing_loop("drones") == &"drone_hum", "a drone flies: drone_hum loops")
 
 	# the quiz
 	for i in 2:
-		arena.join(i + 1, "Speler %d" % (i + 1), 30)
+		arena.players.join(i + 1, "Speler %d" % (i + 1), 30)
 	game.set_planned_round(0, "quiz")
 	game.start_game()
 	for n in 600:
@@ -86,7 +86,7 @@ func _init() -> void:
 
 	# Ritme: its music, from the round's start (everyone left with the stop)
 	for i in 2:
-		arena.join(i + 1, "Speler %d" % (i + 1), 30)
+		arena.players.join(i + 1, "Speler %d" % (i + 1), 30)
 	game.set_planned_round(0, "rhythm")
 	game.start_game()
 	for n in 600:
@@ -101,10 +101,12 @@ func _init() -> void:
 	game.set_mode(GameManager.Mode.OPEN)
 	await process_frame
 	var p: AudioStreamPlayer = sound._loop_players["music"]
-	check(game.current is RhythmRound and sound.playing_loop("music") == &"music_ritme" and absf(p.get_playback_position() - (game.current as RhythmRound).clock) < 0.3,
-		"resumed: from the round's clock (%.2f s / %.2f s)" % [p.get_playback_position(), (game.current as RhythmRound).clock])
+	check(game.current is RhythmRound and sound.playing_loop("music") == &"music_ritme"
+		and absf(p.get_playback_position() - (game.current as RhythmRound).clock) < 0.3,
+		"resumed: from the round's clock (%.2f s / %.2f s)" % [p.get_playback_position(),
+			(game.current as RhythmRound).clock])
 	game.stop_game()
-	arena.leave(14)                                 # (if still there)
+	arena.players.leave(14)                                 # (if still there)
 	for i in 10:
 		await process_frame
 	check(sound.playing_loop("drones") == &"", "the drone's player left: the hum stops")

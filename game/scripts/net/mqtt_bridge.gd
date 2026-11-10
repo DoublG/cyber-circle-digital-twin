@@ -41,6 +41,8 @@ extends MqttClient
 ##                                            the sounds {"sound": "<event>"} on <prefix>/cmd can play
 ## Leave url empty to run without MQTT.
 
+const HELLO_TIMEOUT := 30.0      # s without a hello: offline (as the control server; tiles say hello every 10 s)
+
 @export var topic_prefix := "cybercircle"
 @export var real_tiles := true   # tiles run their own logic: switch the game's simulation off
 @export var node_id := ""        # name in the web interface; "" = "godot-<ip>"
@@ -48,21 +50,20 @@ extends MqttClient
 @export var display_port := 0       # the display nodes connect here (--serve-displays, MirrorServer)
 @export var advertise := ""      # the address announced (--advertise; "" = a LAN address of this machine)
 
+var arena: Arena
+var devices := {}                # master: physical tile id -> its hello (device/<dev>/hello)
+var device_place := {}           # master: physical tile id -> its place (device/<dev>/config)
+
 var _state_json := ""
 var _state_timer := 0.0
 var _tile_states := {}           # tile_id -> last published display state (JSON)
 var _tile_timer := 0.0
 var _announce_timer := 0.0
-
-var arena: Node3D
-var devices := {}                # master: physical tile id -> its hello (device/<dev>/hello)
-var device_place := {}           # master: physical tile id -> its place (device/<dev>/config)
 var _device_seen := {}           # master: physical tile id -> msec its last hello came in
-const HELLO_TIMEOUT := 30.0      # s without a hello: offline (as the control server; tiles say hello every 10 s)
 var _display_announced := {}     # master: display node id -> msec its node/<id> went out
 
 
-func setup(arena_node: Node3D) -> void:
+func setup(arena_node: Arena) -> void:
 	arena = arena_node
 	if Replica.client:
 		_setup_display()
@@ -142,7 +143,7 @@ func setup(arena_node: Node3D) -> void:
 ## builds its settings page from it.
 func _publish_settings() -> void:
 	if role == "master":
-		publish_json(topic_prefix + "/settings/schema", arena.game.settings_schema(), true)
+		publish_json(topic_prefix + "/settings/schema", arena.game.settings.schema(), true)
 		publish_json(topic_prefix + "/texts/defaults", Texts.defaults(arena.game), true)   # (rules follow the settings)
 
 
@@ -170,11 +171,11 @@ func _on_message(topic: String, payload: PackedByteArray) -> void:
 		arena.apply_command({"game": "mode", "mode": data.get("mode", "")})
 		return
 	if topic == topic_prefix + "/db":                    # the database changed: fetch it again now
-		if arena.game.db and arena.game.db.has_method("refresh"):
+		if arena.game.db:
 			arena.game.db.refresh()
 		return
 	if topic == topic_prefix + "/settings":              # the operator's settings
-		arena.game.apply_settings(data)
+		arena.game.settings.apply(data)
 		return
 	if topic == topic_prefix + "/texts":                 # the operator's texts (Texts)
 		Texts.apply(data)
@@ -182,10 +183,10 @@ func _on_message(topic: String, payload: PackedByteArray) -> void:
 		return
 	if topic == topic_prefix + "/tiles":                 # tiles in / out of service
 		if data.get("installed") is Array:               # the places of this installation
-			arena.set_installed(data.installed)
+			arena.players.set_installed(data.installed)
 		var enabled: Dictionary = data.get("enabled", {})
 		for n in enabled:
-			arena.set_tile_enabled(int(n), bool(enabled[n]))
+			arena.players.set_tile_enabled(int(n), bool(enabled[n]))
 		return
 	var parts := topic.trim_prefix(topic_prefix + "/").split("/")
 	if parts.size() == 3 and parts[0] == "tile" and parts[2] == "event":
@@ -336,7 +337,7 @@ func _announce() -> void:
 		"displays": arena.replica.peers.size() if arena.replica else 0,
 		"version": ProjectSettings.get_setting("application/config/version", ""),
 		"fps": Engine.get_frames_per_second(),
-		"db_pending": arena.game.db.pending() if arena.game.db and arena.game.db.has_method("pending") else 0}, true)
+		"db_pending": arena.game.db.pending() if arena.game.db else 0}, true)
 
 
 ## The master's own part of its metrics: the mirror to the display nodes (per
@@ -344,9 +345,9 @@ func _announce() -> void:
 func _metrics(_span: float) -> Dictionary:
 	var out := {"screens_local": range(1, arena.screen_wall.groups().size() + 1).filter(
 		func(k): return k not in arena.screen_wall.remote_screens).size(),
-		"streams": arena._streams.size(), "players": arena.player_ids().size(),
+		"streams": arena.streams.size(), "players": arena.players.player_ids().size(),
 		"game_state": GameManager.State.keys()[arena.game.state],
-		"db_pending": arena.game.db.pending() if arena.game.db and arena.game.db.has_method("pending") else 0}
+		"db_pending": arena.game.db.pending() if arena.game.db else 0}
 	var r: Replica = arena.replica
 	if r:
 		out["replica"] = {"port": r.port, "displays": r.peer_list(), "events": r.stats.events,

@@ -10,7 +10,7 @@ var failures := 0
 
 
 func _ready() -> void:
-	var arena: Node3D = ARENA.instantiate()
+	var arena: Arena = ARENA.instantiate()
 	add_child(arena)
 	var game: GameManager = arena.game
 	game.use_database("")
@@ -18,10 +18,10 @@ func _ready() -> void:
 	game.scoreboard_time = 30.0
 	game.result_time = 3.0
 	game.auto_start_delay = 0.0
-	game.random_rounds = false
-	game.round_types = [ZwartePietRound]
+	game.picker.random_rounds = false
+	game.picker.round_types = [ZwartePietRound]
 	for p in [[1, "Anna"], [2, "Bram"], [5, "Cleo"], [9, "Daan"]]:
-		arena.join(p[0], p[1], 10)
+		arena.players.join(p[0], p[1], 10)
 	await _wait(0.5)
 	game.start_game()
 	await _until(func(): return game.state == GameManager.State.PLAYING)
@@ -72,13 +72,15 @@ func _ready() -> void:
 		lives[id] = arena.tiles[id - 1].health
 	await _until(func(): return game.state == GameManager.State.SCOREBOARD)
 	await _wait(1.0)
-	check([1, 2, 5, 9].all(func(id): return arena.tiles[id - 1].health == lives[id]), "places first: lives unchanged until the scoreboard")
+	check([1, 2, 5, 9].all(func(id): return arena.tiles[id - 1].health == lives[id]),
+		"places first: lives unchanged until the scoreboard")
 	await _until(func(): return game._lives_shown and not arena.attacks_busy(), 30.0)   # the scoreboard: lives
 	await _wait(1.0)
 	check(arena.tiles[4].health == lives[5] - 1, "last place (Cleo): -1 life")
 	var best: int = piet.points.values().max()
 	var firsts := [1, 2, 9].filter(func(id): return piet.points[id] == best)
-	check(firsts.all(func(id): return arena.tiles[id - 1].health == mini(lives[id] + 1, 5)), "1st place(s) %s: +1 life" % [firsts])
+	check(firsts.all(func(id): return arena.tiles[id - 1].health == mini(lives[id] + 1, 5)),
+		"1st place(s) %s: +1 life" % [firsts])
 
 	print("\nDONE: %d failure(s)" % failures)
 	get_tree().quit(1 if failures else 0)

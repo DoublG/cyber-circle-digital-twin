@@ -11,12 +11,12 @@ const ARENA := preload("res://scenes/arena.tscn")
 func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://tests/shots"))
 	get_window().size = Vector2i(1920, 1080)
-	var arena: Node3D = ARENA.instantiate()
+	var arena: Arena = ARENA.instantiate()
 	add_child(arena)
 	var game: GameManager = arena.game
 	game.use_database("")
 	await get_tree().create_timer(1.0).timeout
-	arena.set_tile_enabled(8, false)
+	arena.players.set_tile_enabled(8, false)
 	game.set_mode(GameManager.Mode.SETUP)
 	await get_tree().create_timer(1.5).timeout
 	var wall: ScreenWall = arena.screen_wall
@@ -36,7 +36,8 @@ func _ready() -> void:
 	mqtt._on_device(PackedStringArray(["3c71bf0a1b99", "hello"]), JSON.stringify({"fw": "1.4.0"}).to_utf8_buffer())
 	var d := mqtt.diagnosis()
 	ok = d.tiles.has("5") and d.tiles["5"].online and d.tiles["5"].ip == "10.0.0.35" and d.unplaced == ["3c71bf0a1b99"]
-	print("    [%s] a tile's hello + place: in the diagnosis (online, address), the other unplaced" % ["ok" if ok else "FAIL"])
+	print("    [%s] a tile's hello + place: in the diagnosis (online, address), the other unplaced"
+		% ["ok" if ok else "FAIL"])
 	# ... and an installation as the master would report it with MQTT: the screenshots
 	var tiles := {}
 	for id in range(1, 19):

@@ -10,7 +10,7 @@ extends Node
 const ARENA := preload("res://scenes/arena.tscn")
 
 var failures := 0
-var arena: Node3D
+var arena: Arena
 var game: GameManager
 var shows := {}                                   # tile -> the "show" messages it got
 
@@ -28,12 +28,14 @@ func _ready() -> void:
 	check(CodeRound.score([0, 1, 2, 3], [3, 2, 1, 0]) == [0, 4], "all icons, all in another place: 4 yellow")
 	check(CodeRound.score([0, 1, 2, 3], [0, 0, 0, 0]) == [1, 0], "one icon four times: 1 green, no yellow (counted once)")
 	check(CodeRound.score([1, 1, 2, 3], [1, 2, 1, 1]) == [1, 2], "repeats: 1 green, 2 yellow (the 1 twice in the code)")
-	check(CodeRound.marks([1, 1, 2, 3], [1, 2, 1, 1]) == [2, 1, 1, 0], "per place: green, yellow, yellow, grey (no 1 left for the last)")
+	check(CodeRound.marks([1, 1, 2, 3], [1, 2, 1, 1]) == [2, 1, 1, 0],
+		"per place: green, yellow, yellow, grey (no 1 left for the last)")
 	check(CodeRound.marks([0, 1, 2, 3], [1, 0, 2, 3]) == [1, 1, 2, 2], "per place: two swapped = yellow, the rest green")
 	var codes := CodeRound.make_codes(5)
 	check(codes[0].length == 4 and codes[0].code.duplicate().all(func(x): return codes[0].code.count(x) == 1),
 		"code 1: 4 icons, all different")
-	check(codes[1].length == 4 and codes[1].code.any(func(x): return codes[1].code.count(x) > 1), "code 2: 4 icons, one repeats")
+	check(codes[1].length == 4 and codes[1].code.any(func(x): return codes[1].code.count(x) > 1),
+		"code 2: 4 icons, one repeats")
 	check(codes[2].length == 5 and codes[4].length == 5, "code 3 and further: 5 icons")
 	check(DemoBots.code_candidates(4, false, []).size() == 24 and DemoBots.code_candidates(5, true, []).size() == 1024,
 		"possibilities: 24 (4 different), 1024 (5 with repeats)")
@@ -44,9 +46,11 @@ func _ready() -> void:
 	game.use_database("")
 	game.intro_time = 1.0
 	game.auto_start_delay = 0.0
-	game.random_rounds = false
-	game.round_types = [CodeRound]
-	arena.tile_message.connect(func(id, msg): if msg.has("show"): shows.get_or_add(id, []).append(msg.show))
+	game.picker.random_rounds = false
+	game.picker.round_types = [CodeRound]
+	arena.tile_message.connect(func(id, msg):
+		if msg.has("show"):
+			shows.get_or_add(id, []).append(msg.show))
 	for p in [[1, "Anna", 12], [2, "Bram", 7], [3, "Cleo", 10], [10, "Daan", 13], [11, "Eva", 8]]:
 		arena.apply_command({"tile": p[0], "join": p[1], "age": p[2]})
 	await _wait(1.0)
@@ -60,7 +64,7 @@ func _ready() -> void:
 
 	print("--- Anna: the code at once")
 	await _type(1, code)
-	var anna: Dictionary = r.state[1]
+	var anna: CodeRound.PlayerState = r.state[1]
 	check(anna.cracked == 1 and anna.level == 1 and r.points[1] == r.crack_points + r.par_tries - 1,
 		"cracked in 1 try: %d points (%d + %d)" % [r.points[1], r.crack_points, r.par_tries - 1])
 	check(shows[1][-1].ring.all(func(c): return _is(c, CodeRound.HINT_GREEN)), "her ring: all green")
@@ -72,7 +76,8 @@ func _ready() -> void:
 	wrong.reverse()
 	await _type(2, wrong)
 	await _type(2, code)
-	check(r.state[2].cracked == 1 and r.points[2] == r.crack_points + r.par_tries - 2, "cracked in 2 tries: %d points" % r.points[2])
+	check(r.state[2].cracked == 1 and r.points[2] == r.crack_points + r.par_tries - 2,
+		"cracked in 2 tries: %d points" % r.points[2])
 
 	print("--- Cleo: wrong tries, the hints")
 	var other := [code[1], code[0], code[2], code[3]]   # 2 green, 2 yellow
@@ -106,7 +111,8 @@ func _ready() -> void:
 	game.skip()
 	while game.state == GameManager.State.PLAYING:
 		await get_tree().process_frame
-	check(shows.get(1, []).size() > 0 and not shows[1][-1] is Dictionary, "the end: the tiles' pictures cleared ({\"show\": false})")
+	check(shows.get(1, []).size() > 0 and not shows[1][-1] is Dictionary,
+		"the end: the tiles' pictures cleared ({\"show\": false})")
 	var places := r.places()
 	print("    points: ", r.points, "  places: ", places)
 	check(places[1] == 1 and places[11] == places.values().max(), "Anna 1st, Eva (nothing) last")

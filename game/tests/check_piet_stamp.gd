@@ -14,7 +14,7 @@ func check(ok: bool, what: String) -> void:
 
 
 func _init() -> void:
-	var arena: Node3D = load("res://scenes/arena.tscn").instantiate()
+	var arena: Arena = load("res://scenes/arena.tscn").instantiate()
 	root.add_child(arena)
 	await process_frame
 	arena.simulate_firmware = false                  # (real tiles: presses come in over MQTT)
@@ -23,7 +23,7 @@ func _init() -> void:
 	game.set_mode(GameManager.Mode.OPEN)
 	game.intro_time = 0.5
 	for i in 4:
-		arena.join(i + 1, "Speler %d" % (i + 1), 12)
+		arena.players.join(i + 1, "Speler %d" % (i + 1), 12)
 	game.set_planned_round(0, "zwarte_piet")
 	game.start_game()
 	for n in 600:
@@ -41,8 +41,10 @@ func _init() -> void:
 	var kicker := await _run_out(r)
 	var to: int = r._neighbour(kicker, 1)
 	var before := {kicker: r.points[kicker], to: r.points[to]}
-	arena.apply_command({"tile": kicker, "press": "Square", "t": roundi((r._end_at - 0.1) * 1000.0), "program": r.tile_clock.id})
-	check(r.holder == to and r.late_kicks == 1, "a kick stamped before the end, arriving after it: counts (light at %d)" % r.holder)
+	arena.apply_command({"tile": kicker, "press": "Square", "t": roundi((r._end_at - 0.1) * 1000.0),
+		"program": r.tile_clock.id})
+	check(r.holder == to and r.late_kicks == 1,
+		"a kick stamped before the end, arriving after it: counts (light at %d)" % r.holder)
 	await _until(func(): return r._end_at < 0.0)
 	check(r.points[to] == before[to] - r.penalty and r.points[kicker] == before[kicker],
 		"the one who had it at the end is caught, not the kicker")
@@ -50,7 +52,8 @@ func _init() -> void:
 	# 2. a kick stamped after the end: too late
 	kicker = await _run_out(r)
 	var p: int = r.points[kicker]
-	arena.apply_command({"tile": kicker, "press": "Square", "t": roundi((r._end_at + 0.05) * 1000.0), "program": r.tile_clock.id})
+	arena.apply_command({"tile": kicker, "press": "Square", "t": roundi((r._end_at + 0.05) * 1000.0),
+		"program": r.tile_clock.id})
 	check(r.holder == kicker, "a kick stamped after the end: does not count")
 	await _until(func(): return r._end_at < 0.0)
 	check(r.points[kicker] == p - r.penalty, "... the holder is caught")

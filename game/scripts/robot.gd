@@ -13,6 +13,10 @@ signal hit(target: Vector3)
 signal death_finished(side: int)
 signal hit_taken(side: int)
 
+## The moments of a boot / shutdown, for the game's sounds and lights:
+## awake, booted (boot); electrocuted, dying, off (shutdown).
+signal power_moment(name: StringName)
+
 const ROBOT_SCENE := preload("res://models/robot.glb")
 const PARTY_DOME_SHADER := preload("res://shaders/party_dome.gdshader")
 const SIDE_COUNT := 13
@@ -34,6 +38,8 @@ const BULB_COUNT := SIDE_COUNT * BULBS_PER_SIDE
 @export var bulb_effect_speed := 1.0
 
 var head: Node3D
+var powered := true                     # off: dark and still (the game is closed: the players beat it)
+
 var _model: Node3D
 var _target_yaw := 0.0
 var _has_target := false
@@ -57,11 +63,6 @@ var _dome_mat: ShaderMaterial
 var _party_time := 0.0
 var _effect_time := 0.0
 var _anim: AnimationPlayer
-## The moments of a boot / shutdown, for the game's sounds and lights:
-## awake, booted (boot); electrocuted, dying, off (shutdown).
-signal power_moment(name: StringName)
-
-var powered := true                     # off: dark and still (the game is closed: the players beat it)
 var _power_show := 0                    # a boot / shutdown running (its number: a newer one stops it)
 
 
@@ -620,7 +621,8 @@ func play_shutdown() -> void:
 			return
 		dead[0] = i
 		for j in order.size():
-			set_side_bulbs(order[j], Color.BLACK if j <= i else (Color(1.0, 0.1, 0.05) if randf() < 0.6 else Color(0.25, 0.0, 0.0)))
+			set_side_bulbs(order[j],
+				Color.BLACK if j <= i else (Color(1.0, 0.1, 0.05) if randf() < 0.6 else Color(0.25, 0.0, 0.0)))
 		_dome_light.light_color = Color(1.0, 0.1, 0.05)
 		_dome_light.light_energy = randf_range(0.2, 1.5)):
 		return

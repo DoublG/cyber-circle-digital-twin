@@ -6,7 +6,7 @@ const ARENA := preload("res://scenes/arena.tscn")
 
 
 func _ready() -> void:
-	var arena: Node3D = ARENA.instantiate()
+	var arena: Arena = ARENA.instantiate()
 	add_child(arena)
 	arena.game.use_database("")
 	arena.sound.enabled = false

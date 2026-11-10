@@ -32,7 +32,7 @@ func _process(_delta: float) -> void:
 func _draw() -> void:
 	if round == null or not round.state.has(tile_id) or round.codes.is_empty():
 		return
-	var st: Dictionary = round.state[tile_id]
+	var st := round.state[tile_id]
 	var w := minf(PANEL_WIDTH, size.x - 80.0)
 	var panel := Rect2((size.x - w) / 2, TOP, w, size.y - TOP - BOTTOM)
 	draw_rect(panel, Color(Retro.PANEL, 0.92))
@@ -59,7 +59,8 @@ func _draw() -> void:
 
 	# the legend: the three box colours
 	var ly := panel.end.y - FOOTER / 2 + 10
-	var items := [[CodeRound.HINT_GREEN, "JUISTE PLEK"], [CodeRound.HINT_YELLOW, "ANDERE PLEK"], [CodeRound.HINT_OFF.lightened(0.25), "ZIT ER NIET IN"]]
+	var items := [[CodeRound.HINT_GREEN, "JUISTE PLEK"], [CodeRound.HINT_YELLOW, "ANDERE PLEK"],
+		[CodeRound.HINT_OFF.lightened(0.25), "ZIT ER NIET IN"]]
 	var fs := 24
 	var need := 0.0
 	for it in items:
@@ -76,7 +77,7 @@ func _draw() -> void:
 
 ## The tries so far (the last ones that fit), then the row being typed: big
 ## icons, each in a box in its hint's colour.
-func _draw_board(st: Dictionary, c: Dictionary, board: Rect2, x0: float) -> void:
+func _draw_board(st: CodeRound.PlayerState, c: Dictionary, board: Rect2, x0: float) -> void:
 	var tries: Array = st.tries
 	var rows := maxi(int(board.size.y / ROW_H), 1)
 	var first: int = maxi(tries.size() + 1 - rows, 0)
@@ -117,7 +118,7 @@ func _box(rect: Rect2, col: Color, mark: int) -> void:
 
 
 ## Cracked: the code in green, in how many tries, the points.
-func _draw_cracked(st: Dictionary, board: Rect2, age: float) -> void:
+func _draw_cracked(st: CodeRound.PlayerState, board: Rect2, age: float) -> void:
 	var cx := board.position.x + board.size.x / 2
 	var cy := board.position.y + board.size.y * 0.4
 	var pop := clampf(age / 0.25, 0.0, 1.0)
@@ -145,5 +146,6 @@ func _text(s: String, pos: Vector2, font_size: int, col: Color,
 		x -= width
 	elif align == HORIZONTAL_ALIGNMENT_CENTER:
 		x -= width / 2
-	draw_string_outline(font, Vector2(x, pos.y), s, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, 6, Color(Retro.BG, col.a * 0.9))
+	draw_string_outline(font, Vector2(x, pos.y), s, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, 6,
+		Color(Retro.BG, col.a * 0.9))
 	draw_string(font, Vector2(x, pos.y), s, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, col)

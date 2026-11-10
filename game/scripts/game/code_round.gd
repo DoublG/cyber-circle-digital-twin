@@ -35,9 +35,19 @@ var par_tries := 8               # ... +1 for every try fewer than this
 var level_bonus := 2             # ... +this for every level above the first
 var hint_time := 1.6             # s the hints stay on the ring after a try
 var codes := []                  # [{code: [lane, ...], length, repeats}] - the same for everyone
-var state := {}                  # tile_id -> {level, guess: [lanes], tries: [{guess, marks, green, yellow}],
-                                 #   cracked, total_tries, last: {at, text, points}, hint_until}
+var state: Dictionary[int, PlayerState] = {}   # per tile
 var clock := 0.0
+
+
+## One player's round.
+class PlayerState extends RoundState:
+	var level := 0               # the code they are on (index in codes)
+	var guess := []              # the icons typed so far (lanes)
+	var tries := []              # this code's finished tries: [{guess, marks, green, yellow}]
+	var cracked := 0             # codes cracked
+	var total_tries := 0
+	var last := {}               # the last try's result: {at, text, points} (cracked: + code, tries)
+	var hint_until := 0.0        # clock until which the ring shows the hints (0: not)
 
 
 func _init() -> void:
@@ -48,8 +58,11 @@ func _init() -> void:
 
 
 func _rules() -> String:
-	return ("Kraak de geheime code: een rij iconen. Druk een rij iconen op je tegel.\nNa elke poging krijgt elk icoon een kleur, op je scherm en je tegel:\ngroen = juiste plek, geel = zit erin maar op een andere plek, grijs = zit er niet in.\nGekraakt: +%d punten, +1 voor elke poging minder dan %d. Dan een moeilijkere code!\nNa de ronde: meeste punten +1 leven, minste punten -1 leven."
-		% [crack_points, par_tries])
+	return ("Kraak de geheime code: een rij iconen. Druk een rij iconen op je tegel.\n"
+		+ "Na elke poging krijgt elk icoon een kleur, op je scherm en je tegel:\n"
+		+ "groen = juiste plek, geel = zit erin maar op een andere plek, grijs = zit er niet in.\n"
+		+ "Gekraakt: +%d punten, +1 voor elke poging minder dan %d. Dan een moeilijkere code!\n"
+		+ "Na de ronde: meeste punten +1 leven, minste punten -1 leven.") % [crack_points, par_tries]
 
 
 func prepare(game_manager: GameManager, _tile_ids: Array) -> void:
@@ -70,7 +83,7 @@ func _start() -> void:
 	clock = 0.0
 	codes = make_codes(12)
 	for id in players:
-		state[id] = {"level": 0, "guess": [], "tries": [], "cracked": 0, "total_tries": 0, "last": {}, "hint_until": 0.0}
+		state[id] = PlayerState.new()
 		_show(id)
 
 
@@ -124,7 +137,7 @@ static func score(code: Array, guess: Array) -> Array:
 
 
 func length_of(id: int) -> int:
-	var st: Dictionary = state[id]
+	var st := state[id]
 	return codes[mini(st.level, codes.size() - 1)].length
 
 
@@ -132,7 +145,7 @@ func button(id: int, b: StringName) -> void:
 	var lane := CyberTile.BUTTONS.find(b)
 	if lane < 0 or not state.has(id):
 		return
-	var st: Dictionary = state[id]
+	var st := state[id]
 	if st.level >= codes.size():
 		return
 	st.guess.append(lane)
@@ -151,7 +164,8 @@ func button(id: int, b: StringName) -> void:
 		st.cracked += 1
 		st.last = {"at": clock, "text": "GEKRAAKT!", "points": pts, "code": c.code, "tries": st.tries.size()}
 		add_points(id, pts)
-		game.log_event("%s KRAAKT CODE %d (+%d)" % [game.arena.player_name(id).to_upper(), st.level + 1, pts], Retro.GOOD)
+		game.log_event("%s KRAAKT CODE %d (+%d)"
+			% [game.arena.players.player_name(id).to_upper(), st.level + 1, pts], Retro.GOOD)
 		game.arena.npc.feedback(id, HINT_GREEN, 0.3)
 		st.level += 1
 		st.tries = []
@@ -166,7 +180,7 @@ func button(id: int, b: StringName) -> void:
 func _update(delta: float) -> void:
 	clock += delta
 	for id in players:
-		var st: Dictionary = state[id]
+		var st := state[id]
 		if st.hint_until > 0.0 and clock >= st.hint_until:
 			st.hint_until = 0.0
 			_show(id)                      # the hints have been seen: ready for the next try
@@ -178,7 +192,7 @@ func _update(delta: float) -> void:
 func _show(id: int, cracked := false) -> void:
 	if tile(id).is_dead:
 		return
-	var st: Dictionary = state[id]
+	var st := state[id]
 	var ring := []
 	if cracked:
 		for k in codes[st.level - 1].length:
@@ -208,7 +222,7 @@ func finish() -> void:
 			best = state[id].cracked
 			names = []
 		if state[id].cracked == best:
-			names.append(game.arena.player_name(id).to_upper())
+			names.append(game.arena.players.player_name(id).to_upper())
 	if best >= 1:
 		game.log_event("%d CODE%s GEKRAAKT: %s" % [best, "S" if best > 1 else "", ", ".join(names)], Retro.CREAM)
 
@@ -216,6 +230,11 @@ func finish() -> void:
 # (Replica: what CodeView reads - not the codes themselves, only their sizes)
 func replica_keys() -> Array:
 	return ["state", "crack_points", "par_tries"]
+
+
+## (Its per-player state goes to the display nodes as plain data: RoundState.)
+func state_fields() -> Dictionary:
+	return {"state": PlayerState}
 
 
 func replica_init() -> Dictionary:

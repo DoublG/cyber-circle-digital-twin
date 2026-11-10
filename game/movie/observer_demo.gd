@@ -19,7 +19,7 @@ extends Node
 
 const ARENA := preload("res://scenes/arena.tscn")
 
-var arena: Node3D
+var arena: Arena
 var game: GameManager
 
 
@@ -31,8 +31,8 @@ func _ready() -> void:
 	game.auto_start_delay = 0.0
 	game.intro_time = 5.0
 	game.scoreboard_time = 30.0
-	game.random_rounds = false
-	game.round_types = [QuizRound, ZwartePietRound]
+	game.picker.random_rounds = false
+	game.picker.round_types = [QuizRound, ZwartePietRound]
 	arena.screen_wall.visible = false        # only the overview page is filmed
 	get_viewport().disable_3d = true         # the page has its own camera view
 	var layer := CanvasLayer.new()
@@ -102,7 +102,8 @@ func _direct() -> void:
 			arena.tiles[piet.holder - 1].press_button(CyberTile.BUTTONS.pick_random())
 			react = randf_range(0.3, 1.5)
 		await get_tree().process_frame
-	await _until(func(): return game.state == GameManager.State.SCOREBOARD and game.screen_wall.shared_views.size() > 0, 40.0)
+	await _until(func(): return (game.state == GameManager.State.SCOREBOARD
+		and game.screen_wall.shared_views.size() > 0), 40.0)
 	await _wait(7.0)
 	print("[movie] done")
 	get_tree().quit()

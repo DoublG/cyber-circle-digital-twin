@@ -19,10 +19,11 @@ const WRONG := [7, 8, 9, 10]             # wrong (9: on his last life -> extermi
 const SHIELDED := [12, 13]               # age 7 on a 10+ question: wrong but protected
                                          # 11: no answer
 
+var game: GameManager
+var arena: Arena
+
 var _fails := 0
 var _frame := 0
-var game: GameManager
-var arena: Node3D
 
 
 func _ready() -> void:
@@ -40,11 +41,11 @@ func _ready() -> void:
 	game.result_time = 6.0
 	game.scoreboard_time = 6.0
 	game.auto_start_delay = 0.0
-	game.random_rounds = false
-	game.round_types = [QuizRound, RhythmRound]
+	game.picker.random_rounds = false
+	game.picker.round_types = [QuizRound, RhythmRound]
 	for i in NAMES.size():
 		var id := i + 1
-		arena.join(id, NAMES[i], 7 if id in SHIELDED else 12)
+		arena.players.join(id, NAMES[i], 7 if id in SHIELDED else 12)
 	await _wait(0.5)
 	game.start_game()
 
@@ -78,7 +79,8 @@ func _ready() -> void:
 	var scale_before: Vector2 = view._player_grid.scale
 	await _record(3.5)                              # the cards turn one by one
 	var after := view._player_cards.values().map(func(c): return c.panel.global_position)
-	check(before.size() == after.size() and range(before.size()).all(func(i): return before[i].distance_to(after[i]) < 0.5) \
+	check(before.size() == after.size()
+		and range(before.size()).all(func(i): return before[i].distance_to(after[i]) < 0.5)
 		and view._player_grid.scale.is_equal_approx(scale_before),
 		"reveal: the cards do not move when the result line appears (%s -> %s)" % [before.slice(0, 1), after.slice(0, 1)])
 	check(view._shown_ok.size() == 13, "reveal: every card turned (%d)" % view._shown_ok.size())
@@ -88,10 +90,13 @@ func _ready() -> void:
 		"reveal: the right ones: a thick glowing green border")
 	check((WRONG + [11]).all(func(id): return _card_is(view, id, Retro.BAD, false, true) and _card_width(view, id) <= 5),
 		"reveal: wrong / no answer: a thin red border, dimmed")
-	check(SHIELDED.all(func(id): return _card_is(view, id, Retro.SHIELD, true, false) and view._player_cards[id].shield.visible),
+	check(SHIELDED.all(func(id):
+		return _card_is(view, id, Retro.SHIELD, true, false) and view._player_cards[id].shield.visible),
 		"reveal: shielded: blue, the shield, not dimmed")
-	check(view._player_cards.values().all(func(c): return c.mark.text == "" or c.mark.text == "GEEN"), "reveal: no ✔ / ✘ marks")
-	check(view._slide_status.visible and view._slide_status.modulate.a > 0.99 and view._slide_status.text.begins_with("6 VAN 13"),
+	check(view._player_cards.values().all(func(c): return c.mark.text == "" or c.mark.text == "GEEN"),
+		"reveal: no ✔ / ✘ marks")
+	check(view._slide_status.visible and view._slide_status.modulate.a > 0.99
+		and view._slide_status.text.begins_with("6 VAN 13"),
 		"reveal: '%s'" % view._slide_status.text)
 	_inside(view, [view._slide_status, view._legend], "reveal: status / legend")
 	await _shot(view, "51_13_quiz_reveal")
@@ -105,7 +110,8 @@ func _ready() -> void:
 	_check_board("quiz scoreboard", 13)
 	var board: ScoreboardView = game.screen_wall.shared_views[0]
 	var ilias: Dictionary = board._rows.filter(func(e): return e.data.tile == 9).front()
-	check(ilias.name.text.trim_prefix("▶").strip_edges().begins_with("☠"), "scoreboard: Ilias marked exterminated (%s)" % ilias.name.text)
+	check(ilias.name.text.trim_prefix("▶").strip_edges().begins_with("☠"),
+		"scoreboard: Ilias marked exterminated (%s)" % ilias.name.text)
 	await _shot(board, "52_13_quiz_scoreboard")
 
 	print("--- Ritme, 12 players: UITSLAG, then the scoreboard")
@@ -120,7 +126,8 @@ func _ready() -> void:
 	arena.tiles[last - 1].health = 1                # last place on the last life
 	await _wait(0.5)
 	game.skip()
-	await _until(func(): return not game.screen_wall.shared_views.is_empty() and game.screen_wall.shared_views[0] is RankingView)
+	var views := func(): return game.screen_wall.shared_views
+	await _until(func(): return not views.call().is_empty() and views.call()[0] is RankingView)
 	await _record(5.0)                              # rows in from the last place, then the badges
 	var uitslag: RankingView = game.screen_wall.shared_views[0]
 	check(uitslag._badges.size() == 12, "UITSLAG: 12 rows (%d)" % uitslag._badges.size())
@@ -144,7 +151,8 @@ func _ready() -> void:
 		await RenderingServer.frame_post_draw
 		page.get_viewport().get_texture().get_image().save_png("res://tests/shots/55_13_overview.png")
 	print("frames: %d in %s" % [_frame, dir])
-	print("video:  ffmpeg -framerate 30 -i %s%%05d.jpg -vf scale=1280:720 -c:v libx264 -crf 27 -pix_fmt yuv420p OUT.mp4" % dir)
+	print("video:  ffmpeg -framerate 30 -i %s%%05d.jpg -vf scale=1280:720 -c:v libx264 -crf 27 -pix_fmt yuv420p OUT.mp4"
+		% dir)
 	print("DONE: %d failure(s)" % _fails)
 	get_tree().quit()
 
@@ -245,7 +253,8 @@ func check(ok: bool, what: String) -> void:
 func _card_is(view, id: int, color: Color, glow: bool, dimmed: bool) -> bool:
 	var c: Dictionary = view._player_cards[id]
 	var st: StyleBoxFlat = c.panel.get_theme_stylebox("panel")
-	return st.border_color.is_equal_approx(color) and (st.shadow_size > 0) == glow and (c.panel.modulate.a < 0.99) == dimmed
+	var dim: bool = c.panel.modulate.a < 0.99
+	return st.border_color.is_equal_approx(color) and (st.shadow_size > 0) == glow and dim == dimmed
 
 
 func _card_width(view, id: int) -> int:

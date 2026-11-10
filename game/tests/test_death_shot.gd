@@ -15,7 +15,7 @@ const ARENA := preload("res://scenes/arena.tscn")
 
 func _ready() -> void:
 	get_window().size = Vector2i(1920, 1080)
-	var arena: Node3D = ARENA.instantiate()
+	var arena: Arena = ARENA.instantiate()
 	add_child(arena)
 	var game: GameManager = arena.game
 	game.use_database("")                 # screenshots: no database writes
@@ -23,9 +23,9 @@ func _ready() -> void:
 	game.result_time = 1.0
 	game.scoreboard_time = 4.0
 	game.auto_start_delay = 0.0
-	game.random_rounds = false
+	game.picker.random_rounds = false
 	arena.clip_time = 7.0                      # longer than the 4 s clip: it holds its last frame
-	game.round_types = [ZwartePietRound, CycloneRound]
+	game.picker.round_types = [ZwartePietRound, CycloneRound]
 	for p in [[1, "Anna", 12], [2, "Bram", 7], [3, "Cleo", 9], [5, "Eva", 11]]:
 		arena.apply_command({"tile": p[0], "join": p[1], "age": p[2]})
 	await get_tree().create_timer(1.0).timeout
@@ -46,7 +46,8 @@ func _ready() -> void:
 	while not (game.state == GameManager.State.SCOREBOARD and not game.screen_wall.shared_views.is_empty()):
 		await get_tree().process_frame
 	await get_tree().create_timer(0.8).timeout
-	check(arena.tiles[1].health == 1 and arena.tiles[2].health == 1, "lives unchanged until the scoreboard shows the change")
+	check(arena.tiles[1].health == 1 and arena.tiles[2].health == 1,
+		"lives unchanged until the scoreboard shows the change")
 	check(arena.robot.is_facing_target() and arena.robot._target_yaw == CyberRobot.side_yaw(1),
 		"the robot already faces the first one (Bram) before the lives change")
 	await _shot("29_scoreboard_before")
@@ -82,18 +83,18 @@ func _ready() -> void:
 		"the death clips start once the split views are on screen")
 	var age: float = arena.clock - float(arena.clip_started.get(2, 0.0))
 	check(age < 1.5, "the clip started from the beginning (%.1f s ago)" % age)
-	check(arena.is_playing(2), "the tile stays theirs while the clip plays")
+	check(arena.players.is_playing(2), "the tile stays theirs while the clip plays")
 	await _shot("33_next_round_while_dying")
 	var clip_end: float = float(arena.clip_started[2]) + arena.death_clip_length()
 	while arena.clock < clip_end + 1.0:
 		await get_tree().process_frame
-	check(arena.is_playing(2) and arena.death_clip_pending(2),
+	check(arena.players.is_playing(2) and arena.death_clip_pending(2),
 		"clip shorter than the death screen time: the tile is still theirs")
 	await _shot("34_clip_last_frame")
 	while arena.death_clip_pending(2):
 		await get_tree().process_frame
 	await get_tree().create_timer(0.5).timeout
-	check(not arena.is_playing(2), "the tile is free after the clip")
+	check(not arena.players.is_playing(2), "the tile is free after the clip")
 	print("DONE")
 	get_tree().quit()
 

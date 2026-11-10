@@ -1,7 +1,7 @@
 class_name ControlApi
-extends Node
+extends DataSource
 ## The game master's data source in the installation: the control server's
-## HTTP API (control/server.py owns the database). Same methods as GameDb, so
+## HTTP API (control/server.py owns the database). A DataSource, like GameDb:
 ## the game doesn't care which one it has:
 ##   questions(), leaderboard()    cached here, fetched at the start and kept fresh
 ##   fetch_player(id)              await it: asks the server
@@ -18,10 +18,13 @@ extends Node
 ## start_game() returns a temporary (negative) id at once; the queued requests
 ## use the server's real id as soon as it is known.
 
-signal changed                    # the ranking was refreshed
-
 const REFRESH_TIME := 60.0        # s between fetching questions and ranking
 const RETRY_TIME := 3.0
+
+## The project was called "Cyber Circle Digital Twin" (its user:// folder had
+## that name): once, its files (the queue, the checkpoints) move to the new folder.
+const OLD_USER_DIR := "Cyber Circle Digital Twin"
+static var _carried := false
 
 var base_url := ""                # e.g. http://192.168.1.10:8080
 var _questions: Array = []
@@ -68,7 +71,7 @@ func save_checkpoint(data: Dictionary) -> void:
 
 
 ## {db, checkpoint}: what the control server keeps; null when it can't be reached.
-func fetch_checkpoint():
+func fetch_checkpoint() -> Variant:
 	var r = await _http_get("/api/checkpoint")
 	if r is Dictionary:
 		_db_id = str(r.get("db", ""))
@@ -194,11 +197,6 @@ func queue_file() -> String:
 	ControlApi.carry_over_user_data()
 	return "user://control_queue_%s.json" % base_url.md5_text().left(12)
 
-
-## The project was called "Cyber Circle Digital Twin" (its user:// folder had
-## that name): once, its files (the queue, the checkpoints) move to the new folder.
-const OLD_USER_DIR := "Cyber Circle Digital Twin"
-static var _carried := false
 
 static func carry_over_user_data() -> void:
 	if _carried:

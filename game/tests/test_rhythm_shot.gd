@@ -37,24 +37,28 @@ func _ready() -> void:
 		"nothing else falls while a hold note lasts")
 	check(holds.all(func(n): return n.hold >= chart_round.hold_min - 0.26 and n.hold <= chart_round.hold_max + 0.26),
 		"hold notes last hold_min .. hold_max (on the music's grid)")
-	check(chart[0].fall > chart[-1].fall and chart[0].t >= chart[0].fall, "falls faster later, the first falls the whole way")
-	var gaps := []
+	check(chart[0].fall > chart[-1].fall and chart[0].t >= chart[0].fall,
+		"falls faster later, the first falls the whole way")
+	var gaps := []                         # from the end of one moment (a hold: when it is let go) to the next
+	var ends := {}
+	for n in chart:
+		ends[n.t] = n.t + n.hold
 	var keys := times.keys()
 	for i in range(1, keys.size()):
-		gaps.append(keys[i] - keys[i - 1])
+		gaps.append(keys[i] - ends[keys[i - 1]])
 	check(gaps.slice(0, 3).max() > gaps.slice(-4).max(), "closer together at the end")
 	for t in times:
 		var lanes := chart.filter(func(n): return n.t == t).map(func(n): return n.lane)
 		if lanes.size() == 2 and lanes[0] == lanes[1]:
 			check(false, "two at once on the same icon")
 
-	var arena: Node3D = ARENA.instantiate()
+	var arena: Arena = ARENA.instantiate()
 	add_child(arena)
 	var game: GameManager = arena.game
 	game.use_database("")
 	game.intro_time = 1.0
 	game.auto_start_delay = 0.0
-	game.round_types = [RhythmRound]
+	game.picker.round_types = [RhythmRound]
 	for p in [[1, "Anna", 12], [2, "Bram", 7], [3, "Cleo", 10], [10, "Daan", 13], [11, "Eva", 8]]:
 		arena.apply_command({"tile": p[0], "join": p[1], "age": p[2]})
 	await get_tree().create_timer(1.0).timeout
@@ -106,18 +110,23 @@ func _ready() -> void:
 		await get_tree().process_frame
 	var passed := range(round._first)
 	var hits := func(id): return passed.filter(func(i): return round.state[id].judged.get(i, 0) > 0).size()
-	var lines := func(id): return passed.filter(func(i): return round.state[id].judged.get(i, 0) == round.points_line).size()
-	print("passed %d symbols; Anna %d pts, Bram %d, Cleo %d" % [passed.size(), round.points[1], round.points[2], round.points[3]])
+	var lines := func(id): return passed.filter(
+		func(i): return round.state[id].judged.get(i, 0) == round.points_line).size()
+	print("passed %d symbols; Anna %d pts, Bram %d, Cleo %d"
+		% [passed.size(), round.points[1], round.points[2], round.points[3]])
 	check(passed.size() >= 8, "symbols passed the line")
 	check(lines.call(1) == passed.size(), "Anna: every symbol on the line (%d/%d)" % [lines.call(1), passed.size()])
 	check(hits.call(2) == passed.size() and lines.call(2) == 0, "Bram: every symbol in the band, none on the line")
 	check(round.points[3] == round.points_wrong and hits.call(3) == 0, "Cleo: pressed on nothing (-1), missed the rest")
-	var held := passed.filter(func(i): return round.notes[i].hold > 0.0 and round.clock > round.notes[i].t + round.notes[i].hold + round.band * round.notes[i].fall)
+	var held := passed.filter(func(i):
+		var note = round.notes[i]
+		return note.hold > 0.0 and round.clock > note.t + note.hold + round.band * note.fall)
 	var holds_of := func(id, result): return held.filter(func(i): return round.state[id].holds.get(i, "") == result).size()
 	print("hold notes done: %d; Anna ok %d, Bram ok %d, Daan fail %d, Eva fail %d" % [held.size(), holds_of.call(1, "ok"),
 		holds_of.call(2, "ok"), holds_of.call(10, "fail"), holds_of.call(11, "fail")])
 	check(held.size() >= 1, "hold notes came and ended (%d)" % held.size())
-	check(holds_of.call(1, "ok") == held.size() and holds_of.call(2, "ok") == held.size(), "Anna and Bram: let go on time (every hold note)")
+	check(holds_of.call(1, "ok") == held.size() and holds_of.call(2, "ok") == held.size(),
+		"Anna and Bram: let go on time (every hold note)")
 	check(holds_of.call(10, "fail") == held.size(), "Daan: let go too early (every hold note: 0, the combo ends)")
 	check(holds_of.call(11, "fail") == held.size(), "Eva: held on too long (every hold note: 0)")
 	check(round.state[1].combo == passed.size() + held.size() and round.state[3].combo == 0,

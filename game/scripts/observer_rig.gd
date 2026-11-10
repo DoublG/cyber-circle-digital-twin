@@ -11,7 +11,7 @@ extends Node3D
 @export var orbit_speed := 0.05                 # rad/s: a full circle in ~2 minutes
 @export var glide := 0.5                        # smoothing (lower = softer)
 
-var arena: Node3D
+var arena: Arena
 var _t := 0.0
 var _angle := 0.0
 var _look := Vector3.ZERO
@@ -20,7 +20,7 @@ var _focus_left := 0.0          # ... for this many seconds more
 var _close_left := 0.0          # the overview's robot scene: close around the robot
 
 
-func setup(arena_node: Node3D) -> void:
+func setup(arena_node: Arena) -> void:
 	arena = arena_node
 	_angle = randf() * TAU
 	position = _orbit_pos()

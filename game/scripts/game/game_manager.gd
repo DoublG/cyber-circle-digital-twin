@@ -13,8 +13,9 @@ extends Node
 ## When the last player is gone the game goes back to the LOBBY (stop_game
 ## ends it at once). Exterminated is the end for a player: no new round for
 ## them - and when everyone is exterminated, no new round at all (the
-## scoreboard waits for their tiles to come free, then the lobby). In the database one game = from start to the lobby; every
-## player's result is saved when they leave.
+## scoreboard waits for their tiles to come free, then the lobby). In the
+## database one game = from start to the lobby; every player's result is
+## saved when they leave.
 ## Counters (names on the screens in brackets):
 ##   points    (PUNTEN)  within one round; they decide the round's places
 ##                       (not in the quiz: right = stay, wrong = -1 life)
@@ -27,16 +28,18 @@ extends Node
 ##   record    (RECORD)  a player's most rounds survived over all plays
 ##   place     (#)       the overall ranking by record - live while playing
 ## Players can play many times (each time from 0).
-## The next rounds are planned ahead (`upcoming`, shown in the web interface,
-## which can set them: a chosen round is always played).
-## Every quiz round is one question. Round types are picked at random (the
-## other games never twice in a row; quiz after quiz can); with fewer
-## than `personal_min_players` players only shared rounds (the quiz) are played:
-## personal rounds always have a loser, in the quiz everyone can stay alive.
-## Questions come from the database, which also keeps the scores (GameDb).
+## Every quiz round is one question. Questions come from the database, which
+## also keeps the scores (GameDb).
 ## A player loses at most 1 life per round (take_life). At 0 lives they are
 ## exterminated: the tile blinks red, the robot's death animation plays and
 ## the tile becomes free again (the player leaves the game).
+##
+## This file is the flow of the game. Its helpers:
+##   picker     RoundPicker     which round comes next: the plan, the randomizer
+##   questions  QuestionPicker  the quiz's questions and which category is next
+##   standings  Standings       the ranking of the event
+##   settings   GameSettings    what the operator can change
+##   recovery   Recovery        back after a crash / power cut
 
 signal state_changed(state: State)
 signal mode_changed(mode: Mode)
@@ -57,33 +60,6 @@ enum State { LOBBY, INTRO, PLAYING, SCOREBOARD }
 ## Without a control server the game starts OPEN.
 enum Mode { SETUP, CLOSED, OPEN, PAUSED }
 
-const ROUND_TYPES := [preload("res://scripts/game/cyclone_round.gd"),
-	preload("res://scripts/game/quiz_round.gd"), preload("res://scripts/game/reaction_round.gd"),
-	preload("res://scripts/game/rhythm_round.gd"), preload("res://scripts/game/simon_round.gd"),
-	preload("res://scripts/game/zwarte_piet_round.gd"), preload("res://scripts/game/code_round.gd")]
-
-## Game settings the operator can change (see settings_schema); every round
-## type has its own (GameRound.tunables). tempo > 1: every time shorter.
-## Round settings that are network / hardware delays, not game times: the tempo leaves them alone.
-const NETWORK_TIMES := ["latency_ms", "late_grace"]
-
-const GAME_TUNABLES := [
-	{"key": "tempo", "label": "Tempo (x, alle tijden)", "min": 0.5, "max": 2.0, "step": 0.05, "unit": ""},
-	{"key": "intro_time", "label": "Uitleg voor een ronde", "min": 2, "max": 30, "step": 1, "unit": "s"},
-	{"key": "result_time", "label": "Uitslag (plaatsen, levens)", "min": 0, "max": 30, "step": 1, "unit": "s"},
-	{"key": "scoreboard_time", "label": "Scorebord", "min": 2, "max": 30, "step": 1, "unit": "s"},
-	{"key": "clip_time", "label": "Doodsfilmpje op eigen scherm (min.)", "min": 2, "max": 60, "step": 1, "unit": "s"},
-	{"key": "clip_wait", "label": "Doodsfilmpje wacht op eigen scherm max.", "min": 0, "max": 120, "step": 5, "unit": "s"},
-	{"key": "auto_start_delay", "label": "Start na eerste speler", "min": 0, "max": 120, "step": 5, "unit": "s"},
-	{"key": "lives", "label": "Levens (leeftijd onbekend)", "min": 1, "max": 5, "step": 1, "unit": ""},
-	{"key": "lives_age_8", "label": "Levens t/m 8 jaar", "min": 1, "max": 5, "step": 1, "unit": ""},
-	{"key": "lives_age_10", "label": "Levens 9 - 10 jaar", "min": 1, "max": 5, "step": 1, "unit": ""},
-	{"key": "lives_age_99", "label": "Levens vanaf 11 jaar", "min": 1, "max": 5, "step": 1, "unit": ""},
-	{"key": "streak_bonus", "label": "Juist op rij voor +1 leven", "min": 2, "max": 50, "step": 1, "unit": ""},
-	{"key": "personal_min_players", "label": "Spelers nodig voor eigen spellen", "min": 1, "max": 13, "step": 1, "unit": ""},
-	{"key": "queue_length", "label": "Rondes vooruit gepland", "min": 1, "max": 10, "step": 1, "unit": ""},
-]
-
 @export var tempo := 1.0
 @export var intro_time := 7.0
 @export var scoreboard_time := 8.0
@@ -94,74 +70,50 @@ const GAME_TUNABLES := [
 ## Lives depend on age: {up to this age: lives}. Younger players get more
 ## lives (max 5, the hearts on the tile). Older than every key: the last value.
 @export var lives_by_age := {8: 5, 10: 4, 99: 3}
+@export var streak_bonus := 10         # this many right in a row: +1 life
+@export var db_path := "res://data/cybercircle.db"   # standalone: the SQLite file itself
+@export var control_url := ""          # installation: the control server owns the database
+@export var restore := true            # --no-restore: always a fresh start
+@export var restore_max_age := 3600.0  # s: an older checkpoint is a previous day's game
 
-var arena: Node3D
+var arena: Arena
 var screen_wall: ScreenWall
+var picker := RoundPicker.new(self)        # which round comes next: the plan, the randomizer
+var questions := QuestionPicker.new(self)  # the quiz's questions and which category is next
+var standings := Standings.new(self)       # the ranking of the event (records from the database)
+var settings := GameSettings.new(self)     # what the operator can change
 var state := State.LOBBY
 var mode := Mode.OPEN
 var scores := {}                       # tile_id -> total points this play (tie-break)
 var survived := {}                     # tile_id -> rounds survived this play (RONDES)
 var streaks := {}                      # tile_id -> quiz answers right in a row (OP RIJ)
-@export var streak_bonus := 10         # this many right in a row: +1 life
 var current: GameRound
 var round_number := 0
-var _timer := 0.0
-var _lobby_timer := -1.0
-var round_types: Array = ROUND_TYPES: set = set_round_types   # the round types to pick from
-@export var random_rounds := true          # false: play round_types in order (tests)
-@export var personal_min_players := 4      # fewer players: no personal rounds (they always have a loser)
-@export var db_path := "res://data/cybercircle.db"   # standalone: the SQLite file itself
-@export var control_url := ""              # installation: the control server owns the database
-var db                                     # GameDb or ControlApi; null: none (JSON questions, no saving)
-var game_id := 0                           # this game's id in the database
-var _last_type: Script
-@export var queue_length := 3              # rounds planned ahead
-## The randomizer (game style: weighted random with drought protection and a
-## "director", see round_chances): weight per round type (0 = never), the
-## extra chance per round a type was not played, and how strongly the
-## players' lives steer it.
-var randomizer_off := {}                   # type name -> true: never drawn (the operator can still plan it)
-var round_weights := {"code": 1.0, "cyclone": 1.0, "quiz": 5.0, "reaction": 1.0, "rhythm": 1.0, "simon": 1.0, "zwarte_piet": 1.0}
-@export var drought := 0.5
-@export var mercy := 1.0
-var _history: Array[Script] = []           # the round types played, last at the end
-## Questions (same style): weight per category (missing = 1, 0 = never) and
-## the extra chance per question a category was not asked.
-var category_weights := {}
-@export var category_drought := 0.5
-## What was asked (over all quiz rounds): {count: questions asked, since:
-## {category: questions since it was last asked}, asked: {question id: count when}}.
-var question_memory := {"count": 0, "since": {}, "asked": {}}
-var upcoming: Array = []                   # [{type: Script, forced: bool, options: {}}]: the next rounds
-var _planned := 0                          # rounds planned so far (fixed order: the index)
-var _result_saved := {}                    # tile_id -> true once their result is in the database
-var _records := {}                         # player_id -> {name, best, plays} from the database
-var _started := {}                     # tile_id -> true once the player has had lives set
-var _life_lost := {}                   # tile_id -> round_number in which they lost a life
-var settings := {}                     # operator values: {"game": {key: v}, "<round type>": {key: v}}
-var _game_defaults := {}
-var _result_left := 0.0               # s the UITSLAG board still shows
-var _lives_shown := false              # the scoreboard shows the lives after the change
-var _score_seq := 0                    # (a skipped scoreboard stops its own sequence)
-var _sound_defaults := {}
-var _light_defaults := {}
-var _voice_defaults := {}
-var _countdown := 0                    # the last second announced (light cue "countdown")
+var db: DataSource                     # GameDb or ControlApi; null: none (JSON questions, no saving)
+var game_id := 0                       # this game's id in the database
 var recovery: Recovery                 # crash / power cut: the game comes back where it was
-@export var restore := true                # --no-restore: always a fresh start
-@export var restore_max_age := 3600.0      # s: an older checkpoint is a previous day's game
-var _current_entry := {}               # the round being played, as it was planned (replayed after a crash)
-var _pending_lives := {}               # end of a round: the lives about to change {tile_id: -1/0/+1}
-var _target_lives := {}                # ... and once given / taken: what they become (shots still flying)
 var view := {}                         # what the screens show (show_view): a display node builds the same
-var _view_seq := 0
 ## The robot's shows: it comes to life when the game opens (CLOSED / SETUP ->
 ## OPEN) and is shut down - the players won - when it closes (-> CLOSED).
 ## Closing during a round waits for its end (its scoreboard): _close_pending.
-var power_show := ""                 # "boot" / "shutdown" while one plays
+var power_show := ""                   # "boot" / "shutdown" while one plays
+
+var _timer := 0.0
+var _lobby_timer := -1.0
+var _result_saved := {}                # tile_id -> true once their result is in the database
+var _started := {}                     # tile_id -> true once the player has had lives set
+var _life_lost := {}                   # tile_id -> round_number in which they lost a life
+var _result_left := 0.0                # s the UITSLAG board still shows
+var _lives_shown := false              # the scoreboard shows the lives after the change
+var _score_seq := 0                    # (a skipped scoreboard stops its own sequence)
+var _countdown := 0                    # the last second announced (light cue "countdown")
+var _current_entry := {}               # the round being played, as it was planned (replayed after a crash)
+var _pending_lives := {}               # end of a round: the lives about to change {tile_id: -1/0/+1}
+var _target_lives := {}                # ... and once given / taken: what they become (shots still flying)
+var _view_seq := 0
 var _close_pending := false
-var _closing_now := false            # (the round is over: close for real)
-var _mode_set := false               # (the first mode from the control server: no show, just on / off)
+var _closing_now := false              # (the round is over: close for real)
+var _mode_set := false                 # (the first mode from the control server: no show, just on / off)
 var _replica_round := 0                # a display node: the master's round it has (instance id there)
 
 
@@ -210,12 +162,12 @@ func _build_view() -> void:
 				var b := ScoreboardView.new()
 				var shown := rows.duplicate()
 				var listed := rows.map(func(r): return r.tile)
-				for id in arena.player_ids():               # new players come in here: at the bottom
+				for id in arena.players.player_ids():               # new players come in here: at the bottom
 					if id not in listed and not arena.tiles[id - 1].is_dead:
 						var h: int = arena.tiles[id - 1].health
-						shown.append({"name": arena.player_name(id), "tile": id, "survived": 0, "lives": h,
+						shown.append({"name": arena.players.player_name(id), "tile": id, "survived": 0, "lives": h,
 							"lives_before": h, "change": 0, "score": 0, "delta": 0, "out": false, "was_out": false,
-							"record": record(id), "rank": overall_rank(id), "new": true})
+							"record": standings.record(id), "rank": standings.rank(id), "new": true})
 				b.show_scores(str(v.title), str(v.subtitle), shown, _lives_shown)
 				lives_revealed.connect(b.reveal_lives)
 				return b)
@@ -227,10 +179,10 @@ func _build_view() -> void:
 func replica_fields() -> Dictionary:
 	var r := {}
 	if current:
-		r = {"id": current.get_instance_id(), "type": round_type_name(current.get_script()),
+		r = {"id": current.get_instance_id(), "type": RoundPicker.type_name(current.get_script()),
 			"init": current.replica_init()}
 	return {"g_state": state, "g_mode": mode, "scores": scores, "survived": survived, "streaks": streaks,
-		"round_number": round_number, "records": _records, "started": _started, "lives_shown": _lives_shown,
+		"round_number": round_number, "records": standings.records, "started": _started, "lives_shown": _lives_shown,
 		"tempo": tempo, "round": r, "round_sync": current.replica_sync() if current else {}, "view": view}
 
 
@@ -240,7 +192,7 @@ func apply_replica(f: Dictionary, full: bool) -> void:
 		if f.has(k):
 			set(k, f[k])
 	if f.has("records"):
-		_records = f.records
+		standings.records = f.records
 	if f.has("started"):
 		_started = f.started
 	if f.has("lives_shown"):
@@ -253,7 +205,7 @@ func apply_replica(f: Dictionary, full: bool) -> void:
 			current = null
 			_replica_round = 0
 		elif current == null or _replica_round != int(r.id):
-			var t: Script = _round_type(str(r.type))
+			var t := RoundPicker.type_named(str(r.type))
 			current = t.new() if t else null
 			_replica_round = int(r.id)
 			if current:
@@ -274,31 +226,23 @@ func apply_replica(f: Dictionary, full: bool) -> void:
 
 
 ## A display node: no database, no game logic - only the screens.
-func setup_replica(arena_node: Node3D) -> void:
+func setup_replica(arena_node: Arena) -> void:
 	arena = arena_node
 	screen_wall = arena.screen_wall
 	restore = false
 	show_view({"kind": "players"})
 
 
-func setup(arena_node: Node3D) -> void:
+func setup(arena_node: Arena) -> void:
 	arena = arena_node
-	for t in GAME_TUNABLES + _randomizer_tunables():
-		_game_defaults[t.key] = _get_game_setting(t.key)
-	_game_defaults["category_drought"] = category_drought
-	for t in arena.sound.tunables():
-		_sound_defaults[t.key] = arena.sound.get(t.key)
-	for t in arena.lights.tunables():
-		_light_defaults[t.key] = arena.lights.get(t.key)
-	for t in arena.narrator.tunables():
-		_voice_defaults[t.key] = arena.narrator.get(t.key)
+	settings.remember_defaults()
 	screen_wall = arena.screen_wall
 	arena.robot.power_moment.connect(_on_power_moment)
 	if control_url != "":
 		use_control_server(control_url)
 	else:
 		use_database(db_path)
-	_load_records()
+	standings.load_records()
 	_enter_lobby()
 	recovery = Recovery.new()
 	recovery.name = "Recovery"
@@ -327,7 +271,7 @@ func resume(changes: Dictionary) -> void:
 	_timer = INF
 	log_event("HET SPEL GAAT VERDER (RONDE %d)" % (round_number + 1), Retro.TEAL)
 	_show_scores("Scorebord", "Het spel gaat verder", {}, changes)
-	await get_tree().create_timer(lives_delay / tempo).timeout
+	await wait(lives_delay / tempo)
 	if state != State.SCOREBOARD or seq != _score_seq:
 		return
 	_lives_shown = true
@@ -337,25 +281,38 @@ func resume(changes: Dictionary) -> void:
 	_timer = scoreboard_time / tempo
 
 
-## Open another database file ("" = none); e.g. a test database.
 ## The installation: questions, players and scores through the control server.
 func use_control_server(url: String) -> void:
 	var api := ControlApi.new()
 	api.name = "ControlApi"
-	add_child(api)
+	_set_db(api)
 	api.open(url)
-	api.changed.connect(_load_records)
-	db = api
+	api.changed.connect(standings.load_records)
 
 
-## Standalone: open the SQLite file directly ("" = no database).
+## Standalone: open the SQLite file directly ("" = no database); e.g. a test database.
 func use_database(path: String) -> void:
 	if path.begins_with("res://") and not OS.has_feature("editor"):
 		# an exported build can't write inside itself: use the folder of the program
 		path = OS.get_executable_path().get_base_dir().path_join(path.get_file())
 	db_path = path
 	var file := GameDb.new()
-	db = file if path != "" and file.open(path) else null
+	if path != "" and file.open(path):
+		file.name = "GameDb"
+		_set_db(file)
+	else:
+		file.free()
+		_set_db(null)
+
+
+## The data source is a child node (the control server's needs the tree for its requests).
+func _set_db(source: DataSource) -> void:
+	if db:
+		remove_child(db)
+		db.queue_free()
+	db = source
+	if db:
+		add_child(db)
 
 
 func _process(delta: float) -> void:
@@ -400,18 +357,16 @@ func _process(delta: float) -> void:
 # ---------------------------------------------------------------- flow
 
 func start_game() -> void:
-	if state != State.LOBBY or arena.player_ids().is_empty() or mode != Mode.OPEN:
+	if state != State.LOBBY or arena.players.player_ids().is_empty() or mode != Mode.OPEN:
 		return
 	game_id = db.start_game() if db else 0
-	if not random_rounds:                # fixed order (tests): from the first type
-		upcoming.clear()
-		_planned = 0
+	picker.restart()
 	_result_saved.clear()
 	scores.clear()
 	survived.clear()
 	streaks.clear()
 	_started.clear()
-	for id in arena.player_ids():
+	for id in arena.players.player_ids():
 		scores[id] = 0
 		survived[id] = 0
 	round_number = 0
@@ -446,252 +401,66 @@ func _next_round() -> void:
 	if _close_pending:                   # closing after this round: now
 		_close_now()
 		return
-	if arena.player_ids().is_empty():    # the last player is gone: back to the lobby
+	if arena.players.player_ids().is_empty():    # the last player is gone: back to the lobby
 		_finish_game()
 		return
-	if arena.player_ids().all(func(id): return arena.tiles[id - 1].is_dead):
+	if arena.players.player_ids().all(func(id): return arena.tiles[id - 1].is_dead):
 		_timer = 0.5                     # everyone exterminated: the end - no new round; the scoreboard
 		return                           # waits until their tiles are free (death animation, their clip)
 	round_number += 1                    # counts rounds (database, 1 life per round)
-	_plan_rounds()
-	var entry: Dictionary = upcoming.pop_front()
+	var entry := picker.take_next()
 	_current_entry = entry
 	_target_lives.clear()
-	_last_type = entry.type
-	_history.append(_last_type)
-	if _history.size() > 20:
-		_history.pop_front()
-	_plan_rounds()
-	current = _last_type.new()
-	current.configure(settings.get(round_type_name(_last_type), {}))   # operator settings ...
-	current.configure(entry.get("options", {}))                         # ... this round in the plan
-	for t in current.tunables():                                        # the tempo: all times
-		if t.unit in ["s", "ms"] and not t.key in NETWORK_TIMES:          # (network delays: not game times)
-			var v = current.get(t.key) / tempo
-			current.set(t.key, roundi(v) if current.get(t.key) is int else v)
-	current.prepare(self, arena.player_ids().filter(func(id): return not arena.tiles[id - 1].is_dead))
-	Texts.dress(current, round_type_name(_last_type))   # the operator's name and rules for this game
+	var type_name := RoundPicker.type_name(entry.type)
+	current = entry.type.new()
+	current.configure(settings.of_round(type_name))        # operator settings ...
+	current.configure(entry.get("options", {}))            # ... this round in the plan
+	_apply_tempo(current)
+	current.prepare(self, arena.players.player_ids().filter(func(id): return not arena.tiles[id - 1].is_dead))
+	Texts.dress(current, type_name)                        # the operator's name and rules for this game
 	_set_state(State.INTRO)
-	arena.narrator.say("round_" + round_type_name(_last_type), "%s. %s" % [current.title, current.rules], "round", {}, true)
+	arena.narrator.say("round_" + type_name, "%s. %s" % [current.title, current.rules], "round", {}, true)
 	_timer = intro_time / tempo
 	screen_wall.set_timer("")
 	show_view({"kind": "message"})
 	arena.npc.mood("intro")
 
 
-## Random round type after `after`: personal rounds only with enough players,
-## and not the same type twice in a row (when there is a choice). n: the
-## round's index, for the fixed order (random_rounds = false).
-func _pick_round_type(after: Script, n: int) -> Script:
-	return _pick(after, n).type
-
-
-## {type, chance}: the pick and how likely it was.
-func _pick(after: Script, n: int) -> Dictionary:
-	if not random_rounds:
-		return {"type": round_types[n % round_types.size()], "chance": 1.0}
-	var chances := round_chances(after)
-	var r := randf()
-	var pick: Script = chances.keys().back()
-	for t in chances:
-		r -= chances[t]
-		if r <= 0.0:
-			pick = t
-			break
-	return {"type": pick, "chance": chances[pick]}
-
-
-## The chance of each round type for the round after `after` - a weighted
-## random, steered the way games steer their dice:
-##   in / out   per type (settings "Randomizer", the web interface's Spel tab):
-##              out = never drawn - planning it (set_planned_round) still plays it:
-##              a new game for a chosen audience
-##   weight     per type (settings "Randomizer"; 0 = never)
-##   no repeat  never the same type twice in a row (when there is a choice;
-##              the quiz can: it is the backbone, the other games come in between)
-##   drought    (pity / bad-luck protection) every round a type was not
-##              played - played or already planned - adds `drought` x its
-##              weight: nothing stays away for long
-##   director   the players' lives: when they are low, the rounds that can
-##              win a life (the personal ones) come more often and the quiz
-##              (it only takes lives) less; everyone healthy: more quiz
-##              (more pressure). `mercy` = how strongly (0 = off)
-## Personal rounds only with enough players. Returns {Script: chance}.
-func round_chances(after: Script) -> Dictionary:
-	var options := round_types.filter(func(t): return _allowed(t) and not randomizer_off.has(round_type_name(t)))
-	if options.is_empty():                       # (everything out, or not allowed: then any allowed type)
-		options = round_types.filter(func(t): return _allowed(t))
-	if options.is_empty():
-		options = round_types.duplicate()
-	if options.size() > 1:
-		options = options.filter(func(t): return t != after or t.new().can_repeat)
-	var seq: Array = Array(_history) + upcoming.map(func(e): return e.type)
-	var lives_factor := _director()
-	var w := {}
-	for t in options:
-		var since := seq.size() - 1 - seq.rfind(t) if t in seq else mini(seq.size() + 1, 10)
-		var weight: float = round_weights.get(round_type_name(t), 1.0)
-		weight *= 1.0 + drought * maxi(since - 1, 0)
-		if not t.new().gives_lives:
-			weight *= lives_factor
-		w[t] = weight
-	var total: float = w.values().reduce(func(a, b): return a + b, 0.0)
-	for t in w:
-		w[t] = w[t] / total if total > 0.0 else 1.0 / w.size()
-	return w
-
-
-## All questions: from the database (or control server), else the JSON file.
-func all_questions() -> Array:
-	var all: Array = db.questions() if db else []
-	if all.is_empty():
-		var data = JSON.parse_string(FileAccess.get_file_as_string(QuizRound.QUESTIONS_FILE))
-		all = data if data is Array else []
-	return all
-
-
-## The chance of each category for the next question (the categories in `pool`):
-## its weight x (1 + category_drought x questions since it was last asked;
-## never asked: as long as there have been questions, max 10); a category
-## whose questions were all asked is skipped while other ones have new ones
-## (repeats only when nothing new is left).
-## {category: chance}.
-func category_chances(pool: Array) -> Dictionary:
-	var w := {}
-	var fresh := {}                                 # category -> it still has unasked questions
-	for q in pool:
-		var c := str(q.get("category", ""))
-		if not question_memory.asked.has(str(q.get("id", q.get("question", "")))):
-			fresh[c] = true
-		if w.has(c):
-			continue
-		var since: int = question_memory.since.get(c, mini(question_memory.count + 1, 10))
-		w[c] = float(category_weights.get(c, 1.0)) * (1.0 + category_drought * mini(since, 10))
-	if not fresh.is_empty():
-		for c in w:
-			if not fresh.has(c):
-				w[c] = 0.0                          # every question asked already: not while others have new ones
-	var total: float = w.values().reduce(func(a, b): return a + b, 0.0)
-	if total <= 0.0:
-		return {}                                   # every category weight 0
-	for c in w.keys():
-		if w[c] <= 0.0:
-			w.erase(c)
-		else:
-			w[c] /= total
-	return w
-
-
-## A question was asked (for the drought protection and no early repeats).
-func note_question(category: String, id: String) -> void:
-	question_memory.count += 1
-	for c in question_memory.since:
-		question_memory.since[c] += 1
-	question_memory.since[category] = 0
-	question_memory.asked[id] = question_memory.count
-
-
-## The director: x weight of the rounds that cannot win a life, from the
-## players' lives (average share of their own full hearts - age): low -> fewer, full -> more.
-func _director() -> float:
-	var alive: Array = arena.player_ids().filter(func(id): return not arena.tiles[id - 1].is_dead)
-	if alive.is_empty() or mercy <= 0.0:
-		return 1.0
-	var f: float = alive.map(func(id): return float(arena.tiles[id - 1].health) / maxi(arena.tiles[id - 1].max_health, 1)) \
-		.reduce(func(a, b): return a + b, 0.0) / alive.size()
-	var tension := clampf((0.7 - f) / 0.45, 0.0, 1.0)    # lives running out (full effect at 1/4)
-	var ease := clampf((f - 0.8) / 0.2, 0.0, 1.0)        # (almost) all hearts full
-	return maxf(0.1, 1.0 - mercy * tension) * (1.0 + mercy * ease)
-
-
-func _allowed(t: Script) -> bool:
-	return _personal_allowed() or t.new().mode != "personal"
-
-
-func _personal_allowed() -> bool:
-	var alive: int = arena.player_ids().filter(func(id): return not arena.tiles[id - 1].is_dead).size()
-	return alive >= personal_min_players
-
-
-## Keep `queue_length` rounds planned: planned (not chosen) rounds that are no
-## longer allowed (too few players) are planned again.
-func _plan_rounds() -> void:
-	var keep := []
-	var personal_ok := _personal_allowed()
-	for e in upcoming:
-		if not random_rounds or e.forced:                         # (fixed order: every type)
-			keep.append(e)
-		elif _allowed(e.type) and (e.get("personal_ok", true) or not personal_ok) \
-				and not randomizer_off.has(round_type_name(e.type)):
-			keep.append(e)
-		# else: not allowed any more, or only chosen because personal rounds were not
-		# allowed then (too few players): pick again, now from every type
-	upcoming = keep
-	while upcoming.size() < queue_length:
-		var after: Script = upcoming.back().type if not upcoming.is_empty() else _last_type
-		var pick := _pick(after, _planned)
-		upcoming.append({"type": pick.type, "forced": false, "personal_ok": personal_ok, "chance": pick.chance})
-		_planned += 1
-	while upcoming.size() > queue_length and not upcoming.back().forced:   # (shorter queue setting)
-		upcoming.pop_back()
+## The tempo: all of a round's times (network delays are not game times).
+func _apply_tempo(r: GameRound) -> void:
+	for t in r.tunables():
+		if t.unit in ["s", "ms"] and not t.key in GameSettings.NETWORK_TIMES:
+			var v = r.get(t.key) / tempo
+			r.set(t.key, roundi(v) if r.get(t.key) is int else v)
 
 
 ## Operator: play `type_name` (code, cyclone, quiz, reaction, rhythm, simon, zwarte_piet) as the round in
 ## slot `slot` of the plan (0 = the next round). "" = random again from there.
 func set_planned_round(slot: int, type_name: String, options := {}) -> void:
-	_plan_rounds()
-	slot = clampi(slot, 0, upcoming.size() - 1)
-	if type_name == "":
-		upcoming.resize(slot)
-	else:
-		var t := _round_type(type_name)
-		if t == null:
-			push_warning("unknown round type %s" % type_name)
-			return
-		upcoming[slot] = {"type": t, "forced": true, "options": options}
-	_plan_rounds()
+	picker.set_planned(slot, type_name, options)
 	_checkpoint()
 
 
+## Operator: every planned round random again.
 func clear_planned_rounds() -> void:
-	upcoming.clear()
-	_plan_rounds()
+	picker.clear_planned()
 	_checkpoint()
-
-
-func set_round_types(types: Array) -> void:
-	round_types = types
-	upcoming.clear()                     # plan again with the new types
-	_planned = 0
-	if arena:
-		_plan_rounds()
-
-
-func round_type_name(t: Script) -> String:
-	return t.resource_path.get_file().get_basename().trim_suffix("_round")
-
-
-func _round_type(type_name: String) -> Script:
-	for t in ROUND_TYPES:
-		if round_type_name(t) == type_name:
-			return t
-	return null
 
 
 ## Everything the web interface shows of the game (published on MQTT `state`).
 func status() -> Dictionary:
 	var players := []
-	for id in arena.player_ids():
+	for id in arena.players.player_ids():
 		var t: CyberTile = arena.tiles[id - 1]
-		players.append({"tile": id, "name": arena.player_name(id), "lives": maxi(t.health, 0),
-			"max_lives": t.max_health, "survived": survived.get(id, 0), "record": record(id),
+		players.append({"tile": id, "name": arena.players.player_name(id), "lives": maxi(t.health, 0),
+			"max_lives": t.max_health, "survived": survived.get(id, 0), "record": standings.record(id),
 			"streak": streaks.get(id, 0),
 			"points": current.points.get(id, 0) if current and current.points.has(id) else 0,
-			"score": scores.get(id, 0), "rank": overall_rank(id),
-			"out": t.is_dead, "player_id": arena.player_db_id(id)})
+			"score": scores.get(id, 0), "rank": standings.rank(id),
+			"out": t.is_dead, "player_id": arena.players.player_db_id(id)})
 	var pending := []
 	for id in range(1, arena.tiles.size() + 1):
-		var p: Dictionary = arena.pending_info(id)
+		var p: Dictionary = arena.players.pending_info(id)
 		if not p.is_empty():
 			pending.append({"tile": id, "name": p.name, "color": "#" + p.color.to_html(false),
 				"player_id": p.get("player_id", 0)})
@@ -702,43 +471,26 @@ func status() -> Dictionary:
 		"ranked": current.ranked if current else false,   # the round has points and places (not the quiz)
 		"floor_tiles": Retro.FLOOR_TILES, "tile_count": arena.tiles.size(),
 		"timer": screen_wall.timer_text(), "players": players, "pending": pending,
-		"plan": planned_rounds(), "round_types": _round_types_status(),
-		"disabled": range(1, arena.tiles.size() + 1).filter(func(id): return not arena.is_enabled(id)),
+		"plan": picker.planned_rounds(), "round_types": picker.types_status(),
+		"disabled": range(1, arena.tiles.size() + 1).filter(func(id): return not arena.players.is_enabled(id)),
 		"dying": _dying(),
-		"installed": range(1, arena.tiles.size() + 1).filter(func(id): return arena.is_installed(id))}
+		"installed": range(1, arena.tiles.size() + 1).filter(func(id): return arena.players.is_installed(id))}
 
 
 ## The tiles in an extermination and when they come free: [{tile, free_in}]
 ## (whole seconds; -1: the robot has not fired yet).
 func _dying() -> Array:
 	var out := []
-	for id in arena.player_ids():
+	for id in arena.players.player_ids():
 		var f: float = arena.free_in(id)
 		if f != 0.0:
 			out.append({"tile": id, "free_in": -1 if f < 0.0 else ceili(f)})
 	return out
 
 
-## The plan for the web interface: [{type, title, forced}].
-## Every round type for the web interface: in the randomizer or not, its
-## weight, its chance now (for a random round after the planned ones).
-func _round_types_status() -> Array:
-	var after: Script = upcoming.back().type if not upcoming.is_empty() else _last_type
-	var chances := round_chances(after) if random_rounds else {}
-	return ROUND_TYPES.map(func(t): return {"type": round_type_name(t), "title": t.new().title,
-		"random": not randomizer_off.has(round_type_name(t)), "weight": round_weights.get(round_type_name(t), 1.0),
-		"allowed": _allowed(t), "min_players": personal_min_players if t.new().mode == "personal" else 0,
-		"chance": snappedf(chances.get(t, 0.0), 0.001)})
-
-
-func planned_rounds() -> Array:
-	return upcoming.map(func(e): return {"type": round_type_name(e.type), "title": e.type.new().title,
-		"forced": e.forced, "options": e.get("options", {}), "chance": e.get("chance", 1.0)})
-
-
 ## Starting lives for the player on a tile, from their age (see lives_by_age).
 func lives_for(tile_id: int) -> int:
-	var age: int = arena.player_age(tile_id)
+	var age: int = arena.players.player_age(tile_id)
 	if age <= 0 or lives_by_age.is_empty():
 		return lives
 	var ages := lives_by_age.keys()
@@ -751,7 +503,7 @@ func lives_for(tile_id: int) -> int:
 
 func _begin_round() -> void:
 	var ids: Array[int] = []
-	ids.assign(arena.player_ids())
+	ids.assign(arena.players.player_ids())
 	for id in ids:
 		if not scores.has(id) or not _started.has(id):  # activated since the last round
 			scores[id] = scores.get(id, 0)
@@ -759,7 +511,7 @@ func _begin_round() -> void:
 			arena.rt(t).revive(lives_for(id))
 			_started[id] = true
 	current.begin(self, ids)
-	arena.cue(&"round_start", 0, {"round": round_type_name(current.get_script())})
+	arena.cue(&"round_start", 0, {"round": RoundPicker.type_name(current.get_script())})
 	log_event("%s BEGINT" % current.title.to_upper(), Retro.TEAL)
 	_set_state(State.PLAYING)
 	arena.npc.mood("playing")
@@ -790,8 +542,8 @@ func _end_round() -> void:
 	var seq := _score_seq
 	if db and game_id != 0:
 		var type: String = current.get_script().resource_path.get_file().get_basename().trim_suffix("_round")
-		var rows := current.points.keys().filter(func(id): return arena.is_playing(id)).map(func(id): return {
-			"player_id": arena.player_db_id(id), "tile": id, "points": current.points[id],
+		var rows := current.points.keys().filter(func(id): return arena.players.is_playing(id)).map(func(id): return {
+			"player_id": arena.players.player_db_id(id), "tile": id, "points": current.points[id],
 			"score": survived.get(id, 0),
 			"lives": maxi(arena.tiles[id - 1].health + changes.get(id, 0), 0)})
 		db.save_round(game_id, round_number, type, rows)
@@ -807,11 +559,12 @@ func _end_round() -> void:
 		_result_left = result_time / tempo
 		while _result_left > 0.0:                 # (skip(): on to the scoreboard)
 			await get_tree().process_frame
-			_result_left -= get_process_delta_time()
+			if mode != Mode.PAUSED:
+				_result_left -= get_process_delta_time()
 		if state != State.SCOREBOARD or seq != _score_seq:
 			return
 	_show_scores("Scorebord", current.title, current.points, changes)
-	await get_tree().create_timer(lives_delay / tempo).timeout
+	await wait(lives_delay / tempo)
 	if state != State.SCOREBOARD or seq != _score_seq:
 		return
 	_lives_shown = true
@@ -827,7 +580,7 @@ func _end_round() -> void:
 func _life_plan(changes: Dictionary) -> Dictionary:
 	var plan := {}
 	for id in current.players:
-		if not arena.is_playing(id) or arena.tiles[id - 1].is_dead:
+		if not arena.players.is_playing(id) or arena.tiles[id - 1].is_dead:
 			continue
 		var health: int = arena.tiles[id - 1].health
 		var d: int = clampi(changes.get(id, 0), -1, 1)
@@ -843,14 +596,14 @@ func _life_plan(changes: Dictionary) -> Dictionary:
 ## (at 0: the extermination).
 func _apply_lives(plan: Dictionary) -> void:
 	for id in plan:                               # (what a checkpoint keeps: the animations take a while)
-		if arena.is_playing(id) and not arena.tiles[id - 1].is_dead:
+		if arena.players.is_playing(id) and not arena.tiles[id - 1].is_dead:
 			_target_lives[id] = clampi(arena.lives_after_hits(id) + plan[id], 0, CyberTile.HEART_COUNT)
 	_pending_lives = {}
 	_checkpoint()
 	var losers := []
 	var doomed := []
 	for id in plan:
-		if not arena.is_playing(id) or arena.tiles[id - 1].is_dead:
+		if not arena.players.is_playing(id) or arena.tiles[id - 1].is_dead:
 			continue
 		if plan[id] > 0:
 			arena.give_life(id)
@@ -875,8 +628,8 @@ func _finish_game() -> void:
 	if db and game_id != 0:
 		db.end_game(game_id)
 	game_id = 0
-	for id in arena.player_ids():
-		arena.leave(id)
+	for id in arena.players.player_ids():
+		arena.players.leave(id)
 	_enter_lobby()
 
 
@@ -886,7 +639,7 @@ func _enter_lobby() -> void:
 	screen_wall.set_timer("")
 	show_view({"kind": "players"})
 	arena.npc.mood("lobby")
-	_plan_rounds()                       # the web interface shows the coming rounds already
+	picker.plan()                        # the web interface shows the coming rounds already
 
 
 # ---------------------------------------------------------------- events
@@ -933,15 +686,15 @@ func on_result(tile_id: int, data: Dictionary) -> void:
 
 ## Called by the arena after a join or leave.
 func on_players_changed() -> void:
-	_plan_rounds()                       # e.g. fewer players: no planned personal rounds
+	picker.plan()                        # e.g. fewer players: no planned personal rounds
 	if power_show == "boot" and view.get("kind", "") == "power" and not Replica.client \
-			and (not arena.player_ids().is_empty() or arena.pending_count() > 0):
+			and (not arena.players.player_ids().is_empty() or arena.players.pending_count() > 0):
 		show_view({"kind": "players"})   # someone came in during the boot: their invite (the robot boots on)
 	match state:
 		State.LOBBY:
-			if mode == Mode.OPEN and auto_start_delay > 0.0 and not arena.player_ids().is_empty() and _lobby_timer < 0.0:
+			if mode == Mode.OPEN and auto_start_delay > 0.0 and not arena.players.player_ids().is_empty() and _lobby_timer < 0.0:
 				_lobby_timer = auto_start_delay
-			if arena.player_ids().is_empty():
+			if arena.players.player_ids().is_empty():
 				_lobby_timer = -1.0
 				screen_wall.set_timer("")
 			screen_wall.refresh_all()
@@ -950,12 +703,12 @@ func on_players_changed() -> void:
 				screen_wall.refresh_all()
 		_:
 			pass
-	for id in arena.player_ids():
+	for id in arena.players.player_ids():
 		if not scores.has(id):
 			scores[id] = 0  # activated mid-game: starts at 0 and plays from the next round
 			survived[id] = 0
 	for id in _started.keys():
-		if not arena.is_playing(id):  # left the game: forget lives and counters
+		if not arena.players.is_playing(id):  # left the game: forget lives and counters
 			_started.erase(id)
 			scores.erase(id)
 			survived.erase(id)
@@ -982,8 +735,8 @@ func set_mode(m: Mode) -> void:
 			return                                 # (the same again: the retained mode, a reconnect)
 		_close_pending = true                      # the round first: closed (and the robot shut down) after it
 		for id in range(1, arena.tiles.size() + 1):
-			if arena.is_pending(id):
-				arena.leave(id)                    # (no new players meanwhile)
+			if arena.players.is_pending(id):
+				arena.players.leave(id)                    # (no new players meanwhile)
 		log_event("SPEL SLUIT NA DEZE RONDE", Retro.AMBER)
 		mode_changed.emit(mode)
 		return
@@ -991,11 +744,11 @@ func set_mode(m: Mode) -> void:
 	mode = m
 	match m:
 		Mode.SETUP, Mode.CLOSED:
-			if state != State.LOBBY or not arena.player_ids().is_empty():
+			if state != State.LOBBY or not arena.players.player_ids().is_empty():
 				stop_game()              # everyone out, results saved
 			for id in range(1, arena.tiles.size() + 1):
-				if arena.is_pending(id):
-					arena.leave(id)      # cancel invites
+				if arena.players.is_pending(id):
+					arena.players.leave(id)      # cancel invites
 			_lobby_timer = -1.0
 			screen_wall.set_timer("")
 		Mode.PAUSED:
@@ -1050,7 +803,7 @@ func _on_power_moment(name: StringName) -> void:
 		&"booted", &"off":
 			if name == &"off":
 				arena.cue(&"off")
-				await get_tree().create_timer(7.0).timeout   # (GEWONNEN on the screens a while)
+				await wait(7.0)                        # (GEWONNEN on the screens a while)
 				if power_show != "shutdown":
 					return
 			power_show = ""
@@ -1069,7 +822,7 @@ func play_power_show(kind: String) -> void:
 		await arena.robot.power_moment
 		while power_show != "":
 			await get_tree().process_frame
-		await get_tree().create_timer(3.0).timeout
+		await wait(3.0)
 		if mode != Mode.CLOSED and not arena.robot.powered and power_show == "":
 			_power("boot")
 
@@ -1117,14 +870,6 @@ func on_player_left(tile_id: int) -> void:
 	_life_lost.erase(tile_id)
 
 
-func _load_records() -> void:
-	_records.clear()
-	if db:
-		for r in db.leaderboard():
-			_records[int(r.player_id)] = {"name": r.name, "best": int(r.best), "plays": int(r.plays),
-				"lives": int(r.get("lives", 0)), "points": int(r.get("points", 0))}
-
-
 ## The overview's timer: the screens' timer, else the countdown the screens
 ## show in their own view (the round intro's START OVER, the quiz's answer time).
 func overview_timer() -> String:
@@ -1140,77 +885,16 @@ func overview_timer() -> String:
 	return ""
 
 
-## The overall ranking of the event, live: every player's best play (from the
-## control server: most rounds survived, then most lives left, then the most
-## points - the tie-breakers), the players in the game right now with this play
-## when it is better. [{player_id, name, best, lives, points, plays, tile}] best
-## first (tile 0 = not playing now).
-## lives: {tile: lives} to rank with instead of the tiles' health now (the scoreboard:
-## the lives after this round's change, so the place matches the row order).
-func overall_ranking(lives := {}) -> Array:
-	if arena == null:                      # screens are built before the game is set up
-		return []
-	var rows := {}
-	for pid in _records:
-		var r: Dictionary = _records[pid]
-		rows[pid] = {"player_id": pid, "name": r.name, "best": r.best, "lives": r.get("lives", 0),
-			"points": r.get("points", 0), "plays": r.plays, "tile": 0}
-	for id in arena.player_ids():
-		var pid: int = arena.player_db_id(id)
-		if pid <= 0:
-			continue                       # joined without the app: not ranked
-		var row: Dictionary = rows.get(pid, {"player_id": pid, "name": arena.player_name(id), "best": 0,
-			"lives": 0, "points": 0, "plays": 0})
-		var now := {"best": survived.get(id, 0), "lives": int(lives.get(id, maxi(arena.tiles[id - 1].health, 0))), "points": scores.get(id, 0)}
-		if _better(now, row):
-			row.merge(now, true)
-		row.tile = id
-		rows[pid] = row
-	var out := rows.values()
-	out.sort_custom(_better)
-	return out
-
-
-## a ranks above b: more rounds survived, then more lives left, then more points.
-static func _better(a: Dictionary, b: Dictionary) -> bool:
-	if a.best != b.best:
-		return a.best > b.best
-	if a.get("lives", 0) != b.get("lives", 0):
-		return a.get("lives", 0) > b.get("lives", 0)
-	return a.get("points", 0) > b.get("points", 0)
-
-
-## Overall place of the player on this tile at this event (shared only when rounds,
-## lives and points are all equal); 0 = not ranked.
-func overall_rank(tile_id: int, lives := {}) -> int:
-	if arena == null:
-		return 0
-	var pid: int = arena.player_db_id(tile_id)
-	if pid <= 0:
-		return 0
-	var ranking := overall_ranking(lives)
-	var mine := ranking.filter(func(r): return r.player_id == pid)
-	if mine.is_empty():
-		return 0
-	return 1 + ranking.filter(func(r): return _better(r, mine[0])).size()
-
-
-## The player's record: most rounds survived (this play included).
-func record(tile_id: int) -> int:
-	var pid: int = arena.player_db_id(tile_id)
-	return maxi(_records.get(pid, {}).get("best", 0), survived.get(tile_id, 0))
-
-
 ## rank 0 = no rank (exterminated or left during the game).
 func _save_result(tile_id: int, rank: int) -> void:
-	if db == null or game_id == 0 or _result_saved.has(tile_id) or not arena.is_playing(tile_id):
+	if db == null or game_id == 0 or _result_saved.has(tile_id) or not arena.players.is_playing(tile_id):
 		return
 	_result_saved[tile_id] = true
 	var tile: CyberTile = arena.tiles[tile_id - 1]
-	db.save_result(game_id, {"player_id": arena.player_db_id(tile_id), "tile": tile_id,
-		"name": arena.player_name(tile_id), "score": survived.get(tile_id, 0), "lives": maxi(tile.health, 0),
+	db.save_result(game_id, {"player_id": arena.players.player_db_id(tile_id), "tile": tile_id,
+		"name": arena.players.player_name(tile_id), "score": survived.get(tile_id, 0), "lives": maxi(tile.health, 0),
 		"exterminated": tile.is_dead, "rank": rank if rank > 0 else null})
-	_load_records()
+	standings.load_records()
 
 
 func log_event(text: String, color := Retro.CREAM) -> void:
@@ -1226,6 +910,15 @@ func add_score(tile_id: int, n: int) -> int:
 
 # ---------------------------------------------------------------- helpers
 
+## Wait `seconds` of game time: it stands still while the game is paused (a
+## SceneTree timer would run on, and the game would go on behind the pause).
+func wait(seconds: float) -> void:
+	while seconds > 0.0:
+		await get_tree().process_frame
+		if mode != Mode.PAUSED:
+			seconds -= get_process_delta_time()
+
+
 func _set_state(s: State) -> void:
 	state = s
 	state_changed.emit(s)
@@ -1233,7 +926,7 @@ func _set_state(s: State) -> void:
 
 
 func _alive_players() -> Array:
-	return current.players.filter(func(id): return arena.is_playing(id) and not arena.tiles[id - 1].is_dead)
+	return current.players.filter(func(id): return arena.players.is_playing(id) and not arena.tiles[id - 1].is_dead)
 
 
 ## The players in the game, best first: most rounds survived, then most lives,
@@ -1245,17 +938,17 @@ func _ranking(round_points: Dictionary, changes := {}) -> Array:
 	var rows := []
 	var lives_after := {}
 	for id in scores:
-		if arena.is_playing(id):
+		if arena.players.is_playing(id):
 			lives_after[id] = maxi(arena.lives_after_hits(id) + int(changes.get(id, 0)), 0)
 	for id in scores:
-		if not arena.is_playing(id):
+		if not arena.players.is_playing(id):
 			continue
 		var before: int = arena.lives_after_hits(id)
 		var after: int = lives_after[id]
-		rows.append({"name": arena.player_name(id), "tile": id, "survived": survived.get(id, 0),
+		rows.append({"name": arena.players.player_name(id), "tile": id, "survived": survived.get(id, 0),
 			"lives": after, "lives_before": before, "change": changes.get(id, 0), "score": scores[id],
 			"delta": round_points.get(id, 0), "out": arena.tiles[id - 1].is_dead or after == 0,
-			"was_out": arena.tiles[id - 1].is_dead, "record": record(id), "rank": overall_rank(id, lives_after),
+			"was_out": arena.tiles[id - 1].is_dead, "record": standings.record(id), "rank": standings.rank(id, lives_after),
 			"new": state == State.SCOREBOARD and current != null and id not in current.players})
 	rows.sort_custom(func(a, b):
 		if a.survived != b.survived:
@@ -1273,7 +966,7 @@ func _show_round_ranking(changes: Dictionary) -> void:
 	var rows := []
 	for id in places:
 		var d: int = changes.get(id, 0)
-		rows.append({"name": arena.player_name(id), "tile": id, "place": places[id],
+		rows.append({"name": arena.players.player_name(id), "tile": id, "place": places[id],
 			"score": current.progress(id), "change": d, "doomed": arena.tiles[id - 1].health + d <= 0})
 	rows.sort_custom(func(a, b): return a.place < b.place if a.place != b.place else a.tile < b.tile)
 	var title := current.title
@@ -1301,118 +994,3 @@ func _celebrate_leader() -> void:
 	if rows.is_empty():
 		return
 	arena.npc.celebrate(int(rows[0].tile))
-
-
-# ---------------------------------------------------------------- settings
-
-## Every setting with its range, default and current value, per group ("game"
-## and each round type) - for the web interface:
-## [{group, title, items: [{key, label, min, max, step, unit, default, value}]}].
-func settings_schema() -> Array:
-	var groups := [{"group": "game", "title": "Spel", "items": GAME_TUNABLES.map(func(t): return t.merged(
-		{"default": _game_defaults.get(t.key), "value": _get_game_setting(t.key)}))}]
-	for type in ROUND_TYPES:
-		var r: GameRound = type.new()
-		var own: Dictionary = settings.get(round_type_name(type), {})
-		groups.append({"group": round_type_name(type), "title": r.title, "items": r.tunables().map(func(t):
-			return t.merged({"default": r.get(t.key), "value": own.get(t.key, r.get(t.key))}))})
-	groups.append({"group": "randomizer", "title": "Randomizer", "items": _randomizer_tunables().map(func(t):
-		return t.merged({"default": _game_defaults.get(t.key), "value": _get_game_setting(t.key)}))})
-	groups.append({"group": "questions", "title": "Vragen", "items": _question_tunables().map(func(t):
-		return t.merged({"default": 1.0 if t.key.begins_with("cat:") else _game_defaults.get(t.key),
-			"value": _get_game_setting(t.key)}))})
-	groups.append({"group": "sound", "title": "Geluid", "items": arena.sound.tunables().map(func(t): return t.merged(
-		{"default": _sound_defaults.get(t.key), "value": arena.sound.get(t.key)}))})
-	groups.append({"group": "light", "title": "Licht", "items": arena.lights.tunables().map(func(t): return t.merged(
-		{"default": _light_defaults.get(t.key), "value": arena.lights.get(t.key)}))})
-	groups.append({"group": "voice", "title": "Voorlezen", "items": arena.narrator.tunables().map(func(t): return t.merged(
-		{"default": _voice_defaults.get(t.key), "value": arena.narrator.get(t.key)}))})
-	return groups
-
-
-## The operator's settings (all groups at once; missing keys: the default).
-## The game ones apply at once, the round ones from the next round.
-func apply_settings(values: Dictionary) -> void:
-	var clean := {}
-	for g in settings_schema():
-		var given: Dictionary = values.get(g.group, {}) if values.get(g.group) is Dictionary else {}
-		var out := {}
-		for t in g.items:
-			if given.has(t.key) and (given[t.key] is float or given[t.key] is int):
-				var v := clampf(float(given[t.key]), t.min, t.max)
-				out[t.key] = roundi(v) if t.default is int else v
-		clean[g.group] = out
-	settings = clean
-	for t in GAME_TUNABLES:
-		_set_game_setting(t.key, clean.game.get(t.key, _game_defaults[t.key]))
-	for t in _randomizer_tunables():
-		_set_game_setting(t.key, clean.randomizer.get(t.key, _game_defaults[t.key]))
-	category_weights.clear()
-	for t in _question_tunables():
-		_set_game_setting(t.key, clean.questions.get(t.key, 1.0 if t.key.begins_with("cat:") else _game_defaults[t.key]))
-	for t in arena.sound.tunables():
-		arena.sound.set(t.key, clean.sound.get(t.key, _sound_defaults[t.key]))
-	for t in arena.lights.tunables():
-		arena.lights.set(t.key, clean.light.get(t.key, _light_defaults[t.key]))
-	for t in arena.narrator.tunables():
-		arena.narrator.set(t.key, clean.voice.get(t.key, _voice_defaults[t.key]))
-	arena.lights.refresh()
-	_plan_rounds()
-	settings_changed.emit()
-
-
-func _randomizer_tunables() -> Array:
-	var items := ROUND_TYPES.map(func(t): return GameRound.setting(
-		"use_" + round_type_name(t), "In de randomizer: " + t.new().title + " (1 aan, 0 uit)", 0, 1, 1))
-	items.append_array(ROUND_TYPES.map(func(t): return GameRound.setting(
-		"weight_" + round_type_name(t), "Gewicht " + t.new().title, 0, 10, 0.5)))
-	items.append(GameRound.setting("drought", "Extra kans per ronde niet gespeeld (x gewicht)", 0, 3, 0.1))
-	items.append(GameRound.setting("mercy", "Sturing door levens (0 = uit)", 0, 2, 0.1))
-	return items
-
-
-## The categories of the questions there are now (database / JSON).
-func _question_tunables() -> Array:
-	var items := [GameRound.setting("category_drought", "Extra kans per vraag categorie niet gevraagd (x gewicht)", 0, 3, 0.1)]
-	var cats := {}
-	for q in all_questions():
-		cats[str(q.get("category", ""))] = true
-	var names := cats.keys()
-	names.sort()
-	for c in names:
-		items.append(GameRound.setting("cat:" + c, "Gewicht " + (c if c != "" else "(geen categorie)"), 0, 10, 0.5))
-	return items
-
-
-func _get_game_setting(key: String):
-	if key.begins_with("cat:"):
-		return float(category_weights.get(key.trim_prefix("cat:"), 1.0))
-	if key.begins_with("weight_"):
-		return round_weights.get(key.trim_prefix("weight_"), 1.0)
-	if key.begins_with("use_"):
-		return 0 if randomizer_off.has(key.trim_prefix("use_")) else 1
-	if key.begins_with("lives_age_"):
-		return lives_by_age.get(int(key.trim_prefix("lives_age_")), lives)
-	if key in ["clip_wait", "clip_time"]:
-		return arena.get(key)
-	return get(key)
-
-
-func _set_game_setting(key: String, value) -> void:
-	if key.begins_with("weight_"):
-		round_weights[key.trim_prefix("weight_")] = float(value)
-	elif key.begins_with("use_"):
-		if int(value) == 0:
-			randomizer_off[key.trim_prefix("use_")] = true
-		else:
-			randomizer_off.erase(key.trim_prefix("use_"))
-	elif key.begins_with("cat:"):
-		category_weights[key.trim_prefix("cat:")] = float(value)
-	elif key.begins_with("lives_age_"):
-		lives_by_age[int(key.trim_prefix("lives_age_"))] = int(value)
-	elif key in ["clip_wait", "clip_time"]:
-		arena.set(key, float(value))
-	elif get(key) is int:
-		set(key, int(value))
-	else:
-		set(key, float(value))

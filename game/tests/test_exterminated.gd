@@ -6,7 +6,7 @@ extends Node
 
 const ARENA := preload("res://scenes/arena.tscn")
 
-var arena: Node3D
+var arena: Arena
 var game: GameManager
 var failures := 0
 var intros := 0
@@ -35,14 +35,14 @@ func _run() -> void:
 			arena.tiles[id - 1].press_button(b)
 			await _wait(0.2)
 	await _wait(0.5)
-	check(arena.player_ids() == [1, 2], "Anna and Bram playing")
+	check(arena.players.player_ids() == [1, 2], "Anna and Bram playing")
 
-	game.apply_settings({"quiz": {"question_time": 3, "read_time": 1}})
+	game.settings.apply({"quiz": {"question_time": 3, "read_time": 1}})
 	game.intro_time = 1.0
 	game.scoreboard_time = 1.0
 	game.result_time = 0.0
-	game.random_rounds = false
-	game.round_types = [QuizRound]
+	game.picker.random_rounds = false
+	game.picker.round_types = [QuizRound]
 	game.start_game()
 	await _until(func(): return game.state == GameManager.State.PLAYING)
 	for id in [1, 2]:
@@ -55,8 +55,10 @@ func _run() -> void:
 	var intros_then := intros
 	print("--- no new round: the scoreboard waits until the tiles are free, then the lobby")
 	await _until(func(): return game.state == GameManager.State.LOBBY, 90.0)
-	check(intros == intros_then, "no new round started after everyone was exterminated (%d intros)" % (intros - intros_then))
-	check(game.state == GameManager.State.LOBBY and arena.player_ids().is_empty(), "back to the lobby, the tiles free")
+	check(intros == intros_then,
+		"no new round started after everyone was exterminated (%d intros)" % (intros - intros_then))
+	check(game.state == GameManager.State.LOBBY and arena.players.player_ids().is_empty(),
+		"back to the lobby, the tiles free")
 	check(game.game_id == 0, "the game ended")
 	print("DONE: %d failure(s)" % failures)
 	get_tree().quit(1 if failures else 0)

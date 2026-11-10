@@ -28,7 +28,7 @@ const BOLT_SPEED := 4.5          # m/s
 const SCALE := 1.25              # the model a bit bigger than life: seen from across the room
 
 var slot := 0
-var arena: Node3D                # for its clock (follows --fixed-fps) and the robot
+var arena: Arena                # for its clock (follows --fixed-fps) and the robot
 var player_color := Color(0.2, 0.75, 1.0):   # the thruster glow
 	set(c):
 		player_color = c

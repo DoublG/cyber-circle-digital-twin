@@ -11,14 +11,14 @@ func _ready() -> void:
 	for f in [DB_FILE, DB_FILE + "-wal", DB_FILE + "-shm"]:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(f))
 	get_window().size = Vector2i(1920, 1080)
-	var arena: Node3D = ARENA.instantiate()
+	var arena: Arena = ARENA.instantiate()
 	add_child(arena)
 	var game: GameManager = arena.game
 	game.use_database(DB_FILE)
 	game.intro_time = 1.0
 	game.auto_start_delay = 0.0
-	game.random_rounds = false
-	game.round_types = [CycloneRound]
+	game.picker.random_rounds = false
+	game.picker.round_types = [CycloneRound]
 	var db: GameDb = game.db
 	var gid := db.start_game()
 	var ids := {}
@@ -28,9 +28,9 @@ func _ready() -> void:
 		for score in p[2]:
 			db.save_result(gid, {"player_id": ids[p[0]], "tile": 1, "name": p[0], "score": score, "lives": 0,
 				"exterminated": true})
-	game._load_records()
+	game.standings.load_records()
 	for p in [[1, "Anna"], [2, "Bram"], [3, "Gijs"], [4, "Daan"]]:
-		arena.join(p[0], p[1], 10, ids[p[1]])
+		arena.players.join(p[0], p[1], 10, ids[p[1]])
 	await get_tree().create_timer(1.0).timeout
 	game.start_game()
 	while game.state != GameManager.State.PLAYING:

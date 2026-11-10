@@ -8,7 +8,7 @@ extends Node
 
 const ARENA := preload("res://scenes/arena.tscn")
 
-var arena: Node3D
+var arena: Arena
 var out := ""
 
 
@@ -45,8 +45,9 @@ func _ready() -> void:
 		return
 	await _wait(3.0)                          # (the snapshot; the display builds its screens)
 	await _moment("lobby")
-	arena.game.random_rounds = false
-	arena.game.round_types = [preload("res://scripts/game/quiz_round.gd"), preload("res://scripts/game/rhythm_round.gd")]
+	arena.game.picker.random_rounds = false
+	arena.game.picker.round_types = [preload("res://scripts/game/quiz_round.gd"),
+		preload("res://scripts/game/rhythm_round.gd")]
 	arena.game.start_game()
 	await _wait(2.0)
 	await _moment("intro")
@@ -88,8 +89,8 @@ func _perf() -> void:
 		await get_tree().process_frame
 	await _wait(12.0)
 	_report("lobby")
-	arena.game.random_rounds = false
-	arena.game.round_types = [preload("res://scripts/game/cyclone_round.gd")]
+	arena.game.picker.random_rounds = false
+	arena.game.picker.round_types = [preload("res://scripts/game/cyclone_round.gd")]
 	arena.game.start_game()
 	while arena.game.state != GameManager.State.PLAYING:
 		await _wait(0.2)

@@ -5,7 +5,8 @@ extends SceneTree
 ## Run: godot --headless --path . -s tests/compare_shots.gd -- DIR
 
 func _init() -> void:
-	var dir: String = OS.get_cmdline_user_args()[0] if OS.get_cmdline_user_args().size() > 0 else "res://tests/shots/mirror"
+	var args := OS.get_cmdline_user_args()
+	var dir: String = args[0] if args.size() > 0 else "res://tests/shots/mirror"
 	var fails := 0
 	var pairs := 0
 	var files := DirAccess.get_files_at(dir)
@@ -41,6 +42,7 @@ func _init() -> void:
 		var ok := mean < 6.0 and share < 4.0           # (spinning rotors, typing texts: a frame apart)
 		pairs += 1
 		fails += 0 if ok else 1
-		print("%s %s: mean diff %.2f/255, %.2f%% pixels differ a lot" % ["OK  " if ok else "FAIL", f.get_basename(), mean, share])
+		print("%s %s: mean diff %.2f/255, %.2f%% pixels differ a lot"
+			% ["OK  " if ok else "FAIL", f.get_basename(), mean, share])
 	print("%d pairs, %d failures" % [pairs, fails])
 	quit(1 if fails > 0 or pairs == 0 else 0)

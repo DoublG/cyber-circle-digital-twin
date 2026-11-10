@@ -22,9 +22,20 @@ var pause_ms := 1200
 var points_per_level := 1        # a sequence of n steps right: n x this
 
 var program := {}
-var state := {}                  # tile_id -> {phase, level, index, fails, best, reason, text}
+var state: Dictionary[int, PlayerState] = {}   # per tile
 var _sent := {}
 var _last_n := {}                # tile_id -> last result counter seen
+
+
+## One player's round.
+class PlayerState extends RoundState:
+	var phase := "pause"         # pause / watch / repeat / done
+	var level := 0               # the length of the sequence now
+	var index := 0               # how far in it (watching, repeating)
+	var fails := 0
+	var best := 0                # the longest sequence repeated
+	var reason := ""             # done: why ("complete", "time")
+	var text := "KLAAR..."       # the line on the player's screen
 
 
 func _init() -> void:
@@ -33,7 +44,9 @@ func _init() -> void:
 	mode = "personal"
 	on_tile = true
 	duration = 90.0
-	rules = "Je tegel toont een reeks iconen: onthoud ze en druk ze in dezelfde volgorde.\nElke keer komt er een icoon bij. Fout of te traag? Dan begin je opnieuw bij het begin.\nNa de ronde: langste reeks +1 leven, kortste -1 leven."
+	rules = ("Je tegel toont een reeks iconen: onthoud ze en druk ze in dezelfde volgorde.\n"
+		+ "Elke keer komt er een icoon bij. Fout of te traag? Dan begin je opnieuw bij het begin.\n"
+		+ "Na de ronde: langste reeks +1 leven, kortste -1 leven.")
 
 
 func tunables() -> Array:
@@ -78,8 +91,8 @@ func _start() -> void:
 	if program.is_empty():
 		program = make_program()
 	for id in players:
-		state[id] = {"phase": "pause", "level": start_level, "index": 0, "fails": 0,
-			"best": 0, "reason": "", "text": "KLAAR..."}
+		state[id] = PlayerState.new()
+		state[id].level = start_level
 		_last_n[id] = 0
 		_upload(id)
 	for id in players:
@@ -98,10 +111,10 @@ func result(id: int, r: Dictionary) -> void:
 	if r.get("program") != program.id or int(r.get("n", 0)) <= _last_n[id]:
 		return
 	_last_n[id] = int(r.n)
-	var st: Dictionary = state[id]
+	var st := state[id]
 	if r.get("done", false):
 		st.phase = "done"
-		st.reason = r.get("reason", "")
+		st.reason = str(r.get("reason", ""))
 		st.best = maxi(st.best, int(r.get("best", 0)))
 		st.text = {"complete": "ALLES GOED!", "time": "TIJD OP"}.get(st.reason, "KLAAR")
 		return
@@ -119,7 +132,7 @@ func result(id: int, r: Dictionary) -> void:
 		"press":
 			st.index = int(r.index) + 1
 			var c := Color(program.sequence[int(r.index)].color)
-			game.arena.send_packet(id, c)
+			game.arena.cables.send_packet(id, c)
 		"ok":
 			st.phase = "pause"
 			st.best = maxi(st.best, level)
@@ -134,7 +147,7 @@ func result(id: int, r: Dictionary) -> void:
 			st.level = int(r.get("restart", start_level))
 			st.text = "TE TRAAG!" if str(r.button) == "" else "FOUT!"
 			game.screen_wall.popup(id, st.text, Retro.BAD)
-			game.arena.send_packet(id, Color.RED, Callable(), false)
+			game.arena.cables.send_packet(id, Color.RED, Callable(), false)
 
 
 func finish() -> void:
@@ -151,11 +164,16 @@ func replica_keys() -> Array:              # (what its overlay reads: Replica)
 	return ["state"]
 
 
+## (Its per-player state goes to the display nodes as plain data: RoundState.)
+func state_fields() -> Dictionary:
+	return {"state": PlayerState}
+
+
 func make_player_overlay(id: int) -> Control:
 	var line := StatusLine.new()
 	line.source = func():
-		var st: Dictionary = state.get(id, {})
-		if st.is_empty():
+		var st: PlayerState = state.get(id)
+		if st == null:
 			return ""
 		if st.phase == "done":
 			return st.text

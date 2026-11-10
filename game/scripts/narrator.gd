@@ -39,12 +39,19 @@ var enabled := 0                       # 1: read aloud (0: off - the lines still
 var output := 1                        # 1 stereo, 2 the centre channel (5.1 / 7.1); (0: off, as before)
 var volume := 100                      # %
 var extra_dir := ""                    # --voice=DIR
+var arena: Arena                       # (setup; none: a tool that only reads the lines)
+var wall: ScreenWall                   # (which screen shows which tile)
 
 var _player: AudioStreamPlayer
 var _queue: Array[AudioStream] = []
 var _missing := {}                     # name -> true: reported once
 var _cache := {}                       # name -> AudioStream (or null: no file)
-var wall: ScreenWall                   # (which screen shows which tile)
+
+
+## Before it enters the tree: the arena it reads for.
+func setup(arena_node: Arena) -> void:
+	arena = arena_node
+	wall = arena.screen_wall
 
 
 func _ready() -> void:
@@ -85,7 +92,7 @@ func say(name: String, text: String, kind: String, data := {}, interrupt := fals
 		return
 	if not is_on():
 		return
-	var sound: SoundBoard = get_parent().get("sound") if get_parent() else null
+	var sound: SoundBoard = arena.sound if arena else null
 	if sound == null or SoundBoard.plays_on_displays(sound.where_to):
 		Replica.relay_to_screens(line.get("screens", []), "narrator", &"play_line", [name, interrupt])
 	if sound and not sound.plays_here():
@@ -198,14 +205,14 @@ static func invite_line(tile_id: int) -> String:
 ## in the database now, the rounds with the operator's names and rules).
 static func lines(game: GameManager) -> Array:
 	var out := []
-	for q in game.all_questions():
+	for q in game.questions.all():
 		var qn := question_name(q)
 		out.append({"name": qn, "text": str(q.question), "kind": "question"})
 		for n in mini(q.answers.size(), 4):
 			out.append({"name": "%s_answer_%d" % [qn, n + 1], "text": answer_line(q, n), "kind": "answer"})
-	for t in GameManager.ROUND_TYPES:
+	for t in RoundPicker.ROUND_TYPES:
 		var r: GameRound = t.new()
-		var type := game.round_type_name(t)
+		var type := RoundPicker.type_name(t)
 		Texts.dress(r, type)
 		out.append({"name": "round_" + type, "text": "%s. %s" % [r.title, r.rules], "kind": "round"})
 	out.append({"name": "time_up", "text": "Tijd om!", "kind": "time_up"})

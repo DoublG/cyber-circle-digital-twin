@@ -18,7 +18,7 @@ extends Node
 ## exterminations one after the other, the smoke).
 signal hardware(cmd: Dictionary)
 
-var arena: Node3D
+var arena: Arena
 var robot: CyberRobot
 
 
@@ -27,7 +27,8 @@ func _ev(method: StringName, args: Array) -> void:
 
 
 func _hw(cmd: Dictionary) -> void:
-	if not Replica.client and not cmd.is_empty():                       # (the master: a display node only plays the choreography)
+	# (the master: a display node only plays the choreography)
+	if not Replica.client and not cmd.is_empty():
 		hardware.emit(cmd)
 
 
@@ -51,7 +52,7 @@ func _side(id: int) -> int:
 func press(tile_id: int, color: Color) -> void:
 	_ev(&"press", [tile_id, color])
 	_hw({"look": _side(tile_id)})
-	arena.packet(tile_id, color, func(): robot.look_at_side(_side(tile_id)))
+	arena.cables.packet(tile_id, color, func(): robot.look_at_side(_side(tile_id)))
 
 
 ## A player activated their tile: it flashes in their colour, the robot greets them.
@@ -63,7 +64,7 @@ func greet(tile_id: int, color: Color) -> void:
 	get_tree().create_timer(0.6).timeout.connect(func():
 		if is_instance_valid(tile) and not tile.idle and not tile.is_dead:
 			tile.clear_ring())
-	arena.packet(tile_id, color, func(): robot.look_at_side(_side(tile_id)))
+	arena.cables.packet(tile_id, color, func(): robot.look_at_side(_side(tile_id)))
 
 
 ## A tile's good result (a round): its colour runs to the robot, that side glows.
@@ -73,9 +74,9 @@ func feedback(tile_id: int, color: Color, hold := 0.25, to_robot := true) -> voi
 	if to_robot:
 		_hw({"glow": {"side": _side(tile_id), "color": _hex(color), "ms": int(hold * 1000) + 300}})
 	if not to_robot:
-		arena.packet(tile_id, color, Callable(), false)
+		arena.cables.packet(tile_id, color, Callable(), false)
 		return
-	arena.packet(tile_id, color, func():
+	arena.cables.packet(tile_id, color, func():
 		robot.set_side_glow(_side(tile_id), color, 2.0)
 		await get_tree().create_timer(hold).timeout
 		robot.set_side_glow(_side(tile_id), Color.BLACK))
@@ -102,7 +103,7 @@ func players_attack(tile_ids: Array, everyone := false, color := Color(0.2, 1.0,
 		else:
 			robot.take_hit(sides, color)
 	for id in tile_ids:
-		arena.packet(id, color, on_arrive)
+		arena.cables.packet(id, color, on_arrive)
 
 
 ## The robot attacks: it turns (one target), charges the sides facing all
@@ -126,10 +127,10 @@ func attack(targets: Array, color: Color, shielded: Array, on_charge := Callable
 	for id in targets:
 		var tile := _tile(id)
 		var blocked: bool = id in shielded
-		arena.packet(id, color, func():
+		arena.cables.packet(id, color, func():
 			if blocked:
 				tile.play_block(color)
-				arena.packet(id, CyberTile.SHIELD_COLOR)   # bounced back to the robot
+				arena.cables.packet(id, CyberTile.SHIELD_COLOR)   # bounced back to the robot
 			else:
 				tile.play_hit(color)
 			if on_land.is_valid():

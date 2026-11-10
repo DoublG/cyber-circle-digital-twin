@@ -9,7 +9,7 @@ var _fails := 0
 
 
 func _ready() -> void:
-	var arena: Node3D = ARENA.instantiate()
+	var arena: Arena = ARENA.instantiate()
 	add_child(arena)
 	arena.game.use_database("")
 	await get_tree().process_frame

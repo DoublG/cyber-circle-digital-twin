@@ -4,7 +4,7 @@ extends Node
 
 const ARENA := preload("res://scenes/arena.tscn")
 
-var arena: Node3D
+var arena: Arena
 var game: GameManager
 
 
@@ -17,8 +17,8 @@ func _ready() -> void:
 	game.use_database("")                 # screenshots: no database writes
 	game.intro_time = 2.0
 	game.auto_start_delay = 0.0
-	game.random_rounds = false
-	game.round_types = [CycloneRound, QuizRound]
+	game.picker.random_rounds = false
+	game.picker.round_types = [CycloneRound, QuizRound]
 	_run()
 
 
@@ -72,7 +72,8 @@ func _run() -> void:
 
 	# a question with a video, then one with a long text
 	var all: Array = JSON.parse_string(FileAccess.get_file_as_string(QuizRound.QUESTIONS_FILE))
-	quiz._questions = all.filter(func(q): return q.get("id", "") in ["voorbeeld_video", "voorbeeld_afbeelding", "voorbeeld_tekst"])
+	quiz._questions = all.filter(
+		func(q): return q.get("id", "") in ["voorbeeld_video", "voorbeeld_afbeelding", "voorbeeld_tekst"])
 	quiz._questions.sort_custom(func(a, b): return a.id > b.id)          # video, then tekst ...
 	quiz._questions = [quiz._questions[0], quiz._questions[2], quiz._questions[1]]   # video, picture, long text
 	quiz._stop_video()

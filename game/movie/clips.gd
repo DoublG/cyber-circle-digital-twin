@@ -35,7 +35,7 @@ const COLORS := ["#ff8800", "#33ccff", "#ff44cc", "#88ff00", "#ffee00", "#aa55ff
 const NAMES := ["Anna", "Bram", "Cleo", "Daan", "Eva", "Finn", "Gust", "Hanne", "Ilias", "Jules",
 	"Kato", "Lotte", "Mohammed", "Mila", "Ravi", "Noor", "Sem", "Tess"]
 
-var arena: Node3D
+var arena: Arena
 var game: GameManager
 var bots: DemoBots
 var _caption: Label
@@ -60,8 +60,8 @@ func _ready() -> void:
 	game = arena.game
 	game.use_database("")
 	game.auto_start_delay = 0.0
-	game.random_rounds = false
-	game.apply_settings({"game": {"intro_time": 5, "result_time": 7, "scoreboard_time": 7},
+	game.picker.random_rounds = false
+	game.settings.apply({"game": {"intro_time": 5, "result_time": 7, "scoreboard_time": 7},
 		"quiz": {"question_time": 10, "read_time": 2.5}, "rhythm": {"duration": 25},
 		"cyclone": {"duration": 25}, "simon": {"duration": 25}})
 	game.auto_start_delay = 0.0                   # (the settings put it back to 20 s): the clips start the rounds
@@ -119,12 +119,12 @@ func _gallery() -> void:
 	for id in [2, 6, 10, 14]:
 		await _activate(id, 0.1)
 	for i in 5:
-		arena.join([1, 4, 8, 11, 13][i], NAMES[3 + i], 12 if i % 2 else 7)
-	arena.join(16, NAMES[15], 12)
+		arena.players.join([1, 4, 8, 11, 13][i], NAMES[3 + i], 12 if i % 2 else 7)
+	arena.players.join(16, NAMES[15], 12)
 	say("8 players on the tiles, 2 mobile players on drones: the lobby")
 	await _wait(4.0)
 	await _snap("lobby_players")
-	game.round_types = [QuizRound, CycloneRound, ReactionRound, SimonRound, ZwartePietRound, RhythmRound]
+	game.picker.round_types = [QuizRound, CycloneRound, ReactionRound, SimonRound, ZwartePietRound, RhythmRound]
 	_bots(false)
 	game.start_game()
 
@@ -141,7 +141,7 @@ func _gallery() -> void:
 	await _snap("quiz_read")
 	await _until(func(): return quiz._phase == "question")
 	var correct := int(quiz._questions[quiz._index].correct)
-	for id in arena.player_ids():
+	for id in arena.players.player_ids():
 		arena.tiles[id - 1].press_button(QuizRound.ANSWER_BUTTONS[correct if id % 3 else (correct + 1) % 4])
 	say("Quiz - the answers and the countdown; who answered already")
 	await _wait(2.0)
@@ -250,7 +250,7 @@ func _joining() -> void:
 	await _activate(14, 0.4)
 	await _wait(5.0)
 	say("The rounds start by themselves: intro with the rules, then the quiz")
-	game.round_types = [QuizRound, CycloneRound]
+	game.picker.round_types = [QuizRound, CycloneRound]
 	_bots(false)
 	game.start_game()
 	await _until(func(): return game.state == GameManager.State.PLAYING)
@@ -270,8 +270,8 @@ func _joining() -> void:
 func _few() -> void:
 	game.set_mode(GameManager.Mode.OPEN)
 	for i in 3:
-		arena.join([1, 5, 9][i], NAMES[i], 12)
-	game.round_types = [QuizRound, RhythmRound]
+		arena.players.join([1, 5, 9][i], NAMES[i], 12)
+	game.picker.round_types = [QuizRound, RhythmRound]
 	_bots(false)
 	say("3 players: the empty places on the screens show how to join")
 	await _wait(4.0)
@@ -286,7 +286,7 @@ func _few() -> void:
 	say("Ritme: icons fall down the lanes - in the band +1, on the line +3")
 	await _until(func(): return game.state == GameManager.State.SCOREBOARD, 40.0)
 	say("UITSLAG: the places of the round, +1 life for the winner, -1 for the last")
-	await _until(func(): return not game.screen_wall.shared_views.is_empty() and game.screen_wall.shared_views[0] is ScoreboardView, 20.0)
+	await _until(_scoreboard_shown, 20.0)
 	say("Then the scoreboard with the lives changing")
 	await _wait(8.0)
 
@@ -294,12 +294,12 @@ func _few() -> void:
 func _full() -> void:
 	game.set_mode(GameManager.Mode.OPEN)
 	for i in 13:
-		arena.join(i + 1, NAMES[i], 12 if i % 4 else 8)
+		arena.players.join(i + 1, NAMES[i], 12 if i % 4 else 8)
 	for i in 5:
-		arena.join(14 + i, NAMES[13 + i], 12)
+		arena.players.join(14 + i, NAMES[13 + i], 12)
 	say("Completely full: 13 players on the tiles and 5 mobile players on drones (18)")
 	await _wait(6.0)
-	game.round_types = [CycloneRound, QuizRound]
+	game.picker.round_types = [CycloneRound, QuizRound]
 	_bots(false)
 	game.start_game()
 	await _until(func(): return game.state == GameManager.State.PLAYING)
@@ -311,12 +311,12 @@ func _full() -> void:
 		arena.tiles[id - 1].health = 1
 	await _until(func(): return game.state == GameManager.State.SCOREBOARD, 20.0)
 	say("UITSLAG with 18 players: two columns; three players on their last life (skull)")
-	await _until(func(): return not game.screen_wall.shared_views.is_empty() and game.screen_wall.shared_views[0] is ScoreboardView, 20.0)
+	await _until(_scoreboard_shown, 20.0)
 	say("Scoreboard: GEËXTERMINEERD - the robot fires at the tiles and the drone, one after the other")
 	await _until(func(): return game.state == GameManager.State.PLAYING and game.current is QuizRound, 40.0)
 	say("The next round already runs while the exterminations finish: a quiz with every player's card")
 	var right := {}
-	for id in arena.player_ids():
+	for id in arena.players.player_ids():
 		if not arena.tiles[id - 1].is_dead:
 			right[id] = id % 3 != 0
 	await _answer(game.current, right, 0.15)
@@ -326,9 +326,9 @@ func _full() -> void:
 
 func _mobile() -> void:
 	game.set_mode(GameManager.Mode.OPEN)
-	game.round_types = [QuizRound, SimonRound]
+	game.picker.round_types = [QuizRound, SimonRound]
 	for i in 3:
-		arena.join([2, 6, 10][i], NAMES[i], 12)
+		arena.players.join([2, 6, 10][i], NAMES[i], 12)
 	say("Mobile players (wheelchair, blind with a handheld tile, tablet) are each set up at a station")
 	await _wait(3.0)
 	for i in 3:
@@ -354,7 +354,7 @@ func _mobile() -> void:
 	say("Simon, on the tile: the drone camera swings over the drone and looks down at its LEDs")
 	var simon: SimonRound = game.current
 	await _until(func(): return simon.time_left < 1.5, 60.0)
-	for id in arena.player_ids():
+	for id in arena.players.player_ids():
 		simon.state[id].best = 3 if id != 15 else 0     # M2 last ...
 	arena.tiles[14].health = 1                          # ... on the last life
 	await _until(func(): return game.state == GameManager.State.SCOREBOARD, 20.0)
@@ -365,16 +365,16 @@ func _mobile() -> void:
 func _leaving() -> void:
 	game.set_mode(GameManager.Mode.OPEN)
 	for i in 6:
-		arena.join([1, 3, 5, 8, 10, 12][i], NAMES[i], 12)
-	arena.join(17, NAMES[14], 12)
-	game.round_types = [ReactionRound, QuizRound]
+		arena.players.join([1, 3, 5, 8, 10, 12][i], NAMES[i], 12)
+	arena.players.join(17, NAMES[14], 12)
+	game.picker.round_types = [ReactionRound, QuizRound]
 	_bots(false)
 	await _wait(4.0)
 	game.start_game()
 	await _until(func(): return game.state == GameManager.State.PLAYING)
 	say("Reactie - halfway through, a player just walks away: their view leaves the screen")
 	await _wait(8.0)
-	arena.leave(3)
+	arena.players.leave(3)
 	await _wait(5.0)
 	var r: ReactionRound = game.current
 	await _until(func(): return r.time_left < 1.5, 60.0)
@@ -387,8 +387,8 @@ func _leaving() -> void:
 	await _until(func(): return game.state == GameManager.State.PLAYING, 40.0)
 	await _wait(16.0)
 	say("The others leave one by one - the last one gone: the game goes back to idle")
-	for id in arena.player_ids():
-		arena.leave(id)
+	for id in arena.players.player_ids():
+		arena.players.leave(id)
 		await _wait(1.5)
 	await _wait(8.0)
 
@@ -477,12 +477,18 @@ func _answer(quiz: QuizRound, right: Dictionary, gap := 0.5) -> void:
 	await _wait(1.5)
 	var correct := int(quiz._questions[quiz._index].correct)
 	for id in right:
-		if arena.is_playing(id) and id in quiz.players:
+		if arena.players.is_playing(id) and id in quiz.players:
 			var answer: int = correct if right[id] else (correct + 1 + id % 3) % 4
 			arena.tiles[id - 1].press_button(QuizRound.ANSWER_BUTTONS[answer])
 			await _wait(gap)
 	await _until(func(): return quiz._phase == "reveal", 40.0)
 	await _wait(4.0)
+
+
+## The screens show the scoreboard (after the round's UITSLAG).
+func _scoreboard_shown() -> bool:
+	var views: Array = game.screen_wall.shared_views
+	return not views.is_empty() and views[0] is ScoreboardView
 
 
 func _until(cond: Callable, timeout := 60.0) -> void:

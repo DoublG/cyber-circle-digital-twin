@@ -35,13 +35,14 @@ var late_grace := 0.3                # s: wait for a kick stamped before the end
 
 var holder := 0                      # tile with the light (0 = none: between bursts)
 var speed := 0.0
+var late_kicks := 0                  # kicks that counted though they arrived after the end
+var bursts := 0
+
 var _left := 0.0                     # s until the current burst ends (hidden)
 var _got_at := 0.0                   # round clock when the holder got the light
 var _clock := 0.0
 var _wait := 0.0                     # pause between bursts
 var _end_at := -1.0                  # the countdown ended at this moment: waiting for late kicks
-var late_kicks := 0                  # kicks that counted though they arrived after the end
-var bursts := 0
 
 
 func _init() -> void:
@@ -49,7 +50,10 @@ func _init() -> void:
 	mode = "personal"
 	on_tile = true
 	duration = 60.0
-	rules = "Een lampje draait rond op een tegel. Heb jij het? Schop het snel weg!\nLinks (vierkant of kruis) of rechts (driehoek of cirkel) naar je buur.\nNiemand weet wanneer de tijd om is: wie het lampje dan heeft verliest een punt.\nNa de ronde: meeste punten +1 leven, minste punten -1 leven."
+	rules = ("Een lampje draait rond op een tegel. Heb jij het? Schop het snel weg!\n"
+		+ "Links (vierkant of kruis) of rechts (driehoek of cirkel) naar je buur.\n"
+		+ "Niemand weet wanneer de tijd om is: wie het lampje dan heeft verliest een punt.\n"
+		+ "Na de ronde: meeste punten +1 leven, minste punten -1 leven.")
 
 
 func tunables() -> Array:
@@ -119,7 +123,7 @@ func button(id: int, b: StringName) -> void:
 	# the faster the kick, the faster the light spins from now on
 	speed = minf(max_speed, speed * (1.0 + 0.35 * clampf(1.0 - reaction / 1.5, 0.0, 1.0)) + 1.0)
 	var to := _neighbour(id, 1 if b in LEFT else -1)
-	game.arena.send_packet(id, PIET_COLOR, Callable())   # the light runs off down the cable
+	game.arena.cables.send_packet(id, PIET_COLOR, Callable())   # the light runs off down the cable
 	_give(to, at)
 
 
@@ -155,7 +159,7 @@ func _burst() -> void:
 
 
 func _alive(id: int) -> bool:
-	return id in players and game.arena.is_playing(id) and not tile(id).is_dead
+	return id in players and game.arena.players.is_playing(id) and not tile(id).is_dead
 
 
 func finish() -> void:

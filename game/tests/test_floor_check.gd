@@ -8,7 +8,7 @@ const ARENA := preload("res://scenes/arena.tscn")
 
 
 func _ready() -> void:
-	var arena: Node3D = ARENA.instantiate()
+	var arena: Arena = ARENA.instantiate()
 	add_child(arena)
 	arena.game.use_database("")
 	arena.sound.enabled = false
@@ -24,12 +24,12 @@ func _ready() -> void:
 	cam.position = Vector3(0, 5.0, 0)
 	cam.rotation_degrees = Vector3(-90, 0, 0)
 	await get_tree().create_timer(1.0).timeout
-	arena.set_installed([14, 15, 16, 17, 18])
+	arena.players.set_installed([14, 15, 16, 17, 18])
 	arena.robot.visible = false
 	await get_tree().create_timer(1.0).timeout
 	vp.get_texture().get_image().save_png(ProjectSettings.globalize_path("res://tests/shots/87_floor_empty.png"))
 	# the consoles: the room from the middle, both halves
-	arena.set_installed(range(1, 19))
+	arena.players.set_installed(range(1, 19))
 	arena.robot.visible = true
 	cam.projection = Camera3D.PROJECTION_PERSPECTIVE
 	cam.fov = 75.0
