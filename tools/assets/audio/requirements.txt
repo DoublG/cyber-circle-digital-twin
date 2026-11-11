@@ -1,0 +1,10 @@
+# The Python packages of tools/assets/make_audio.py: Stable Audio Open (Small and
+# 1.0, Stability AI Community License - see tools/assets/audio/README.md) through
+# Stability's own stable-audio-tools. Installed by tools/assets/audio/setup.sh into
+# tools/assets/audio/.venv (Python 3.10). It brings its own torch (CUDA 12).
+stable-audio-tools
+pytorch_lightning        # (stable-audio-tools 0.0.20 imports it without listing it)
+huggingface_hub>=0.26
+soundfile
+numpy<2                 # (PyWavelets 1.4, which stable-audio-tools pins, is built for numpy 1.x)
+pyloudnorm

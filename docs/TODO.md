@@ -1,6 +1,6 @@
 # TODO – movies and sound effects to provide
 
-The game ships with free CC0 sounds and music (8-bit / sci-fi, from
+The game ships with free CC0 sounds and music (sci-fi, from
 OpenGameArt: [CREDITS.md](CREDITS.md)); only the robot's show (`boot`,
 `shutdown`, `power_down`, `off`) still has synthesised placeholders
 (`tools/assets/make_sounds.py`), and the movies a 4 s test clip. Better or own
@@ -48,8 +48,8 @@ same layout given as `--sounds=DIR` (no re-export needed).
 | ☐ | `time_up` | the quiz's TIJD OM | every question | 0.5–1.2 s (TIJD OM lasts 1.2 s) | 2 alarms |
 | ☐ | `ranking` | the UITSLAG: the round's places come up | every round | 1–2.5 s | 2 coin tallies |
 | ☐ | `drone_hum` | **loop**: while a mobile player's drone flies | whenever mobile players play | 1–4 s, seamless | a 3.2 s machine loop |
-| ☐ | `music_lobby` | **loop**: the lobby (the game open, no round running) | most of the day: make it pleasant, several files | 30 s–3 min, seamless | 2 NES-style loops (40 s, 22 s) |
-| ☐ | `music_ritme` | **loop**: the Ritme round, from its first moment; the symbols land on its beats | every Ritme round | **≥ 45 s** (the round), the first beat at 0 s, a steady tempo: set it in *Ritme › Muziek: tempo* (bpm) | NES-style "Boss", 120 bpm, 66 s |
+| ☐ | `music_lobby` | **loop**: the lobby (the game open, no round running) | most of the day: make it pleasant, several files | 30 s–3 min, seamless | 2 loops (40 s, 22 s) |
+| ☐ | `music_ritme` | **loop**: the Ritme round, from its first moment; the symbols land on its beats | every Ritme round | **≥ 45 s** (the round), the first beat at 0 s, a steady tempo: set it in *Ritme › Muziek: tempo* (bpm) | "Boss", 120 bpm, 66 s |
 
 ## Read-aloud voice (`game/data/voice/`, docs/SETUP.md §4 *Generating the voice*)
 

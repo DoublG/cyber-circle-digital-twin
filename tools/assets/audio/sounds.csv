@@ -1,0 +1,36 @@
+# The sounds tools/assets/make_audio.py generates (Stable Audio Open). One per line:
+#   name;kind;model;seconds;bpm;bars;variants;prompt
+# kind: sfx / loop (bpm + bars: a seamless loop, 4/4, its tempo checked) / pad (a loop without a beat: no tempo check)
+# model: small (<= 11 s, fast) / 1.0 (<= 47 s)
+# A loop: seconds a little longer than its bars (8 bars at 120 bpm = 16 s -> 20).
+name;kind;model;seconds;bpm;bars;variants;prompt
+code_key;sfx;small;1.5;0;0;4;single short soft analog synthesizer key tap, warm sine blip, Yamaha CS-80 style, short room reverb
+code_hint;sfx;small;2;0;0;4;three quick rising analog synthesizer tones, warm brass and sine, Yamaha CS-80 style, chorus, short reverb
+code_cracked;sfx;small;3;0;0;4;triumphant warm synth brass chord swell resolving upward, vintage polyphonic analog synthesizer, Yamaha CS-80 style, chorus, hall reverb
+code_wrong;sfx;small;1.5;0;0;4;short low descending analog synthesizer brass tone, dissonant, Yamaha CS-80 style, access denied, short reverb
+music_code;loop;1.0;20;120;8;4;tense cinematic puzzle music on a vintage polyphonic analog synthesizer like the Yamaha CS-80, 120 BPM, pulsing bass on every beat, mysterious brass and string pads, steady drum beat, instrumental, no vocals
+# classic analog synth palette (1960s electronic studio sound: oscillators, ring modulation, tape echo, filtered noise)
+music_lobby_synth;pad;1.0;24;120;8;4;classic 1960s analog synthesizer music, sine and square wave oscillators, ring modulation, tape echo, filtered white noise, slow mysterious pulsing rhythm, eerie atmosphere, instrumental, no vocals
+music_ritme_synth;loop;1.0;20;120;8;4;classic analog synthesizer loop, 120 BPM, punchy oscillator bass, tape echo, ring modulated percussion, steady driving beat, retro electronic, instrumental, no vocals
+synth_whoosh;sfx;small;4;0;0;4;classic analog synthesizer whoosh, oscillator sweeping up then down, tape echo, filtered white noise wind, retro electronic sci-fi
+synth_warble;sfx;small;3;0;0;4;warbling analog oscillator tone gliding up, ring modulation, tape echo, retro 1960s electronic sound effect
+synth_drone;pad;1.0;20;60;4;4;dark analog synthesizer drone, low sine oscillators slowly detuning, filtered noise, tape echo, mysterious hum, no beat, ambient
+# Ritme: classic analog synth, 16 bars at 120 bpm (the Ritme beat grid: music_bpm 120)
+ritme_synth_drive;loop;1.0;36;120;16;4;classic analog synthesizer music, 120 BPM, driving pulsing oscillator bassline, crisp electronic drum beat on every beat, tape echo, retro electronic, energetic, instrumental, no vocals
+ritme_synth_arp;loop;1.0;36;120;16;4;classic analog synthesizer music, 120 BPM, fast square wave arpeggios, steady four on the floor electronic kick, ring modulation, tape echo, retro sci-fi, instrumental, no vocals
+ritme_synth_dark;loop;1.0;36;120;16;4;classic analog synthesizer music, 120 BPM, dark sine wave bass pulse, hard electronic percussion on every beat, filtered noise sweeps, tape echo, tense retro sci-fi, instrumental, no vocals
+# classical, CS-80 style: a vintage polyphonic analog synth (warm brass and string pads, expressive glides,
+# chorus, big reverb), classical / cinematic harmony; the Ritme loops keep a clear beat at 120 bpm
+cs80_lobby;pad;1.0;36;120;16;4;cinematic classical piece played on a vintage polyphonic analog synthesizer like the Yamaha CS-80, warm brass pads, lush string ensemble pads, expressive pitch glides, chorus, large hall reverb, slow majestic chord progression, instrumental, no vocals, no drums
+cs80_ritme_drive;loop;1.0;36;120;16;4;classical inspired electronic music on a vintage polyphonic analog synthesizer like the Yamaha CS-80, 120 BPM, pulsing bass on every beat, warm brass synth melody, lush string pads, steady drum beat, cinematic, instrumental, no vocals
+cs80_ritme_epic;loop;1.0;36;120;16;4;heroic cinematic synth brass fanfare on a vintage polyphonic analog synthesizer like the Yamaha CS-80, 120 BPM, lush string pads, big electronic drums on every beat, orchestral feel, instrumental, no vocals
+cs80_ritme_baroque;loop;1.0;36;120;16;4;baroque style arpeggios and counterpoint on a warm vintage polyphonic analog synthesizer like the Yamaha CS-80, 120 BPM, plucked synth bass, steady kick drum on every beat, chorus, reverb, instrumental, no vocals
+cs80_swell;sfx;small;5;0;0;4;warm vintage polyphonic analog synthesizer brass swell, Yamaha CS-80 style, rising major chord, chorus, big hall reverb
+cs80_glide;sfx;small;4;0;0;4;expressive analog synthesizer pitch glide with ribbon controller, warm brass tone, Yamaha CS-80 style, vibrato, hall reverb
+# Ritme, CS-80 style, more candidates: the beat spelled out (a kick on every beat, a constant tempo) - the model keeps
+# the tempo far more often when the prompt is about the beat first
+ritme_cs80_pulse;loop;1.0;36;120;16;6;120 BPM, constant tempo, four on the floor kick drum on every beat, steady pulsing synth bass on every beat, warm brass and string pads on a vintage polyphonic analog synthesizer like the Yamaha CS-80, classical cinematic chords, instrumental, no vocals
+ritme_cs80_march;loop;1.0;36;120;16;6;120 BPM, constant tempo, classical march rhythm with a strong drum hit on every beat, heroic warm brass melody on a vintage polyphonic analog synthesizer like the Yamaha CS-80, lush string pads, instrumental, no vocals
+ritme_cs80_ostinato;loop;1.0;36;120;16;6;120 BPM, constant tempo, steady electronic kick on every beat, repeating classical ostinato of eighth notes on a vintage polyphonic analog synthesizer like the Yamaha CS-80, warm brass swells, string pads, instrumental, no vocals
+ritme_cs80_disco;loop;1.0;36;120;16;6;120 BPM, constant tempo, four on the floor kick and hi-hat, octave bassline on every beat, classical strings and warm synth brass on a vintage polyphonic analog synthesizer like the Yamaha CS-80, cinematic, instrumental, no vocals
+ritme_cs80_waltz_free;loop;1.0;36;120;16;6;120 BPM, constant tempo, steady kick drum on every beat, slow majestic classical chord progression on warm synth brass and strings, vintage polyphonic analog synthesizer like the Yamaha CS-80, arpeggiated synth on eighth notes, instrumental, no vocals

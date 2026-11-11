@@ -58,9 +58,9 @@ silence at the start), levelled to the same loudness and converted to mono
 
 | event | file ← original | title, author | link | licence | notes |
 |---|---|---|---|---|---|
-| music_ritme | `nes_boss_120bpm.ogg` ← Boss.ogg | *NES Shooter Music* – "Boss", sketchylogic | [opengameart](https://opengameart.org/content/nes-shooter-music-5-tracks-3-jingles) | CC0 | 120 bpm, 66 s; the first 0.083 s cut: the first beat at 0 s |
-| music_lobby | `nes_mercury.ogg` ← Mercury.ogg | *NES Shooter Music* – "Mercury", sketchylogic | [opengameart](https://opengameart.org/content/nes-shooter-music-5-tracks-3-jingles) | CC0 | 40 s loop |
-| music_lobby | `8bit_title_screen.ogg` ← 8Bit Title Screen.mp3 | "8Bit Title Screen", joth | [opengameart](https://opengameart.org/content/8bit-title-screen) | CC0 | 22 s loop |
+| music_ritme | `boss_120bpm.ogg` ← Boss.ogg | *NES Shooter Music* – "Boss", sketchylogic | [opengameart](https://opengameart.org/content/nes-shooter-music-5-tracks-3-jingles) | CC0 | 120 bpm, 66 s; the first 0.083 s cut: the first beat at 0 s |
+| music_lobby | `mercury.ogg` ← Mercury.ogg | *NES Shooter Music* – "Mercury", sketchylogic | [opengameart](https://opengameart.org/content/nes-shooter-music-5-tracks-3-jingles) | CC0 | 40 s loop |
+| music_lobby | `title_screen.ogg` ← 8Bit Title Screen.mp3 | "8Bit Title Screen", joth | [opengameart](https://opengameart.org/content/8bit-title-screen) | CC0 | 22 s loop |
 
 ## Read-aloud voice – `game/data/voice/`
 
