@@ -1,0 +1,41 @@
+[gd_scene format=3]
+
+[node name="StripesLeft" type="HBoxContainer" unique_id=1377083634]
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+alignment = 2
+
+[node name="Line" type="ColorRect" parent="." unique_id=712177196]
+custom_minimum_size = Vector2(0, 6)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+color = Color(0.7, 0.315, 0.055999998, 1)
+
+[node name="Bars" type="HBoxContainer" parent="." unique_id=27683462]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ColorRect" type="ColorRect" parent="Bars" unique_id=1375012358]
+custom_minimum_size = Vector2(14, 44)
+layout_mode = 2
+size_flags_vertical = 4
+color = Color(0.2, 0.8, 0.75, 1)
+
+[node name="ColorRect2" type="ColorRect" parent="Bars" unique_id=607930026]
+custom_minimum_size = Vector2(14, 44)
+layout_mode = 2
+size_flags_vertical = 4
+color = Color(1, 0.45, 0.08, 1)
+
+[node name="ColorRect3" type="ColorRect" parent="Bars" unique_id=886782976]
+custom_minimum_size = Vector2(14, 44)
+layout_mode = 2
+size_flags_vertical = 4
+color = Color(1, 0.45, 0.08, 1)
+
+[node name="ColorRect4" type="ColorRect" parent="Bars" unique_id=1454779666]
+custom_minimum_size = Vector2(14, 44)
+layout_mode = 2
+size_flags_vertical = 4
+color = Color(1, 0.74, 0.22, 1)

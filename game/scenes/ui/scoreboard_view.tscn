@@ -1,0 +1,129 @@
+[gd_scene format=3]
+
+[ext_resource type="Theme" path="res://scenes/ui/retro_theme.tres" id="1_yy6jl"]
+[ext_resource type="Script" path="res://scripts/ui/scoreboard_view.gd" id="2_cxl25"]
+[ext_resource type="PackedScene" path="res://scenes/ui/background.tscn" id="3_n12o7"]
+[ext_resource type="PackedScene" path="res://scenes/ui/stripes_left.tscn" id="4_bsn25"]
+[ext_resource type="PackedScene" path="res://scenes/ui/stripes_right.tscn" id="5_2ulb3"]
+[ext_resource type="PackedScene" path="res://scenes/ui/score_table.tscn" id="6_vw382"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_cxwgh"]
+content_margin_left = 10.0
+content_margin_top = 5.0
+content_margin_right = 10.0
+content_margin_bottom = 5.0
+bg_color = Color(0.35, 0, 0, 1)
+border_width_left = 8
+border_width_top = 8
+border_width_right = 8
+border_width_bottom = 8
+border_color = Color(1, 0.25, 0.2, 1)
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
+corner_detail = 1
+
+[node name="ScoreboardView" type="Control" unique_id=1594709512]
+layout_mode = 3
+anchors_preset = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme = ExtResource("1_yy6jl")
+script = ExtResource("2_cxl25")
+
+[node name="Background" parent="." unique_id=1369816793 instance=ExtResource("3_n12o7")]
+layout_mode = 1
+
+[node name="Box" type="VBoxContainer" parent="." unique_id=1844262221]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 70.0
+offset_top = 40.0
+offset_right = -70.0
+offset_bottom = -40.0
+theme_override_constants/separation = 8
+
+[node name="Header" type="Control" parent="Box" unique_id=1666872261]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 168)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Titles" type="VBoxContainer" parent="Box/Header" unique_id=374011896]
+unique_name_in_owner = true
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="TitleBar" type="HBoxContainer" parent="Box/Header/Titles" unique_id=1715612394]
+layout_mode = 2
+theme_override_constants/separation = 22
+
+[node name="StripesLeft" parent="Box/Header/Titles/TitleBar" unique_id=1377083634 instance=ExtResource("4_bsn25")]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Box/Header/Titles/TitleBar" unique_id=2129432795]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 76
+theme_override_colors/font_color = Color(1, 0.74, 0.22, 1)
+text = "SCOREBORD"
+horizontal_alignment = 1
+
+[node name="StripesRight" parent="Box/Header/Titles/TitleBar" unique_id=1436792696 instance=ExtResource("5_2ulb3")]
+layout_mode = 2
+
+[node name="Subtitle" type="Label" parent="Box/Header/Titles" unique_id=1524766849]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 38
+theme_override_colors/font_color = Color(0.2, 0.8, 0.75, 1)
+text = "SUBTITLE"
+horizontal_alignment = 1
+
+[node name="Banner" type="PanelContainer" parent="Box/Header" unique_id=1689344890]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchor_left = 0.04
+anchor_right = 0.96
+anchor_bottom = 1.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_cxwgh")
+
+[node name="Lines" type="VBoxContainer" parent="Box/Header/Banner" unique_id=2144991693]
+layout_mode = 2
+theme_override_constants/separation = 0
+alignment = 1
+
+[node name="Exterminated" type="Label" parent="Box/Header/Banner/Lines" unique_id=1372092016]
+layout_mode = 2
+theme_override_font_sizes/font_size = 64
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+text = "☠  GEËXTERMINEERD  ☠"
+horizontal_alignment = 1
+
+[node name="Who" type="Label" parent="Box/Header/Banner/Lines" unique_id=188321715]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 42
+theme_override_colors/font_color = Color(1, 0.74, 0.22, 1)
+horizontal_alignment = 1
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Table" parent="Box" unique_id=426331372 instance=ExtResource("6_vw382")]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Flash" type="ColorRect" parent="." unique_id=1068548778]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+color = Color(1, 0.05, 0, 0.55)

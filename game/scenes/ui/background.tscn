@@ -1,0 +1,12 @@
+[gd_scene format=3]
+
+[ext_resource type="Shader" path="res://shaders/retro_background.gdshader" id="1_1iqp7"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_qy2i1"]
+shader = ExtResource("1_1iqp7")
+
+[node name="Background" type="ColorRect" unique_id=1369816793]
+material = SubResource("ShaderMaterial_qy2i1")
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2

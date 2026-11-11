@@ -25,59 +25,29 @@ const FAIL_LINES := [
 	[11.4, "GEHEUGEN ............ FOUT"],
 	[12.2, "STROOM .............. 12 %"],
 ]
+const SCENE := "res://scenes/ui/power_view.tscn"
 const GLITCH := "#@%&$*!?<>/\\|=+~^01"
 
 var kind := "boot"
 var at := 0.0
-var _bg: ColorRect
-var _lines: Label
-var _big: Label
-var _sub: Label
-var _bar: ProgressBar
 var _glitch_frame := -1
 
+@onready var _bg: ColorRect = %Bg
+@onready var _lines: Label = %Lines
+@onready var _big: Label = %Big
+@onready var _sub: Label = %Sub
+@onready var _bar: ProgressBar = %Bar
 
-func _init(show_kind := "boot", start_at := 0.0) -> void:
-	kind = show_kind
-	at = start_at
-	set_anchors_preset(Control.PRESET_FULL_RECT)
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_bg = ColorRect.new()
-	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_bg.color = Color.BLACK
-	add_child(_bg)
-	var box := VBoxContainer.new()
-	box.set_anchors_preset(Control.PRESET_FULL_RECT)
-	box.offset_left = 120
-	box.offset_right = -120
-	box.offset_top = 80
-	box.offset_bottom = -80
-	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_theme_constant_override("separation", 36)
-	add_child(box)
-	_lines = Retro.label(44, Retro.GOOD)
-	_lines.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	box.add_child(_lines)
-	_bar = ProgressBar.new()
-	_bar.custom_minimum_size = Vector2(0, 34)
-	_bar.show_percentage = false
-	_bar.max_value = 1.0
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = Retro.GOOD
-	var back := StyleBoxFlat.new()
-	back.bg_color = Color(0.1, 0.1, 0.1)
-	back.border_color = Color(Retro.GOOD, 0.5)
-	back.set_border_width_all(3)
-	_bar.add_theme_stylebox_override("fill", fill)
-	_bar.add_theme_stylebox_override("background", back)
-	box.add_child(_bar)
-	_big = Retro.label(130, Retro.AMBER)
-	_big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(_big)
-	_sub = Retro.label(60, Retro.CREAM)
-	_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(_sub)
+
+## The show `show_kind` ("boot" / "shutdown"), started at `start_at` on the game's clock.
+static func create(show_kind := "boot", start_at := 0.0) -> PowerView:
+	var v: PowerView = load(SCENE).instantiate()
+	v.kind = show_kind
+	v.at = start_at
+	return v
+
+
+func _ready() -> void:
 	_process(0.0)
 
 

@@ -1,0 +1,69 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/score_row.gd" id="1_avac8"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_ba50p"]
+
+[node name="ScoreboardRow" type="PanelContainer" unique_id=1516407554]
+theme_override_styles/panel = SubResource("StyleBoxEmpty_ba50p")
+script = ExtResource("1_avac8")
+widths = PackedInt32Array(3, 0, 4, 6, 6, 6, 6)
+
+[node name="Cells" type="HBoxContainer" parent="." unique_id=379837553]
+layout_mode = 2
+theme_override_constants/separation = 30
+
+[node name="Place" type="Label" parent="Cells" unique_id=860543011]
+custom_minimum_size = Vector2(81.84, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 44
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+horizontal_alignment = 2
+
+[node name="PlayerName" type="Label" parent="Cells" unique_id=2015954141]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 44
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Tile" type="Label" parent="Cells" unique_id=1560929304]
+custom_minimum_size = Vector2(109.12, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 44
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+horizontal_alignment = 2
+
+[node name="Lives" type="RichTextLabel" parent="Cells" unique_id=1060029028]
+custom_minimum_size = Vector2(163.68, 0)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+theme_override_font_sizes/normal_font_size = 44
+theme_override_colors/default_color = Color(1, 0.93, 0.8, 1)
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+autowrap_mode = 0
+
+[node name="Rounds" type="Label" parent="Cells" unique_id=1903438776]
+custom_minimum_size = Vector2(163.68, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 44
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+horizontal_alignment = 2
+
+[node name="Record" type="Label" parent="Cells" unique_id=568519778]
+custom_minimum_size = Vector2(163.68, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 44
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+horizontal_alignment = 2
+
+[node name="Rank" type="Label" parent="Cells" unique_id=1967765513]
+custom_minimum_size = Vector2(163.68, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 44
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+horizontal_alignment = 2

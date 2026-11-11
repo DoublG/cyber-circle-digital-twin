@@ -1,17 +1,20 @@
 class_name TileRelay
 extends RefCounted
 ## A tile's visual actions as the game calls them (arena.rt(id).play_hit(...)):
-## the call runs here and goes to every display node (Replica.relay). The
+## the call runs here and goes to every display node (Replica.relay; its LED
+## ring is a target of its own: "ring:3"). The
 ## tile's own calls (its animations, TileFirmware's LEDs) don't go through
 ## here: the displays run those themselves.
 
 var tile: CyberTile
 var target := ""
+var ring_target := ""
 
 
 func _init(t: CyberTile) -> void:
 	tile = t
 	target = "tile:%d" % t.tile_id
+	ring_target = "ring:%d" % t.tile_id
 
 
 func _r(method: StringName, args: Array) -> void:
@@ -29,23 +32,23 @@ func cancel_activation() -> void:
 
 
 func set_ring_led(index: int, color: Color) -> void:
-	_r(&"set_ring_led", [index, color])
-	tile.set_ring_led(index, color)
+	Replica.relay(ring_target, &"set_led", [index, color])
+	tile.ring.set_led(index, color)
 
 
 func set_ring(colors: Array) -> void:
-	_r(&"set_ring", [colors])
-	tile.set_ring(colors)
+	Replica.relay(ring_target, &"set_all", [colors])
+	tile.ring.set_all(colors)
 
 
 func fill_ring(color: Color) -> void:
-	_r(&"fill_ring", [color])
-	tile.fill_ring(color)
+	Replica.relay(ring_target, &"fill", [color])
+	tile.ring.fill(color)
 
 
 func clear_ring() -> void:
-	_r(&"clear_ring", [])
-	tile.clear_ring()
+	Replica.relay(ring_target, &"clear", [])
+	tile.ring.clear()
 
 
 func blink_doomed() -> void:

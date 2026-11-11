@@ -1,0 +1,71 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/wall_screen.gd" id="1_cw7px"]
+[ext_resource type="Theme" path="res://scenes/ui/retro_theme.tres" id="2_dvqjr"]
+[ext_resource type="PackedScene" path="res://scenes/ui/crt_overlay.tscn" id="3_57vue"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_y2phj"]
+content_margin_left = 26.0
+content_margin_top = 13.0
+content_margin_right = 26.0
+content_margin_bottom = 13.0
+bg_color = Color(0.09, 0.075, 0.06, 0.92)
+border_width_left = 4
+border_width_top = 4
+border_width_right = 4
+border_width_bottom = 4
+border_color = Color(1, 0.45, 0.08, 1)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+corner_detail = 1
+
+[node name="WallScreen" type="Control" unique_id=1996361781]
+clip_contents = true
+layout_mode = 3
+anchors_preset = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("1_cw7px")
+
+[node name="Scaled" type="SubViewportContainer" parent="." unique_id=311074311]
+unique_name_in_owner = true
+layout_mode = 0
+offset_right = 1920.0
+offset_bottom = 1080.0
+
+[node name="Viewport" type="SubViewport" parent="Scaled" unique_id=1865087288]
+unique_name_in_owner = true
+physics_object_picking = true
+size = Vector2i(1920, 1080)
+
+[node name="Content" type="ColorRect" parent="Scaled/Viewport" unique_id=1173999834]
+unique_name_in_owner = true
+offset_right = 1920.0
+offset_bottom = 1080.0
+theme = ExtResource("2_dvqjr")
+color = Color(0, 0, 0, 1)
+
+[node name="Crt" parent="Scaled/Viewport" unique_id=468216943 instance=ExtResource("3_57vue")]
+unique_name_in_owner = true
+anchor_right = 0.0
+anchor_bottom = 0.0
+offset_right = 1920.0
+offset_bottom = 1080.0
+
+[node name="Link" type="Label" parent="Scaled/Viewport" unique_id=1402911215]
+unique_name_in_owner = true
+visible = false
+offset_left = 460.0
+offset_top = 820.0
+offset_right = 1460.0
+offset_bottom = 843.0
+theme_override_styles/normal = SubResource("StyleBoxFlat_y2phj")
+theme_override_font_sizes/font_size = 34
+theme_override_colors/font_color = Color(1, 0.74, 0.22, 1)
+theme_override_colors/font_outline_color = Color(0.035, 0.03, 0.028, 1)
+theme_override_constants/outline_size = 10
+horizontal_alignment = 1

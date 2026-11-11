@@ -38,13 +38,12 @@ func _ready() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var root := Control.new()
-	root.theme = Retro.theme()
+	root.theme = Retro.THEME
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	layer.add_child(root)
-	var page := ObserverView.new()
-	page.wall = arena.screen_wall
+	var page := ObserverView.create(arena.screen_wall)
 	root.add_child(page)
-	var crt := Retro.crt_overlay()
+	var crt: Control = preload("res://scenes/ui/crt_overlay.tscn").instantiate()
 	crt.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_child(crt)
 	_direct()

@@ -36,7 +36,7 @@ func _init() -> void:
 	var game: GameManager = arena.game
 	var sound: SoundBoard = arena.sound
 	game.use_database("")
-	game.set_mode(GameManager.Mode.OPEN)
+	game.modes.change(GameManager.Mode.OPEN)
 	game.intro_time = 0.5
 	for i in 5:
 		await process_frame
@@ -53,7 +53,7 @@ func _init() -> void:
 	# the quiz
 	for i in 2:
 		arena.players.join(i + 1, "Speler %d" % (i + 1), 30)
-	game.set_planned_round(0, "quiz")
+	game.picker.set_planned(0, "quiz")
 	game.start_game()
 	for n in 600:
 		if game.state == GameManager.State.PLAYING and game.current is QuizRound:
@@ -87,7 +87,7 @@ func _init() -> void:
 	# Ritme: its music, from the round's start (everyone left with the stop)
 	for i in 2:
 		arena.players.join(i + 1, "Speler %d" % (i + 1), 30)
-	game.set_planned_round(0, "rhythm")
+	game.picker.set_planned(0, "rhythm")
 	game.start_game()
 	for n in 600:
 		if game.state == GameManager.State.PLAYING and game.current is RhythmRound:
@@ -95,10 +95,10 @@ func _init() -> void:
 		await process_frame
 	await process_frame
 	check(game.current is RhythmRound and sound.playing_loop("music") == &"music_ritme", "Ritme: music_ritme")
-	game.set_mode(GameManager.Mode.PAUSED)
+	game.modes.change(GameManager.Mode.PAUSED)
 	await process_frame
 	check(sound.playing_loop("music") == &"", "paused: the music stops")
-	game.set_mode(GameManager.Mode.OPEN)
+	game.modes.change(GameManager.Mode.OPEN)
 	await process_frame
 	var p: AudioStreamPlayer = sound._loop_players["music"]
 	check(game.current is RhythmRound and sound.playing_loop("music") == &"music_ritme"

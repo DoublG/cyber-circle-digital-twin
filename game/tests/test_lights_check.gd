@@ -31,7 +31,7 @@ func _ready() -> void:
 	check(washes != null and washes.visible and washes.is_visible_in_tree(), "the pillar washes are there and visible")
 	check(washes != null and washes.multimesh.instance_count == 16, "16 washes, one per pillar")
 	check(arena.find_child("Lightning", true, false) != null, "the lightning mesh is there")
-	arena.game.set_mode(GameManager.Mode.OPEN)
+	arena.game.modes.change(GameManager.Mode.OPEN)
 	await get_tree().create_timer(2.0).timeout
 	var lit := 0
 	for k in 16:

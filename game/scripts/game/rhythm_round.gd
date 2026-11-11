@@ -63,6 +63,8 @@ class PlayerState extends RoundState:
 
 
 func _init() -> void:
+	replica_keys = ["state", "band", "line", "points_line", "latency_ms"]   # (what its views read: RoundMirror)
+	state_fields = {"state": PlayerState}   # (sent as plain data: RoundState)
 	title = "Ritme"
 	mode = "personal"
 	duration = 45.0
@@ -110,7 +112,7 @@ func tunables() -> Array:
 func _start() -> void:
 	clock = 0.0
 	notes = make_chart()
-	start_tile_clock()
+	tile_clock.start(self)
 	for id in players:
 		state[id] = PlayerState.new()
 
@@ -162,7 +164,7 @@ func _update(delta: float) -> void:
 			var st := state[id]
 			if not st.judged.has(_first):
 				st.judged[_first] = 0
-				if not tile(id).is_dead:
+				if not _tile(id).is_dead:
 					st.combo = 0
 					st.last[notes[_first].lane] = {"at": clock, "text": "GEMIST", "points": 0}
 		_first += 1
@@ -188,7 +190,7 @@ func _hold_result(id: int, i: int, result: String, text: String, pts: int) -> vo
 		if pts >= points_line:
 			st.lines += 1
 			_flash(id, CyberTile.BUTTON_COLORS[CyberTile.BUTTONS[notes[i].lane]])
-	elif not tile(id).is_dead:
+	elif not _tile(id).is_dead:
 		st.combo = 0
 	st.last[notes[i].lane] = {"at": clock, "text": text, "points": pts}
 	if pts != 0:
@@ -205,7 +207,7 @@ func button_up(id: int, b: StringName) -> void:
 	for i in st.holds:
 		if st.holds[i] != "on" or notes[i].lane != lane:
 			continue
-		var at := press_time(clock - latency_ms / 1000.0)
+		var at := tile_clock.press_time(clock - latency_ms / 1000.0)
 		var d: float = (at - _hold_end(notes[i])) / notes[i].fall
 		if d < -band:
 			_hold_result(id, i, "fail", "TE VROEG", 0)
@@ -224,7 +226,7 @@ func button(id: int, b: StringName) -> void:
 	var lane := CyberTile.BUTTONS.find(b)
 	if lane < 0 or not state.has(id):
 		return
-	var at := press_time(clock - latency_ms / 1000.0)   # (the tile's stamp; none: on arrival)
+	var at := tile_clock.press_time(clock - latency_ms / 1000.0)   # (the tile's stamp; none: on arrival)
 	var st := state[id]
 	var best := -1
 	var best_d := INF
@@ -268,7 +270,7 @@ func _flash(id: int, color: Color) -> void:
 
 ## The longest combo of the round in the event feed.
 func finish() -> void:
-	stop_tile_clock()
+	tile_clock.stop()
 	var best := 0
 	var names := []
 	for id in state:
@@ -279,16 +281,6 @@ func finish() -> void:
 			names.append(game.arena.players.player_name(id).to_upper())
 	if best >= 5:
 		game.log_event("LANGSTE COMBO %d: %s" % [best, ", ".join(names)], Retro.CREAM)
-
-
-# (Replica: what RhythmView reads)
-func replica_keys() -> Array:
-	return ["state", "band", "line", "points_line", "latency_ms"]
-
-
-## (Its per-player state goes to the display nodes as plain data: RoundState.)
-func state_fields() -> Dictionary:
-	return {"state": PlayerState}
 
 
 func replica_init() -> Dictionary:

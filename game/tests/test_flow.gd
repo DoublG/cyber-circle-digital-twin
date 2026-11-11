@@ -260,7 +260,7 @@ func check(ok: bool, what: String) -> void:
 
 
 func _yellow_leds(t: CyberTile) -> int:
-	return t.get_ring_colors().filter(func(c): return c.is_equal_approx(Color(1.0, 0.8, 0.0))).size()
+	return t.ring.colors.filter(func(c): return c.is_equal_approx(Color(1.0, 0.8, 0.0))).size()
 
 
 func _wait(seconds: float) -> void:

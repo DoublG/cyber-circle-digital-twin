@@ -24,7 +24,7 @@ func _ready() -> void:
 		await get_tree().create_timer(0.25).timeout
 	a.players.register(5, "Bram", Color("#33ccff"), 9, 12)
 	a.tiles[2].health = 2
-	a.game.set_planned_round(0, "quiz")
+	a.game.picker.set_planned(0, "quiz")
 	var cp: Dictionary = JSON.parse_string(JSON.stringify(a.game.recovery.snapshot()))   # (as stored)
 	check(cp.players.size() == 1 and cp.invites.size() == 1, "snapshot: 1 player, 1 invite")
 	a.queue_free()

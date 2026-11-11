@@ -13,7 +13,7 @@ func _ready() -> void:
 	add_child(arena)
 	arena.game.use_database("")
 	await get_tree().process_frame
-	arena.game.set_mode(GameManager.Mode.SETUP)
+	arena.game.modes.change(GameManager.Mode.SETUP)
 	await get_tree().process_frame
 	for t in arena.tiles:
 		var lit := []
@@ -23,7 +23,7 @@ func _ready() -> void:
 		for i in CyberTile.HEART_COUNT:
 			want.append(bool(t.tile_id >> i & 1))
 		check(lit == want, "%s: hearts %s = %d" % [Retro.tile_label(t.tile_id), _pattern(lit), t.tile_id])
-	arena.game.set_mode(GameManager.Mode.CLOSED)
+	arena.game.modes.change(GameManager.Mode.CLOSED)
 	await get_tree().process_frame
 	check(arena.tiles.all(func(t): return range(CyberTile.HEART_COUNT).all(func(i): return not _lit(t, i))),
 		"setup locked: the hearts dark again (no players)")

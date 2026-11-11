@@ -1,0 +1,73 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/quiz_answer_card.gd" id="1_dmmis"]
+[ext_resource type="Script" path="res://scripts/ui/button_icon.gd" id="2_xo7hf"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_2snri"]
+content_margin_left = 6.0
+content_margin_top = 3.0
+content_margin_right = 6.0
+content_margin_bottom = 3.0
+bg_color = Color(1, 0.35, 0.75, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(1, 0.61, 0.85, 1)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+corner_detail = 1
+
+[node name="QuizAnswerCard" type="PanelContainer" unique_id=2034161921]
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("1_dmmis")
+
+[node name="Row" type="HBoxContainer" parent="." unique_id=346843931]
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="Key" type="PanelContainer" parent="Row" unique_id=1162783767]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_2snri")
+
+[node name="Icon" type="Control" parent="Row/Key" unique_id=1204435190]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(84, 84)
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("2_xo7hf")
+color = Color(0.035, 0.03, 0.028, 1)
+glow = false
+
+[node name="TextHolder" type="Control" parent="Row" unique_id=1885350301]
+clip_contents = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="Texts" type="VBoxContainer" parent="Row/TextHolder" unique_id=1316843572]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+alignment = 1
+
+[node name="Tag" type="Label" parent="Row/TextHolder/Texts" unique_id=16560299]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+theme_override_colors/font_color = Color(1, 0.35, 0.75, 1)
+text = "VIERKANT"
+
+[node name="Answer" type="Label" parent="Row/TextHolder/Texts" unique_id=1589263951]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 44
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+autowrap_mode = 3

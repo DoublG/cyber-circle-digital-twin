@@ -84,7 +84,7 @@ func _ready() -> void:
 
 	# scoreboard with two exterminations: the banner above the rows
 	game.skip()
-	while not game._lives_shown:
+	while not game.views.lives_shown:
 		await get_tree().process_frame
 	await get_tree().create_timer(0.2).timeout
 	for b in [page._board] + game.screen_wall.shared_views.slice(0, 1):
@@ -92,10 +92,9 @@ func _ready() -> void:
 	await get_tree().create_timer(0.6).timeout
 	for b in [page._board] + game.screen_wall.shared_views.slice(0, 1):
 		var board: ScoreboardView = b
-		var banner: Control = board._header.get_children().filter(func(c): return c.has_meta(&"banner")).front() \
-			if board._header.get_children().any(func(c): return c.has_meta(&"banner")) else null
-		check(banner != null, "scoreboard: GEËXTERMINEERD banner shown")
-		if banner:
+		var banner: Control = board.get_node("%Banner")
+		check(banner.visible, "scoreboard: GEËXTERMINEERD banner shown")
+		if banner.visible:
 			var head_row: Control = board._rows[0].panel.get_parent().get_child(0)
 			check(banner.get_global_rect().end.y <= head_row.get_global_rect().position.y + 0.5,
 				"scoreboard: banner (bottom %.0f) above the column headers (top %.0f)" % [banner.get_global_rect().end.y,

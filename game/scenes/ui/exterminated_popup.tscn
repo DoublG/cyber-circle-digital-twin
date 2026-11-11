@@ -1,0 +1,34 @@
+[gd_scene format=3]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_g01gh"]
+content_margin_left = 34.0
+content_margin_top = 17.0
+content_margin_right = 34.0
+content_margin_bottom = 17.0
+bg_color = Color(0.35, 0, 0, 0.92)
+border_width_left = 6
+border_width_top = 6
+border_width_right = 6
+border_width_bottom = 6
+border_color = Color(1, 0.25, 0.2, 1)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+corner_detail = 1
+
+[node name="ExterminatedPopup" type="Label" unique_id=1812793253]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -92.5
+offset_top = 340.0
+offset_right = 92.5
+offset_bottom = 23.0
+grow_horizontal = 2
+pivot_offset = Vector2(500, 50)
+theme_override_styles/normal = SubResource("StyleBoxFlat_g01gh")
+theme_override_font_sizes/font_size = 76
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+text = "☠  GEËXTERMINEERD  ☠"
+horizontal_alignment = 1
+metadata/doom_popup = true

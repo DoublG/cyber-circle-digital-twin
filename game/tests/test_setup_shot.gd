@@ -16,8 +16,8 @@ func _ready() -> void:
 	var game: GameManager = arena.game
 	game.use_database("")
 	await get_tree().create_timer(1.0).timeout
-	arena.players.set_tile_enabled(8, false)
-	game.set_mode(GameManager.Mode.SETUP)
+	arena.installation.set_enabled(8, false)
+	game.modes.change(GameManager.Mode.SETUP)
 	await get_tree().create_timer(1.5).timeout
 	var wall: ScreenWall = arena.screen_wall
 	var patterns := []
@@ -57,7 +57,7 @@ func _ready() -> void:
 		var vp: SubViewport = wall._screens[k].get_viewport()
 		vp.get_texture().get_image().save_png("res://tests/shots/setup_screen_%d.png" % (k + 1))
 	wall._observer_screen.get_viewport().get_texture().get_image().save_png("res://tests/shots/setup_overview.png")
-	game.set_mode(GameManager.Mode.OPEN)
+	game.modes.change(GameManager.Mode.OPEN)
 	await get_tree().create_timer(0.5).timeout
 	var gone: bool = wall._screens.all(func(s): return s.get_node_or_null("TestPattern") == null)
 	print("    [%s] the test pattern is gone when the game opens" % ["ok" if gone else "FAIL"])

@@ -1,5 +1,5 @@
 extends Node
-## A partial installation (PlayerRegistry.set_installed): only T01-T07 and M1-M2.
+## A partial installation (Installation.set_installed): only T01-T07 and M1-M2.
 ## The room from above (the other tiles, their ducts and cables hidden) and
 ## the screens (no slots for the missing places; a screen without any: how
 ## to join). tests/shots/86_installed_*.
@@ -21,7 +21,7 @@ func _ready() -> void:
 	add_child(arena)
 	arena.game.use_database("")
 	arena.sound.enabled = false
-	arena.game.set_mode(GameManager.Mode.OPEN)
+	arena.game.modes.change(GameManager.Mode.OPEN)
 	var vp := SubViewport.new()
 	vp.size = Vector2i(1280, 720)
 	vp.world_3d = arena.get_world_3d()
@@ -34,9 +34,9 @@ func _ready() -> void:
 	await get_tree().create_timer(1.0).timeout
 	arena.apply_command({"tile": 9, "join": "Weg"})          # a player on a place that goes
 	await get_tree().create_timer(0.5).timeout
-	arena.players.set_installed([1, 2, 3, 4, 5, 6, 7, 14, 15])
+	arena.installation.set_installed([1, 2, 3, 4, 5, 6, 7, 14, 15])
 	await get_tree().create_timer(1.0).timeout
-	check(not arena.players.is_installed(9) and not arena.players.is_enabled(9), "T09 not installed, not usable")
+	check(not arena.installation.is_installed(9) and not arena.installation.is_enabled(9), "T09 not installed, not usable")
 	check(not arena.players.is_playing(9), "the player on T09 left")
 	check(not arena.tiles[8].visible and arena.tiles[0].visible, "T09 hidden, T01 shown")
 	check(not arena.tiles[15].visible, "M3 (drone) hidden")
@@ -57,7 +57,7 @@ func _ready() -> void:
 	get_viewport().get_texture().get_image().save_png(
 		ProjectSettings.globalize_path("res://tests/shots/86_installed_screens.png"))
 	print("saved 86_installed_room, 86_installed_screens")
-	arena.players.set_installed(range(1, 19))
+	arena.installation.set_installed(range(1, 19))
 	await get_tree().create_timer(0.5).timeout
 	check(arena.tiles[8].visible and floor_model.find_child("Ring_07", true, false).visible,
 		"all back: T09 and its ducts shown")

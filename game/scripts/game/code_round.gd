@@ -51,6 +51,8 @@ class PlayerState extends RoundState:
 
 
 func _init() -> void:
+	replica_keys = ["state", "crack_points", "par_tries"]   # (what its views read: RoundMirror)
+	state_fields = {"state": PlayerState}   # (sent as plain data: RoundState)
 	title = "Code kraken"
 	mode = "personal"
 	duration = 75.0
@@ -190,7 +192,7 @@ func _update(delta: float) -> void:
 ## their colour, the rest dim); after a try the hint of every place, in order;
 ## cracked: all green.
 func _show(id: int, cracked := false) -> void:
-	if tile(id).is_dead:
+	if _tile(id).is_dead:
 		return
 	var st := state[id]
 	var ring := []
@@ -225,16 +227,6 @@ func finish() -> void:
 			names.append(game.arena.players.player_name(id).to_upper())
 	if best >= 1:
 		game.log_event("%d CODE%s GEKRAAKT: %s" % [best, "S" if best > 1 else "", ", ".join(names)], Retro.CREAM)
-
-
-# (Replica: what CodeView reads - not the codes themselves, only their sizes)
-func replica_keys() -> Array:
-	return ["state", "crack_points", "par_tries"]
-
-
-## (Its per-player state goes to the display nodes as plain data: RoundState.)
-func state_fields() -> Dictionary:
-	return {"state": PlayerState}
 
 
 func replica_init() -> Dictionary:

@@ -23,7 +23,7 @@ func _ready() -> void:
 	add_child(arena)
 	arena.game.use_database("")
 	arena.sound.enabled = false
-	arena.game.set_mode(GameManager.Mode.OPEN)
+	arena.game.modes.change(GameManager.Mode.OPEN)
 	await get_tree().create_timer(1.0).timeout
 	check(arena.find_children("Stream_*", "", false, false).is_empty(), "no stream: nothing runs")
 	arena.apply_command({"tile": 5, "join": "Lena"})

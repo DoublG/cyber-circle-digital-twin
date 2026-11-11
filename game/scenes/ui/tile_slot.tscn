@@ -1,0 +1,148 @@
+[gd_scene format=3]
+
+[ext_resource type="Theme" path="res://scenes/ui/retro_theme.tres" id="1_3l5qo"]
+[ext_resource type="Script" path="res://scripts/ui/tile_slot.gd" id="2_q4y18"]
+[ext_resource type="Script" path="res://scripts/ui/tile_diagram.gd" id="3_trf6d"]
+[ext_resource type="PackedScene" path="res://scenes/ui/call_to_action.tscn" id="4_d3xw2"]
+[ext_resource type="Script" path="res://scripts/ui/view_frame.gd" id="5_iww3o"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_icduo"]
+resource_local_to_scene = true
+content_margin_left = 22.0
+content_margin_top = 11.0
+content_margin_right = 22.0
+content_margin_bottom = 11.0
+bg_color = Color(0.2, 0.8, 0.75, 0.45)
+border_color = Color(0.2, 0.8, 0.75, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+corner_detail = 1
+
+[node name="TileSlot" type="Control" unique_id=193659132]
+clip_contents = true
+layout_mode = 3
+anchors_preset = 0
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+theme = ExtResource("1_3l5qo")
+script = ExtResource("2_q4y18")
+
+[node name="Box" type="VBoxContainer" parent="." unique_id=1321529983]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 40.0
+offset_top = 40.0
+offset_right = -40.0
+offset_bottom = -40.0
+theme_override_constants/separation = 28
+alignment = 1
+
+[node name="Badge" type="Label" parent="Box" unique_id=2004202716]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_styles/normal = SubResource("StyleBoxFlat_icduo")
+theme_override_font_sizes/font_size = 56
+theme_override_colors/font_color = Color(0.035, 0.03, 0.028, 1)
+text = "T00"
+horizontal_alignment = 1
+
+[node name="Setup" type="Label" parent="Box" unique_id=759352372]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 48
+theme_override_colors/font_color = Color(1, 0.74, 0.22, 1)
+text = "SETUP"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="OutOfService" type="Label" parent="Box" unique_id=1535962116]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 64
+theme_override_colors/font_color = Color(1, 0.25, 0.2, 0.8)
+text = "BUITEN GEBRUIK"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="Closed" type="Label" parent="Box" unique_id=1944269163]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_font_sizes/font_size = 96
+theme_override_colors/font_color = Color(0.55, 0.48, 0.4, 0.8)
+text = "GESLOTEN"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="Invited" type="VBoxContainer" parent="Box" unique_id=32448044]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 28
+
+[node name="PlayerName" type="Label" parent="Box/Invited" unique_id=309071688]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 84
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+text = "SPELER"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="Press" type="Label" parent="Box/Invited" unique_id=1330253880]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 40
+theme_override_colors/font_color = Color(1, 0.74, 0.22, 1)
+text = "DRUK OP DE 4 ICONEN"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="Diagram" type="Control" parent="Box/Invited" unique_id=13124186]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 460)
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("3_trf6d")
+
+[node name="Free" type="VBoxContainer" parent="Box" unique_id=811362311]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 28
+
+[node name="Vrij" type="Label" parent="Box/Free" unique_id=1506682674]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 96
+theme_override_colors/font_color = Color(0.55, 0.48, 0.4, 0.8)
+text = "VRIJ"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="Cta" parent="Box/Free" unique_id=553420388 instance=ExtResource("4_d3xw2")]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 200)
+layout_mode = 2
+theme_override_font_sizes/font_size = 52
+
+[node name="Join" type="Label" parent="Box/Free" unique_id=979351306]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="Frame" type="Control" parent="." unique_id=680558168]
+anchors_preset = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+script = ExtResource("5_iww3o")

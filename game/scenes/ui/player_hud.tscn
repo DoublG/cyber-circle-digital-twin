@@ -1,0 +1,115 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/player_hud.gd" id="1_e6e0b"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_31ty4"]
+content_margin_left = 14.0
+content_margin_top = 7.0
+content_margin_right = 14.0
+content_margin_bottom = 7.0
+bg_color = Color(0.09, 0.075, 0.06, 0.85)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(1, 0.45, 0.08, 1)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+corner_detail = 1
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_u16pa"]
+content_margin_left = 8.0
+content_margin_top = 4.0
+content_margin_right = 8.0
+content_margin_bottom = 4.0
+bg_color = Color(0.2, 0.8, 0.75, 1)
+border_color = Color(0.2, 0.8, 0.75, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+corner_detail = 1
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_u7a8l"]
+content_margin_left = 40.0
+content_margin_top = 20.0
+content_margin_right = 40.0
+content_margin_bottom = 20.0
+bg_color = Color(0.1, 0, 0, 0.85)
+border_width_left = 6
+border_width_top = 6
+border_width_right = 6
+border_width_bottom = 6
+border_color = Color(1, 0.25, 0.2, 1)
+corner_radius_top_left = 24
+corner_radius_top_right = 24
+corner_radius_bottom_right = 24
+corner_radius_bottom_left = 24
+corner_detail = 1
+
+[node name="PlayerHud" type="Control" unique_id=1859517791]
+layout_mode = 3
+anchors_preset = 0
+mouse_filter = 2
+script = ExtResource("1_e6e0b")
+
+[node name="Plate" type="PanelContainer" parent="." unique_id=262936115]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 26.0
+offset_right = 30.0
+offset_bottom = 26.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_31ty4")
+
+[node name="Row" type="HBoxContainer" parent="Plate" unique_id=1872674944]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Tile" type="Label" parent="Plate/Row" unique_id=1524439880]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_u16pa")
+theme_override_font_sizes/font_size = 36
+theme_override_colors/font_color = Color(0.035, 0.03, 0.028, 1)
+horizontal_alignment = 1
+
+[node name="PlayerName" type="Label" parent="Plate/Row" unique_id=538548198]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 38
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+horizontal_alignment = 1
+
+[node name="Lives" type="Label" parent="Plate/Row" unique_id=1598350664]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 38
+theme_override_colors/font_color = Color(1, 0.2, 0.3, 1)
+
+[node name="Score" type="Label" parent="Plate/Row" unique_id=303254156]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 38
+theme_override_colors/font_color = Color(1, 0.74, 0.22, 1)
+
+[node name="Dead" type="Label" parent="." unique_id=700158292]
+unique_name_in_owner = true
+layout_mode = 1
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -72.5
+offset_top = -11.5
+offset_right = 72.5
+offset_bottom = 11.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_u7a8l")
+theme_override_font_sizes/font_size = 80
+theme_override_colors/font_color = Color(1, 0.25, 0.2, 1)
+text = "GEËXTERMINEERD!"
+horizontal_alignment = 1

@@ -51,7 +51,7 @@ func _run() -> void:
 	await _until(func(): return game.state == GameManager.State.SCOREBOARD)
 	await _until(func(): return arena.tiles[0].is_dead and arena.tiles[1].is_dead, 30.0)
 	check(arena.tiles[0].is_dead and arena.tiles[1].is_dead, "both exterminated")
-	check(game._waiting_overlay(1).source.call() == "", "an exterminated player's view: no 'wait for the next round'")
+	check(game.views.waiting_overlay(1).source.call() == "", "an exterminated player's view: no 'wait for the next round'")
 	var intros_then := intros
 	print("--- no new round: the scoreboard waits until the tiles are free, then the lobby")
 	await _until(func(): return game.state == GameManager.State.LOBBY, 90.0)

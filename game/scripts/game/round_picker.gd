@@ -210,12 +210,20 @@ func set_planned(slot: int, name: String, options := {}) -> void:
 			return
 		upcoming[slot] = {"type": t, "forced": true, "options": options}
 	plan()
+	_checkpoint()
 
 
 ## Operator: every planned round random again.
 func clear_planned() -> void:
 	upcoming.clear()
 	plan()
+	_checkpoint()
+
+
+## The plan changed: it is what comes back after a crash (Recovery).
+func _checkpoint() -> void:
+	if game.recovery:
+		game.recovery.mark()
 
 
 ## The plan for the web interface: [{type, title, forced, options, chance}].

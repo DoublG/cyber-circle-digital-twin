@@ -24,7 +24,7 @@ func _ready() -> void:
 		"x": "  "})
 	check(not Texts.values.has("x"), "an empty text: the default")
 	check(Texts.calls() == ["KOM SPELEN!", "WIN VAN DE ROBOT!"], "the slogans, one per line")
-	var cta := CallToAction.new()
+	var cta := CallToAction.create()
 	add_child(cta)                                  # (it picks its slogan when it goes on screen)
 	check(cta.text in Texts.calls(), "a call to action shows one of them (%s)" % cta.text)
 	cta.free()
@@ -34,7 +34,7 @@ func _ready() -> void:
 		await get_tree().process_frame
 	check(game.current.title == "De Grote Quiz" and game.current.rules.begins_with("Juist = blijven"),
 		"the round: the new name and rules (%s)" % game.current.title)
-	var slot := TileSlot.new()
+	var slot := TileSlot.create()
 	slot.tile_id = 5
 	add_child(slot)
 	await get_tree().process_frame

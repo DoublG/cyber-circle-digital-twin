@@ -1,0 +1,45 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/ui/call_to_action.tscn" id="1_7kj84"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_redln"]
+content_margin_left = 40.0
+content_margin_top = 20.0
+content_margin_right = 40.0
+content_margin_bottom = 20.0
+bg_color = Color(0.09, 0.075, 0.06, 0.95)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0.45, 0.08, 1)
+corner_detail = 1
+
+[node name="JoinPanel" type="PanelContainer" unique_id=1781122132]
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_redln")
+
+[node name="Box" type="VBoxContainer" parent="." unique_id=1436754863]
+layout_mode = 2
+theme_override_constants/separation = 40
+alignment = 1
+
+[node name="Logo" type="Label" parent="Box" unique_id=1762776801]
+layout_mode = 2
+theme_override_font_sizes/font_size = 80
+theme_override_colors/font_color = Color(0.2, 0.8, 0.75, 1)
+text = "CYBER CIRCLE CHALLENGE"
+horizontal_alignment = 1
+
+[node name="Cta" parent="Box" unique_id=553420388 instance=ExtResource("1_7kj84")]
+custom_minimum_size = Vector2(0, 220)
+layout_mode = 2
+theme_override_font_sizes/font_size = 64
+
+[node name="How" type="Label" parent="Box" unique_id=1820215623]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 40
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+horizontal_alignment = 1
+autowrap_mode = 3

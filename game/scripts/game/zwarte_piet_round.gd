@@ -16,8 +16,8 @@ extends GameRound
 ## {"piet": {"on": false}} and reports its presses as usual.
 ##
 ## The end of a countdown is a matter of milliseconds: a kick just before it
-## may arrive just after. The tiles run the round's clock (GameRound
-## start_tile_clock) and stamp their presses; when the time is up, the game
+## may arrive just after. The tiles run the round's clock (TileClock)
+## and stamp their presses; when the time is up, the game
 ## waits `late_grace` for a kick stamped before the end - it counts, and the
 ## one who had the light at that moment is caught. Simulated tiles (no
 ## network): no wait.
@@ -46,6 +46,7 @@ var _end_at := -1.0                  # the countdown ended at this moment: waiti
 
 
 func _init() -> void:
+	replica_keys = ["holder", "speed"]   # (what its views read: RoundMirror)
 	title = "Zwarte Piet"
 	mode = "personal"
 	on_tile = true
@@ -71,7 +72,7 @@ func tunables() -> Array:
 func _start() -> void:
 	for id in players:
 		game.arena.send_to_tile(id, {"piet": {"on": false}})
-	start_tile_clock()
+	tile_clock.start(self)
 	_new_burst()
 
 
@@ -114,9 +115,9 @@ func _new_burst() -> void:
 func button(id: int, b: StringName) -> void:
 	if id != holder or holder == 0:
 		return
-	var at := press_time(_clock)
+	var at := tile_clock.press_time(_clock)
 	if _end_at >= 0.0:                   # after the end: only a kick from before it
-		if not press_stamped() or at >= _end_at:
+		if not tile_clock.press_stamped() or at >= _end_at:
 			return
 		late_kicks += 1
 	var reaction := maxf(0.0, at - _got_at)
@@ -159,13 +160,13 @@ func _burst() -> void:
 
 
 func _alive(id: int) -> bool:
-	return id in players and game.arena.players.is_playing(id) and not tile(id).is_dead
+	return id in players and game.arena.players.is_playing(id) and not _tile(id).is_dead
 
 
 func finish() -> void:
 	for id in players:
 		game.arena.send_to_tile(id, {"piet": {"on": false}})
-	stop_tile_clock()
+	tile_clock.stop()
 	holder = 0
 	_end_at = -1.0
 
@@ -175,12 +176,8 @@ func progress(id: int) -> int:
 	return points[id]
 
 
-func replica_keys() -> Array:              # (what its overlay reads: Replica)
-	return ["holder", "speed"]
-
-
 func make_player_overlay(id: int) -> Control:
-	var line := StatusLine.new()
+	var line := StatusLine.create()
 	line.source = func():
 		if holder == id:
 			return "JIJ HEBT HET LICHT!  < LINKS  |  RECHTS >"

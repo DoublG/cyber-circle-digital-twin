@@ -16,8 +16,8 @@ func _init() -> void:
 	root.add_child(arena)
 	await process_frame
 	arena.game.use_database("")
-	arena.game.set_mode(GameManager.Mode.OPEN)
-	arena.players.set_installed([1, 14, 15, 16, 17, 18])       # one floor tile, the mobile places
+	arena.game.modes.change(GameManager.Mode.OPEN)
+	arena.installation.set_installed([1, 14, 15, 16, 17, 18])       # one floor tile, the mobile places
 	await process_frame
 	check(arena.players.register(0, "Anna") == 1, "a free floor tile first (T01)")
 	check(arena.players.register(0, "Bram") == 0, "no floor tile free, mobile off: nobody placed")
@@ -26,7 +26,7 @@ func _init() -> void:
 	arena.players.leave(1)
 	check(arena.players.register(0, "Daan", Color.RED, 0, 0, true) == 1,
 		"mobile on, a floor tile free again: the floor tile")
-	arena.players.set_installed([14, 15, 16, 17, 18])          # no floor tiles at all
+	arena.installation.set_installed([14, 15, 16, 17, 18])          # no floor tiles at all
 	await process_frame
 	check(arena.players.register(0, "Eva") == 0, "only mobile places, mobile off: nobody placed (the gamemaster's choice)")
 	check(arena.players.register(0, "Eva", Color.RED, 0, 0, true) == 16,

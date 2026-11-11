@@ -167,33 +167,35 @@ func _on_message(topic: String, payload: PackedByteArray) -> void:
 	if not data is Dictionary:
 		push_warning("mqtt: ignored non-JSON message on " + topic)
 		return
-	if topic == topic_prefix + "/mode":                  # the operator's operating mode
-		arena.apply_command({"game": "mode", "mode": data.get("mode", "")})
-		return
-	if topic == topic_prefix + "/db":                    # the database changed: fetch it again now
-		if arena.game.db:
-			arena.game.db.refresh()
-		return
-	if topic == topic_prefix + "/settings":              # the operator's settings
-		arena.game.settings.apply(data)
-		return
-	if topic == topic_prefix + "/texts":                 # the operator's texts (Texts)
-		Texts.apply(data)
-		arena.screen_wall.refresh_all()                  # (free tiles: their line)
-		return
-	if topic == topic_prefix + "/tiles":                 # tiles in / out of service
-		if data.get("installed") is Array:               # the places of this installation
-			arena.players.set_installed(data.installed)
-		var enabled: Dictionary = data.get("enabled", {})
-		for n in enabled:
-			arena.players.set_tile_enabled(int(n), bool(enabled[n]))
-		return
 	var parts := topic.trim_prefix(topic_prefix + "/").split("/")
 	if parts.size() == 3 and parts[0] == "tile" and parts[2] == "event":
 		data["tile"] = int(parts[1])
-	elif parts != PackedStringArray(["cmd"]):
-		return
-	arena.apply_command(data)
+		arena.apply_command(data)
+	elif parts.size() == 1:
+		_on_operator(parts[0], data)
+
+
+## The control server's topics: <prefix>/<name>.
+func _on_operator(kind: String, data: Dictionary) -> void:
+	match kind:
+		"cmd":
+			arena.apply_command(data)
+		"mode":                              # the operator's operating mode
+			arena.apply_command({"game": "mode", "mode": data.get("mode", "")})
+		"db":                                # the database changed: fetch it again now
+			if arena.game.db:
+				arena.game.db.refresh()
+		"settings":                          # the operator's settings
+			arena.game.settings.apply(data)
+		"texts":                             # the operator's texts (Texts)
+			Texts.apply(data)
+			arena.screen_wall.refresh_all()  # (free tiles: their line)
+		"tiles":                             # tiles in / out of service
+			if data.get("installed") is Array:   # the places of this installation
+				arena.installation.set_installed(data.installed)
+			var enabled: Dictionary = data.get("enabled", {})
+			for n in enabled:
+				arena.installation.set_enabled(int(n), bool(enabled[n]))
 
 
 func _process(delta: float) -> void:
@@ -284,7 +286,7 @@ func _setup_display() -> void:
 		arena.own_tiles_live = true)
 	disconnected.connect(func(): arena.own_tiles_live = false)
 	for id in range(1, arena.tiles.size() + 1):
-		if arena.is_own_tile(id):
+		if arena.mirror.is_own_tile(id):
 			subscribe("%s/tile/%d/cmd" % [topic_prefix, id])
 			subscribe("%s/tile/%d/event" % [topic_prefix, id])
 	start()
@@ -296,12 +298,12 @@ func _on_display_message(topic: String, payload: PackedByteArray) -> void:
 	if not data is Dictionary or parts.size() != 3 or parts[0] != "tile":
 		return
 	var id := int(parts[1])
-	if id < 1 or id > arena.tiles.size() or not arena.is_own_tile(id):
+	if id < 1 or id > arena.tiles.size() or not arena.mirror.is_own_tile(id):
 		return
 	if Replica.debug:
 		print("replica: own tile %d over MQTT: %s %s" % [id, parts[2], data])
 	if parts[2] == "cmd":
-		arena.replica_tile_msg(id, data)               # (its tile logic: the same program as the real tile)
+		arena.mirror.tile_msg(id, data)               # (its tile logic: the same program as the real tile)
 	elif parts[2] == "event" and data.has("press"):
 		if data.get("hold", 0):                    # (shows at once; the master scores it)
 			arena.tiles[id - 1].hold_button(StringName(data.press))

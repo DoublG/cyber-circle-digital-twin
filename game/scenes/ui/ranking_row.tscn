@@ -1,0 +1,50 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/score_row.gd" id="1_bgyrq"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_vkogh"]
+
+[node name="RankingRow" type="PanelContainer" unique_id=803842027]
+theme_override_styles/panel = SubResource("StyleBoxEmpty_vkogh")
+script = ExtResource("1_bgyrq")
+widths = PackedInt32Array(3, 0, 4, 7, 7)
+
+[node name="Cells" type="HBoxContainer" parent="." unique_id=400405506]
+layout_mode = 2
+theme_override_constants/separation = 30
+
+[node name="Place" type="Label" parent="Cells" unique_id=2139653427]
+custom_minimum_size = Vector2(81.84, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 44
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+horizontal_alignment = 2
+
+[node name="PlayerName" type="Label" parent="Cells" unique_id=1084037563]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 44
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Tile" type="Label" parent="Cells" unique_id=1719914134]
+custom_minimum_size = Vector2(109.12, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 44
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+horizontal_alignment = 2
+
+[node name="Score" type="Label" parent="Cells" unique_id=2113369052]
+custom_minimum_size = Vector2(190.96, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 44
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+horizontal_alignment = 2
+
+[node name="Badge" type="Label" parent="Cells" unique_id=1373682719]
+custom_minimum_size = Vector2(190.96, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 44
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+horizontal_alignment = 2

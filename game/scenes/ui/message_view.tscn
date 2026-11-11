@@ -1,0 +1,81 @@
+[gd_scene format=3]
+
+[ext_resource type="Theme" path="res://scenes/ui/retro_theme.tres" id="1_6dkc4"]
+[ext_resource type="Script" path="res://scripts/ui/message_view.gd" id="2_gddoq"]
+[ext_resource type="PackedScene" path="res://scenes/ui/background.tscn" id="3_r6ivm"]
+[ext_resource type="PackedScene" path="res://scenes/ui/stripes_left.tscn" id="4_wu7na"]
+[ext_resource type="PackedScene" path="res://scenes/ui/stripes_right.tscn" id="5_e21bg"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tgupk"]
+content_margin_left = 50.0
+content_margin_top = 25.0
+content_margin_right = 50.0
+content_margin_bottom = 25.0
+bg_color = Color(0.09, 0.075, 0.06, 1)
+border_width_left = 4
+border_width_top = 4
+border_width_right = 4
+border_width_bottom = 4
+border_color = Color(0.2, 0.8, 0.75, 1)
+corner_radius_top_left = 30
+corner_radius_top_right = 30
+corner_radius_bottom_right = 30
+corner_radius_bottom_left = 30
+corner_detail = 1
+
+[node name="MessageView" type="Control" unique_id=51868708]
+layout_mode = 3
+anchors_preset = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme = ExtResource("1_6dkc4")
+script = ExtResource("2_gddoq")
+
+[node name="Background" parent="." unique_id=1369816793 instance=ExtResource("3_r6ivm")]
+layout_mode = 1
+
+[node name="Box" type="VBoxContainer" parent="." unique_id=1773726411]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 80.0
+offset_right = -80.0
+theme_override_constants/separation = 40
+alignment = 1
+
+[node name="TitleBar" type="HBoxContainer" parent="Box" unique_id=1560126578]
+layout_mode = 2
+theme_override_constants/separation = 30
+
+[node name="StripesLeft" parent="Box/TitleBar" unique_id=1377083634 instance=ExtResource("4_wu7na")]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Box/TitleBar" unique_id=1511939048]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 120
+theme_override_colors/font_color = Color(1, 0.74, 0.22, 1)
+horizontal_alignment = 1
+
+[node name="StripesRight" parent="Box/TitleBar" unique_id=1436792696 instance=ExtResource("5_e21bg")]
+layout_mode = 2
+
+[node name="Plate" type="PanelContainer" parent="Box" unique_id=451022914]
+layout_mode = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_tgupk")
+
+[node name="Body" type="Label" parent="Box/Plate" unique_id=2077880264]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 50
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="Footer" type="Label" parent="Box" unique_id=43442080]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 64
+theme_override_colors/font_color = Color(0.2, 0.8, 0.75, 1)
+horizontal_alignment = 1

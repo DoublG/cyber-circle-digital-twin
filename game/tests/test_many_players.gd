@@ -25,7 +25,7 @@ func _ready() -> void:
 	container.add_child(_vp)
 
 	print("--- quiz with %d players" % N)
-	var quiz := _screen(QuizView.new()) as QuizView
+	var quiz := _screen(QuizView.create()) as QuizView
 	var players := []
 	for i in N:
 		var id := i + 1
@@ -36,11 +36,11 @@ func _ready() -> void:
 		"category": "Computers", "ages": "10-16 JAAR", "text": "", "video": null, "media": null,
 		"video_progress": 0.0, "time_left": 3.0, "time_total": 3.0, "players": players}
 	await _frames(state, quiz, 1.0)
-	var cards: Array = quiz._player_cards.values().map(func(c): return c.panel)
+	var cards: Array = quiz._player_cards.values()
 	check(cards.size() == N, "quiz: %d cards (%d)" % [N, cards.size()])
 	_inside(quiz, cards, "quiz answers: every card on the screen")
 	var clipped := quiz._player_cards.values().all(
-		func(c): return c.name.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS)
+		func(c): return c.name_label.text_overrun_behavior == TextServer.OVERRUN_TRIM_ELLIPSIS)
 	check(clipped, "quiz: names clip with … (the card keeps its width)")
 	await _shot("60_many_quiz_answers")
 	for p in players:
@@ -60,7 +60,7 @@ func _ready() -> void:
 	for i in N:
 		rows.append({"name": NAMES[i], "tile": i + 1, "place": i / 2 + 1, "score": 40 - i,
 			"change": 1 if i < 2 else (-1 if i >= N - 2 else 0), "doomed": i == N - 1})
-	var ranking := _screen(RankingView.new()) as RankingView
+	var ranking := _screen(RankingView.create()) as RankingView
 	ranking.show_ranking("Ritme", "PUNTEN", rows)
 	await _wait(5.0)
 	check(ranking._badges.size() == N, "UITSLAG: all %d rows (%d)" % [N, ranking._badges.size()])
@@ -74,7 +74,7 @@ func _ready() -> void:
 		board_rows.append({"name": NAMES[i], "tile": i + 1, "survived": 12 - i / 2, "lives": 1 + i % 5,
 			"lives_before": 1 + i % 5, "change": 0, "out": i == N - 1, "was_out": false, "record": 14,
 			"rank": i + 1})
-	var board := _screen(ScoreboardView.new()) as ScoreboardView
+	var board := _screen(ScoreboardView.create()) as ScoreboardView
 	board.show_scores("Scorebord", "Ritme", board_rows, true)
 	await _wait(1.5)
 	check(board._rows.size() == N, "scoreboard: all %d rows (%d)" % [N, board._rows.size()])
@@ -90,7 +90,7 @@ func _screen(view: Control) -> Control:
 	var bg := ColorRect.new()                     # as a screen of the wall: the Retro theme
 	bg.color = Color.BLACK
 	bg.size = Vector2(1920, 1080)
-	bg.theme = Retro.theme()
+	bg.theme = Retro.THEME
 	_vp.add_child(bg)
 	view.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.add_child(view)

@@ -2,8 +2,8 @@ class_name CyberRobot
 extends Node3D
 ## The central robot. Wraps models/robot.glb.
 ## 13 sides (Side_00..12), one per tile: side k faces tile k+1. Side 0 faces -Z,
-## then clockwise seen from above. Each side has 5 half-sphere lights,
-## Bulb_{side * 5 + row} with row 0 at the bottom.
+## then clockwise seen from above. Each side has 5 half-sphere lights; they, the
+## side plates' glow and the dome are its `lights` (RobotLights).
 ## The "Head" node is the rotating top (neck cage, eye, dome); it yaws around Y
 ## (0 = eye looking along -Z, i.e. at tile 1). When idle it spins continuously.
 ## The plunger (rod with black tip on the head) can fire at a tile.
@@ -18,10 +18,8 @@ signal hit_taken(side: int)
 signal power_moment(name: StringName)
 
 const ROBOT_SCENE := preload("res://models/robot.glb")
-const PARTY_DOME_SHADER := preload("res://shaders/party_dome.gdshader")
-const SIDE_COUNT := 13
-const BULBS_PER_SIDE := 5
-const BULB_COUNT := SIDE_COUNT * BULBS_PER_SIDE
+const SIDE_COUNT := RobotLights.SIDES
+const BULBS_PER_SIDE := RobotLights.ROWS
 
 @export var head_speed_deg := 120.0   # max turn speed for turn_head_to / look_at_point
 @export var idle_spin_deg := 30.0      # idle spin speed of the top (deg/s, 0 = stop)
@@ -31,13 +29,14 @@ const BULB_COUNT := SIDE_COUNT * BULBS_PER_SIDE
 @export var eye_pitch_max_deg := 60.0     # up (at the drones)
 @export var shot_speed := 6.0          # m/s of the plunger shot
 @export var death_color := Color.RED   # colour of the 5 half spheres in the death animation
-@export var party_lamp := true: set = set_party_lamp   # rotating colours inside the dome
-@export var party_spin_speed := 0.6: set = set_party_spin_speed  # rad/s
-## Built-in light show on the half spheres (each has an RGB light behind it).
-@export_enum("none", "rainbow", "chase", "pulse") var bulb_effect := "rainbow"
+## The lights at the start (afterwards: `lights`).
+@export var party_lamp := true         # rotating colours inside the dome
+@export var party_spin_speed := 0.6    # rad/s
+@export_enum("none", "rainbow", "chase", "pulse") var bulb_effect := "rainbow"   # light show on the half spheres
 @export var bulb_effect_speed := 1.0
 
 var head: Node3D
+var lights: RobotLights
 var powered := true                     # off: dark and still (the game is closed: the players beat it)
 
 var _model: Node3D
@@ -56,12 +55,6 @@ var _eye_pivot: Node3D                  # the eye gun tilts on it (pitch); made 
 var _target_pitch := 0.0                # radians, + = up
 var _plunger_lens: Node3D
 var _muzzle_light: OmniLight3D
-var _bulbs: Array[MeshInstance3D] = []
-var _sides: Array[MeshInstance3D] = []
-var _dome_light: OmniLight3D
-var _dome_mat: ShaderMaterial
-var _party_time := 0.0
-var _effect_time := 0.0
 var _anim: AnimationPlayer
 var _power_show := 0                    # a boot / shutdown running (its number: a newer one stops it)
 
@@ -75,29 +68,10 @@ func _ready() -> void:
 		add_child(_model)
 	head = _model.find_child("Head", true, false)
 	_anim = _model.find_child("AnimationPlayer", true, false)
-	for i in BULB_COUNT:
-		_bulbs.append(_make_led(_model.find_child("Bulb_%02d" % i, true, false)))
-	for k in SIDE_COUNT:
-		var side := _model.find_child("Side_%02d" % k, true, false) as MeshInstance3D
-		var mat := StandardMaterial3D.new()
-		mat.albedo_color = Color(0.62, 0.52, 0.30)
-		mat.metallic = 0.6
-		mat.roughness = 0.45
-		mat.emission_enabled = true
-		mat.emission = Color.BLACK
-		side.material_override = mat
-		_sides.append(side)
-	var dome := _model.find_child("Dome", true, false) as MeshInstance3D
-	_dome_mat = ShaderMaterial.new()
-	_dome_mat.shader = PARTY_DOME_SHADER
-	dome.material_override = _dome_mat
-	_dome_light = OmniLight3D.new()
-	_dome_light.position = dome.position + Vector3(0, 0.1, 0)
-	_dome_light.omni_range = 1.5
-	_dome_light.light_energy = 0.0
-	head.add_child(_dome_light)
-	set_party_lamp(party_lamp)
-	set_party_spin_speed(party_spin_speed)
+	lights = RobotLights.new(_model, head)
+	lights.set_party_lamp(party_lamp)
+	lights.set_party_spin_speed(party_spin_speed)
+	lights.set_effect(bulb_effect, bulb_effect_speed)
 	_build_eye_pivot()
 	for part in ["Eye_Tip", "Eye_Lens", "Eye_Fins"]:
 		var node := _model.find_child(part, true, false) as Node3D
@@ -114,15 +88,9 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	var pitch_step := deg_to_rad(eye_pitch_speed_deg) * delta   # the eye gun tilts on its own
 	_eye_pivot.rotation.x += clampf(_target_pitch - _eye_pivot.rotation.x, -pitch_step, pitch_step)
+	lights.update(Retro.game_clock, not _head_locked)   # (the arena's clock)
 	if _head_locked:
-		if bulb_effect != "none":
-			_effect_time += delta * bulb_effect_speed
-			_run_bulb_effect()
-		return
-	if party_lamp:
-		# the lamp spills a slowly changing colour around the head
-		_party_time += delta
-		_dome_light.light_color = Color.from_hsv(fmod(_party_time * 0.1, 1.0), 0.7, 1.0)
+		return                          # (an animation drives the head directly)
 	if _has_target:
 		var diff := wrapf(_target_yaw - head.rotation.y, -PI, PI)
 		var step := deg_to_rad(head_speed_deg) * delta
@@ -133,39 +101,10 @@ func _process(delta: float) -> void:
 				_has_target = false
 	elif not (_anim and _anim.is_playing()):
 		head.rotation.y = wrapf(head.rotation.y - deg_to_rad(idle_spin_deg) * delta, -PI, PI)
-	if bulb_effect != "none":
-		_effect_time += delta * bulb_effect_speed
-		_run_bulb_effect()
-
-
-## Pick a light show for the half spheres; "none" leaves them to set_bulb() calls.
-func set_bulb_effect(effect: String, speed := 1.0) -> void:
-	bulb_effect = effect
-	bulb_effect_speed = speed
-	if effect == "none":
-		set_all_bulbs(Color.BLACK)
-
-
-func _run_bulb_effect() -> void:
-	var t := _effect_time
-	for side in SIDE_COUNT:
-		for row in BULBS_PER_SIDE:
-			var c := Color.BLACK
-			match bulb_effect:
-				"rainbow":  # colours wander around the robot and up the sides
-					c = Color.from_hsv(fmod(float(side) / SIDE_COUNT + row * 0.04 + t * 0.15, 1.0), 0.9, 1.0)
-				"chase":  # one lit column runs around, colour changes per lap
-					var pos := fmod(t * 4.0, SIDE_COUNT)
-					var dist := absf(wrapf(side - pos, -SIDE_COUNT / 2.0, SIDE_COUNT / 2.0))
-					c = Color.from_hsv(fmod(floor(t * 4.0 / SIDE_COUNT) * 0.17, 1.0), 0.9, clampf(1.0 - dist / 2.0, 0.0, 1.0))
-				"pulse":  # whole robot breathes through the colours
-					c = Color.from_hsv(fmod(t * 0.1, 1.0), 0.8, 0.5 + 0.5 * sin(t * 3.0))
-			set_side_bulb(side, row, c)
 
 
 # ---------------------------------------------------------------- head
 
-## Turn smoothly to a yaw angle in degrees (0 = front, positive = turn left).
 ## The eye gun (base, stalk, fins, tip, lens) on one pivot at its mount on
 ## the head, so it can tilt up and down (aim at a drone, down at a tile).
 func _build_eye_pivot() -> void:
@@ -183,7 +122,7 @@ func _build_eye_pivot() -> void:
 
 
 ## Tilt the eye gun towards a point (clamped to its range); null = level.
-func aim_pitch_at(global_point = null) -> void:
+func _aim_pitch_at(global_point = null) -> void:
 	if global_point == null:
 		_target_pitch = 0.0
 		return
@@ -196,17 +135,11 @@ func get_eye_pitch() -> float:
 	return rad_to_deg(_eye_pivot.rotation.x)
 
 
+## Turn smoothly to a yaw angle in degrees (0 = front, positive = turn left).
 func turn_head_to(deg: float) -> void:
 	_target_yaw = deg_to_rad(deg)
 	_has_target = true
 	_hold = 0.0
-
-
-## Jump instantly (use when mirroring a real encoder value).
-func set_head_angle(deg: float) -> void:
-	head.rotation.y = deg_to_rad(deg)
-	_target_yaw = head.rotation.y
-	_has_target = true
 
 
 ## The head as the master has it now (Replica: a display node's robot follows
@@ -251,7 +184,7 @@ func look_at_side(side: int) -> void:
 func look_at_point(global_point: Vector3) -> void:
 	var p := to_local(global_point)
 	_target_yaw = atan2(-p.x, -p.z)
-	aim_pitch_at(global_point)
+	_aim_pitch_at(global_point)
 	_has_target = true
 	_hold = 0.0
 
@@ -269,13 +202,6 @@ func release_head() -> void:
 	_target_pitch = 0.0
 
 
-## Plays the baked "HeadSpin" or "HeadScan" animation from the glb.
-func play_head_animation(anim_name: StringName) -> void:
-	_has_target = false
-	if _anim:
-		_anim.play(anim_name)
-
-
 func is_facing_target() -> bool:
 	return _has_target and absf(wrapf(_target_yaw - head.rotation.y, -PI, PI)) < 0.02 \
 		and absf(_target_pitch - _eye_pivot.rotation.x) < 0.03
@@ -289,13 +215,6 @@ func fire_at(global_target: Vector3) -> void:
 	while not is_facing_target():
 		await get_tree().process_frame
 	fire(global_target)
-
-
-func fire_at_side(side: int) -> void:
-	look_at_side(side)
-	while not is_facing_target():
-		await get_tree().process_frame
-	fire(global_position + side_direction(side) * 2.0)
 
 
 ## Fire straight ahead of the eye (or at `global_target` if given).
@@ -359,10 +278,10 @@ func take_hit(sides: Array, color := Color(0.2, 1.0, 0.3)) -> void:
 	for side in sides:
 		hit_taken.emit(side)
 	if _death_running:  # don't disturb a death animation, only flash the dome
-		_flash_dome(color)
+		lights.flash_dome(color)
 		return
 	_begin_fx()
-	_flash_dome(color)
+	lights.flash_dome(color)
 	var amount := 0.05 + 0.012 * sides.size()
 	var shake := create_tween()
 	shake.tween_property(head, "rotation:z", amount, 0.05)
@@ -371,10 +290,10 @@ func take_hit(sides: Array, color := Color(0.2, 1.0, 0.3)) -> void:
 	shake.tween_property(head, "rotation:z", 0.0, 0.08)
 	for n in 3:
 		for side in sides:
-			set_side_bulbs(side, color)
+			lights.set_side_bulbs(side, color)
 		await get_tree().create_timer(0.12).timeout
 		for side in sides:
-			set_side_bulbs(side, Color.BLACK)
+			lights.set_side_bulbs(side, Color.BLACK)
 		await get_tree().create_timer(0.08).timeout
 	_end_fx()
 
@@ -394,25 +313,25 @@ func play_overload(color := Color(0.2, 1.0, 0.3), sides: Array = []) -> void:
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 	for wave in 3:  # three green waves around the robot
 		for side in SIDE_COUNT:
-			set_side_bulbs(side, color)
-			set_side_bulbs(posmod(side - 3, SIDE_COUNT), Color.BLACK)
+			lights.set_side_bulbs(side, color)
+			lights.set_side_bulbs(posmod(side - 3, SIDE_COUNT), Color.BLACK)
 			if side % 2 == 0:
-				_flash_dome(Color.from_hsv(randf(), 0.6, 1.0))
+				lights.flash_dome(Color.from_hsv(randf(), 0.6, 1.0))
 			await get_tree().create_timer(0.05).timeout
 	for n in 4:  # everything strobes
-		set_all_bulbs(color)
-		_flash_dome(Color.WHITE)
+		lights.set_all_bulbs(color)
+		lights.flash_dome(Color.WHITE)
 		await get_tree().create_timer(0.08).timeout
-		set_all_bulbs(Color.BLACK)
+		lights.set_all_bulbs(Color.BLACK)
 		await get_tree().create_timer(0.08).timeout
 	# power down ... and reboot side by side
-	var party := party_lamp
-	set_party_lamp(false)
+	var party := lights.party_lamp
+	lights.set_party_lamp(false)
 	await get_tree().create_timer(1.0).timeout
 	for side in SIDE_COUNT:
-		set_side_bulbs(side, Color(0.3, 0.3, 0.3))
+		lights.set_side_bulbs(side, Color(0.3, 0.3, 0.3))
 		await get_tree().create_timer(0.04).timeout
-	set_party_lamp(party)
+	lights.set_party_lamp(party)
 	head.rotation.y = wrapf(head.rotation.y, -PI, PI)
 	_head_locked = false
 	release_head()
@@ -425,37 +344,29 @@ func charge_attack(sides: Array, color := Color(1.0, 0.1, 0.05)) -> void:
 	if _death_running:
 		return
 	_begin_fx()
-	_flash_dome(color)
+	lights.flash_dome(color)
 	for row in BULBS_PER_SIDE:
 		for side in sides:
-			set_side_bulb(side, row, color)
+			lights.set_side_bulb(side, row, color)
 		await get_tree().create_timer(0.07).timeout
 	await get_tree().create_timer(0.15).timeout
 	for side in sides:
-		set_side_bulbs(side, Color.BLACK)
+		lights.set_side_bulbs(side, Color.BLACK)
 	_end_fx()
 
 
 ## Light effects pause while hit/attack animations use the half spheres.
 func _begin_fx() -> void:
 	if _hits == 0:
-		_effect_before_hit = bulb_effect
-		set_bulb_effect("none")
+		_effect_before_hit = lights.effect
+		lights.set_effect("none")
 	_hits += 1
 
 
 func _end_fx() -> void:
 	_hits -= 1
 	if _hits == 0 and not _death_running:
-		set_bulb_effect(_effect_before_hit)
-
-
-func _flash_dome(color: Color) -> void:
-	# (with the party lamp on, _process takes the colour back over)
-	var energy := _dome_light.light_energy
-	_dome_light.light_color = color
-	_dome_light.light_energy = 5.0
-	create_tween().tween_property(_dome_light, "light_energy", energy, 0.5)
+		lights.set_effect(_effect_before_hit)
 
 
 # ---------------------------------------------------------------- power: coming to life, shutting down
@@ -466,8 +377,8 @@ func set_powered(on: bool) -> void:
 	powered = on
 	if on:
 		_head_locked = false
-		set_party_lamp(true)
-		set_bulb_effect("rainbow")
+		lights.set_party_lamp(true)
+		lights.set_effect("rainbow")
 		_muzzle_light.light_energy = 0.0
 		release_head()
 	else:
@@ -476,13 +387,8 @@ func set_powered(on: bool) -> void:
 
 func _dark() -> void:
 	_head_locked = true                 # (no idle spin)
-	set_bulb_effect("none")
-	set_all_bulbs(Color.BLACK)
-	set_party_lamp(false)
-	_dome_light.light_energy = 0.0
+	lights.dark()
 	_muzzle_light.light_energy = 0.0
-	for k in SIDE_COUNT:
-		set_side_glow(k, Color.BLACK)
 
 
 func _wait(s: float) -> bool:           # false: another show took over (stop)
@@ -514,54 +420,17 @@ func play_boot() -> void:
 	powered = false
 	_dark()
 	_target_pitch = deg_to_rad(eye_pitch_min_deg)    # (sagging, as it was left)
-	if not await _wait(1.5): return
-	var flick := [-1]                                # first power: hesitant flickers (6, ~1.6 a second)
-	if not await _part(3.4, func(e):
-		var k := int(e / 0.57)
-		var on := fmod(e, 0.57) < 0.12
-		if k * 2 + int(on) != flick[0]:
-			flick[0] = k * 2 + int(on)
-			_dome_light.light_color = Color(0.6, 0.8, 1.0)
-			_dome_light.light_energy = randf_range(0.6, 2.0) if on else 0.0
-			_muzzle_light.light_energy = randf_range(0.2, 0.8) if on and k % 2 == 0 else 0.0):
-		return
-	_dome_light.light_energy = 0.0
-	_muzzle_light.light_energy = 0.0
-	_target_pitch = 0.0                              # the eye lifts
-	var lit := [-1]                                  # systems check: side by side
-	if not await _part(13 * 0.32, func(e):
-		var k := mini(int(e / 0.32), SIDE_COUNT - 1)
-		if k != lit[0]:
-			if lit[0] >= 0:
-				set_side_glow(lit[0], Color.BLACK)
-			lit[0] = k
-			set_side_bulbs(k, Color(0.25, 0.65, 1.0))
-			set_side_glow(k, Color(0.25, 0.65, 1.0), 0.6)):
-		return
-	set_side_glow(lit[0], Color.BLACK)
-	for side in SIDE_COUNT:
-		set_side_bulbs(side, Color(0.1, 0.25, 0.4))
-	var from := head.rotation.y                      # a stiff scan: once around, stop and go
-	var at := [-1]
-	if not await _part(13 * 0.34, func(e):
-		var k := mini(int(e / 0.34), SIDE_COUNT - 1)
-		if k != at[0]:
-			at[0] = k
-			create_tween().tween_property(head, "rotation:y", from + TAU * (k + 1) / SIDE_COUNT, 0.18) \
-				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-			set_side_bulbs(posmod(nearest_side(from + TAU * (k + 1) / SIDE_COUNT), SIDE_COUNT), Color(0.5, 0.85, 1.0))):
-		return
-	if not await _wait(0.4): return
+	if not await _boot_checks(): return
 	head.rotation.y = wrapf(head.rotation.y, -PI, PI)
 	power_moment.emit(&"awake")
 	_muzzle_light.light_color = Color(1.0, 0.3, 0.1)  # awake: the eye snaps on, the dome flares
 	_muzzle_light.light_energy = 4.0
 	create_tween().tween_property(_muzzle_light, "light_energy", 1.0, 1.2)
-	set_all_bulbs(Color.WHITE)
-	_flash_dome(Color.WHITE)
+	lights.set_all_bulbs(Color.WHITE)
+	lights.flash_dome(Color.WHITE)
 	if not await _wait(0.3): return
-	set_party_lamp(true)
-	set_bulb_effect("rainbow")
+	lights.set_party_lamp(true)
+	lights.set_effect("rainbow")
 	_head_locked = false
 	hold_after_target = 0.6
 	for side in [9, 3, 0]:                           # a menacing look around
@@ -575,6 +444,50 @@ func play_boot() -> void:
 		power_moment.emit(&"booted")
 
 
+## The boot before the robot is awake: flickers, the systems check, the scan.
+## false: another show took over.
+func _boot_checks() -> bool:
+	if not await _wait(1.5): return false
+	var flick := [-1]                                # first power: hesitant flickers (6, ~1.6 a second)
+	if not await _part(3.4, func(e):
+		var k := int(e / 0.57)
+		var on := fmod(e, 0.57) < 0.12
+		if k * 2 + int(on) != flick[0]:
+			flick[0] = k * 2 + int(on)
+			lights.dome.light_color = Color(0.6, 0.8, 1.0)
+			lights.dome.light_energy = randf_range(0.6, 2.0) if on else 0.0
+			_muzzle_light.light_energy = randf_range(0.2, 0.8) if on and k % 2 == 0 else 0.0):
+		return false
+	lights.dome.light_energy = 0.0
+	_muzzle_light.light_energy = 0.0
+	_target_pitch = 0.0                              # the eye lifts
+	var lit := [-1]                                  # systems check: side by side
+	if not await _part(13 * 0.32, func(e):
+		var k := mini(int(e / 0.32), SIDE_COUNT - 1)
+		if k != lit[0]:
+			if lit[0] >= 0:
+				lights.set_side_glow(lit[0], Color.BLACK)
+			lit[0] = k
+			lights.set_side_bulbs(k, Color(0.25, 0.65, 1.0))
+			lights.set_side_glow(k, Color(0.25, 0.65, 1.0), 0.6)):
+		return false
+	lights.set_side_glow(lit[0], Color.BLACK)
+	for side in SIDE_COUNT:
+		lights.set_side_bulbs(side, Color(0.1, 0.25, 0.4))
+	var from := head.rotation.y                      # a stiff scan: once around, stop and go
+	var at := [-1]
+	if not await _part(13 * 0.34, func(e):
+		var k := mini(int(e / 0.34), SIDE_COUNT - 1)
+		if k != at[0]:
+			at[0] = k
+			var yaw := from + TAU * (k + 1) / SIDE_COUNT
+			create_tween().tween_property(head, "rotation:y", yaw, 0.18) \
+				.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+			lights.set_side_bulbs(posmod(nearest_side(yaw), SIDE_COUNT), Color(0.5, 0.85, 1.0))):
+		return false
+	return await _wait(0.4)
+
+
 ## Shutting down (~18 s): the players won. Their last attack from every side,
 ## electrocuted (stuttering colours, the head twitching), the sides go dark one
 ## by one, the eye fades as the head sags back to the start, a last spark - off.
@@ -582,7 +495,7 @@ func play_shutdown() -> void:
 	_power_show += 1
 	_head_locked = true
 	_has_target = false
-	set_bulb_effect("none")
+	lights.set_effect("none")
 	var green := Color(0.2, 1.0, 0.3)
 	var wave := [-1]                                 # the last attack: green waves from all sides
 	if not await _part(1.6, func(e):
@@ -590,10 +503,10 @@ func play_shutdown() -> void:
 		if k != wave[0]:
 			wave[0] = k
 			var side := k % SIDE_COUNT
-			set_side_bulbs(side, green)
-			set_side_bulbs(posmod(side - 4, SIDE_COUNT), Color.BLACK)
-			set_side_glow(side, green, 1.5)
-			set_side_glow(posmod(side - 2, SIDE_COUNT), Color.BLACK)):
+			lights.set_side_bulbs(side, green)
+			lights.set_side_bulbs(posmod(side - 4, SIDE_COUNT), Color.BLACK)
+			lights.set_side_glow(side, green, 1.5)
+			lights.set_side_glow(posmod(side - 2, SIDE_COUNT), Color.BLACK)):
 		return
 	power_moment.emit(&"electrocuted")
 	var next := [0.0, 0.0]                           # electrocuted: [next change, next dome flash (max 3/s)]
@@ -602,16 +515,16 @@ func play_shutdown() -> void:
 			return
 		next[0] = e + randf_range(0.04, 0.11)
 		for k in 4:
-			set_side_bulbs(randi() % SIDE_COUNT, Color.from_hsv(randf(), 0.8, 1.0) if randf() < 0.7 else Color.BLACK)
-		set_side_glow(randi() % SIDE_COUNT, Color(0.6, 0.9, 1.0) if randf() < 0.5 else Color.BLACK, 3.0)
+			lights.set_side_bulbs(randi() % SIDE_COUNT, Color.from_hsv(randf(), 0.8, 1.0) if randf() < 0.7 else Color.BLACK)
+		lights.set_side_glow(randi() % SIDE_COUNT, Color(0.6, 0.9, 1.0) if randf() < 0.5 else Color.BLACK, 3.0)
 		if e >= next[1]:
 			next[1] = e + randf_range(0.34, 0.6)
-			_flash_dome(Color(0.7, 0.9, 1.0) if randf() < 0.6 else Color.from_hsv(randf(), 0.7, 1.0))
+			lights.flash_dome(Color(0.7, 0.9, 1.0) if randf() < 0.6 else Color.from_hsv(randf(), 0.7, 1.0))
 			create_tween().tween_property(head, "rotation:y", head.rotation.y + randf_range(-0.45, 0.45), 0.07)
 			_target_pitch = deg_to_rad(randf_range(eye_pitch_min_deg, 20.0))):
 		return
 	for k in SIDE_COUNT:
-		set_side_glow(k, Color.BLACK)
+		lights.set_side_glow(k, Color.BLACK)
 	var order := range(SIDE_COUNT)                   # damage: the sides die one by one, the rest flickers red
 	order.shuffle()
 	var dead := [-1]
@@ -621,23 +534,23 @@ func play_shutdown() -> void:
 			return
 		dead[0] = i
 		for j in order.size():
-			set_side_bulbs(order[j],
+			lights.set_side_bulbs(order[j],
 				Color.BLACK if j <= i else (Color(1.0, 0.1, 0.05) if randf() < 0.6 else Color(0.25, 0.0, 0.0)))
-		_dome_light.light_color = Color(1.0, 0.1, 0.05)
-		_dome_light.light_energy = randf_range(0.2, 1.5)):
+		lights.dome.light_color = Color(1.0, 0.1, 0.05)
+		lights.dome.light_energy = randf_range(0.2, 1.5)):
 		return
 	power_moment.emit(&"dying")
 	_muzzle_light.light_color = Color(1.0, 0.3, 0.1)  # dying: the eye fades, the head sags back
 	_muzzle_light.light_energy = 2.0
 	create_tween().tween_property(_muzzle_light, "light_energy", 0.0, 4.5)
-	create_tween().tween_property(_dome_light, "light_energy", 0.0, 3.0)
+	create_tween().tween_property(lights.dome, "light_energy", 0.0, 3.0)
 	var back := head.rotation.y - wrapf(head.rotation.y, -PI, PI)   # (to the start, the short way)
 	create_tween().tween_property(head, "rotation:y", back, 4.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 	_target_pitch = deg_to_rad(eye_pitch_min_deg)
 	if not await _wait(5.0): return
 	head.rotation.y = 0.0
-	_flash_dome(Color.WHITE)                         # a last spark
-	set_side_bulbs(randi() % SIDE_COUNT, Color(0.8, 0.9, 1.0))
+	lights.flash_dome(Color.WHITE)                         # a last spark
+	lights.set_side_bulbs(randi() % SIDE_COUNT, Color(0.8, 0.9, 1.0))
 	if not await _wait(0.12): return
 	powered = false
 	_dark()
@@ -666,25 +579,14 @@ func queue_death(side: int, global_target = null, on_hit := Callable()) -> void:
 		_light_victim(side)  # a late victim lights up straight away
 
 
-## Kill several sides at once, e.g. play_deaths([0, 4, 7]).
-func play_deaths(sides: Array) -> void:
-	for side in sides:
-		queue_death(int(side))
-
-
-## Single victim (kept for convenience).
-func play_death(side: int, global_target = null) -> void:
-	queue_death(side, global_target)
-
-
 func _run_deaths() -> void:
 	_death_running = true
 	_locked = false
-	var prev_effect := bulb_effect
+	var prev_effect := lights.effect
 	var prev_hold := hold_after_target
 	hold_after_target = -1.0  # stay locked on each victim
-	set_bulb_effect("none")
-	set_all_bulbs(Color.BLACK)
+	lights.set_effect("none")
+	lights.set_all_bulbs(Color.BLACK)
 	# short window so players dying "at the same moment" light up together
 	await get_tree().create_timer(0.05).timeout
 	for v in _death_queue:
@@ -699,14 +601,14 @@ func _run_deaths() -> void:
 					v = c
 			_death_queue.erase(v)
 			look_at_side(v.side)
-			aim_pitch_at(v.target)                # a drone: the eye gun tilts up to it
+			_aim_pitch_at(v.target)                # a drone: the eye gun tilts up to it
 			while not is_facing_target():
 				await get_tree().process_frame
 			head.rotation.y = side_yaw(v.side)  # land exactly on the plate centre
 			for n in 2:
-				set_side_bulbs(v.side, Color.BLACK)
+				lights.set_side_bulbs(v.side, Color.BLACK)
 				await get_tree().create_timer(0.15).timeout
-				set_side_bulbs(v.side, death_color)
+				lights.set_side_bulbs(v.side, death_color)
 				await get_tree().create_timer(0.15).timeout
 			var landed := [false]
 			fire(v.target, func(): landed[0] = true)
@@ -722,94 +624,16 @@ func _run_deaths() -> void:
 			break
 	_death_running = false
 	hold_after_target = prev_hold
-	set_bulb_effect(prev_effect)
+	lights.set_effect(prev_effect)
 	release_head()
 
 
 ## Light the 5 half spheres of a victim's side bottom to top.
 func _light_victim(side: int) -> void:
 	for row in BULBS_PER_SIDE:
-		set_side_bulb(side, row, death_color)
+		lights.set_side_bulb(side, row, death_color)
 		await get_tree().create_timer(0.12).timeout
 
 
 func _turn_distance(side: int) -> float:
 	return absf(wrapf(side_yaw(side) - head.rotation.y, -PI, PI))
-
-
-func get_head_angle() -> float:
-	return rad_to_deg(head.rotation.y)
-
-
-# ---------------------------------------------------------------- lights
-
-func set_bulb(index: int, color: Color) -> void:
-	_paint(_bulbs[posmod(index, BULB_COUNT)], color)
-
-
-func set_side_bulb(side: int, row: int, color: Color) -> void:
-	set_bulb(side * BULBS_PER_SIDE + row, color)
-
-
-## Light all 5 half spheres of one side (e.g. the side facing an active tile).
-func set_side_bulbs(side: int, color: Color) -> void:
-	for row in BULBS_PER_SIDE:
-		set_side_bulb(side, row, color)
-
-
-## Tint / glow a whole side plate (Color.BLACK = normal gold).
-func set_side_glow(side: int, color: Color, energy := 1.0) -> void:
-	var mat := _sides[posmod(side, SIDE_COUNT)].material_override as StandardMaterial3D
-	mat.emission = color
-	mat.emission_energy_multiplier = energy
-
-
-## Note: set_bulb/set_side_bulbs are overwritten while a bulb_effect is running;
-## call set_bulb_effect("none") first when mirroring the real robot.
-func set_all_bulbs(color: Color) -> void:
-	for b in _bulbs:
-		_paint(b, color)
-
-
-## Party lamp inside the dome: coloured spots rotating on the inside of the dome.
-func set_party_lamp(on: bool) -> void:
-	party_lamp = on
-	if _dome_mat == null:  # not built yet; _ready() applies it
-		return
-	_dome_mat.set_shader_parameter("enabled", on)
-	_dome_light.light_energy = 0.8 if on else 0.0
-
-
-func set_party_spin_speed(rad_per_s: float) -> void:
-	party_spin_speed = rad_per_s
-	if _dome_mat != null:
-		_dome_mat.set_shader_parameter("spin_speed", rad_per_s)
-
-
-## Plain dome colour instead of the party lamp (Color.BLACK = off).
-func set_dome_color(color: Color, energy := 2.0) -> void:
-	set_party_lamp(false)
-	_dome_light.light_color = color
-	_dome_light.light_energy = energy if color.v > 0.01 else 0.0
-
-
-# ---------------------------------------------------------------- internals
-
-## Frosted half sphere with an RGB light behind it.
-func _make_led(mi: MeshInstance3D) -> MeshInstance3D:
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.9, 0.9, 0.93)
-	mat.roughness = 0.45
-	mat.rim_enabled = true  # brighter frosted edge
-	mat.rim = 0.4
-	mat.emission_enabled = true
-	mat.emission = Color.BLACK
-	mat.emission_energy_multiplier = 2.5
-	mi.material_override = mat
-	return mi
-
-
-func _paint(mi: MeshInstance3D, color: Color) -> void:
-	var mat := mi.material_override as StandardMaterial3D
-	mat.emission = color
-	mat.albedo_color = Color(0.9, 0.9, 0.93).lerp(color, 0.5 * color.v)

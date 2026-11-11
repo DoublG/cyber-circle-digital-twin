@@ -25,7 +25,7 @@ signal health_changed(tile_id: int, health: int)
 signal fx(tile_id: int, name: String, color: Color)
 
 const TILE_SCENE := preload("res://models/tile.glb")
-const LED_COUNT := 48           # LED_00 faces the robot, counting clockwise from above
+const LED_COUNT := TileRing.COUNT   # the ring: LED 0 faces the robot, counting clockwise from above
 const HEART_COUNT := 5          # Heart_0 nearest the logo
 const BUTTONS: Array[StringName] = [&"Square", &"Triangle", &"Cross", &"Circle"]
 const BUTTON_COLORS := {
@@ -40,30 +40,28 @@ const OFF_COLOR := Color(0.15, 0.15, 0.15)
 const SYMBOL_OFF_COLOR := Color(0.85, 0.85, 0.85)
 const SHIELD_COLOR := Color(0.3, 0.75, 1.0)
 const SHIELD_SHADER := preload("res://shaders/shield.gdshader")
-const LED_SHADER := preload("res://shaders/led.gdshader")
 
 static var _shadow_mat: StandardMaterial3D   # the contact shadow's, shared by every tile
 
 @export var tile_id := 1
 @export_range(0.0, 1.0) var press_threshold := 0.3  # normalised sensor value = "pressed"
 @export_range(1, HEART_COUNT) var max_health := HEART_COUNT  # lives this player started with (age)
-@export_range(0, HEART_COUNT) var health := HEART_COUNT: set = set_health
-@export var idle := true: set = set_idle   # no player on this tile
+@export_range(0, HEART_COUNT) var health := HEART_COUNT: set = _set_health
+@export var idle := true: set = _set_idle  # no player on this tile
 ## Out of service (taken out of the game during setup or play): all dark,
 ## status LED red, no idle animation.
-@export var out_of_service := false: set = set_out_of_service
+@export var out_of_service := false: set = _set_out_of_service
 
 var is_dead := false
 var pending := false
-var show_number := false: set = set_show_number   # setup: the hearts show tile_id in binary
+var show_number := false: set = _set_show_number  # setup: the hearts show tile_id in binary
 ## Protected (e.g. the question is too hard for the player's age): attacks are
 ## blocked. In the game: energy dome over the tile. Real tile: the LED ring glows blue.
-var shielded := false: set = set_shielded
+var shielded := false: set = _set_shielded
 var installed := true            # false: this place is not part of the installation (hidden, never used)
+var ring: TileRing               # the 48 ring LEDs
 
 var _model: Node3D
-var _ring: MultiMesh                 # the 48 ring LEDs: one draw call (instance colour = LED)
-var _ring_colors: Array[Color] = []
 var _hearts: Array[MeshInstance3D] = []
 var _anchors := {}       # button -> Node3D at the icon centre on the glass
 var _pressure := {}      # button -> float 0..1
@@ -89,7 +87,7 @@ func _ready() -> void:
 	if _model == null:
 		_model = TILE_SCENE.instantiate()
 		add_child(_model)
-	_build_ring()
+	ring = TileRing.new(self, _model, OFF_COLOR)
 	for i in HEART_COUNT:
 		_hearts.append(_led("Heart_%d" % i))
 	for b in BUTTONS:
@@ -104,10 +102,9 @@ func _ready() -> void:
 	if not (self is DroneTile):
 		_contact_shadow()
 	_idle_time = fmod(tile_id * 3.7, 10.0)  # tiles don't animate in lockstep (the same on every node: display nodes)
-	clear_ring()
-	set_health(health)
+	_set_health(health)
 	set_status(Color(0.1, 1.0, 0.2))
-	set_idle(idle)
+	_set_idle(idle)
 
 
 func _process(delta: float) -> void:
@@ -155,9 +152,9 @@ func _run_pending_animation() -> void:
 	for i in LED_COUNT:
 		var quarter := BUTTONS[i * BUTTONS.size() / LED_COUNT]
 		if quarter in _activation_pressed:
-			set_ring_led(i, _activation_color)
+			ring.set_led(i, _activation_color)
 		else:
-			set_ring_led(i, _activation_color * (0.2 + 0.25 * (1.0 + sin(t * 5.0 - i * 0.3))))
+			ring.set_led(i, _activation_color * (0.2 + 0.25 * (1.0 + sin(t * 5.0 - i * 0.3))))
 	# pressed icons stay lit, the others blink
 	var blink := 1.0 if fmod(t, 0.8) < 0.4 else 0.15
 	for b in BUTTONS:
@@ -165,42 +162,42 @@ func _run_pending_animation() -> void:
 	set_status(_activation_color)
 
 
-func set_out_of_service(on: bool) -> void:
+func _set_out_of_service(on: bool) -> void:
 	out_of_service = on
-	if _ring == null:  # not built yet; _ready() applies it
+	if ring == null:  # not built yet; _ready() applies it
 		return
 	if on:
-		clear_ring()
+		ring.clear()
 		for b in BUTTONS:
 			set_button_led(b, Color.BLACK)
 		for h in _hearts:
 			_paint(h, Color.BLACK)
 		set_status(Color(1.0, 0.1, 0.05))
 	else:
-		set_idle(idle)
+		_set_idle(idle)
 
 
 # ---------------------------------------------------------------- idle
 
 ## Idle = no player: attract animation. Leaving idle hands the LEDs to the game.
-func set_idle(on: bool) -> void:
+func _set_idle(on: bool) -> void:
 	idle = on
 	pending = false
 	if on:
 		shielded = false
-	if _ring == null:  # not built yet; _ready() applies it
+	if ring == null:  # not built yet; _ready() applies it
 		return
 	if on:
 		for h in _hearts:
 			_paint(h, Color.BLACK)
 		if show_number:                # (setup: the number stays on the hearts)
-			set_show_number(true)
+			_set_show_number(true)
 	else:
-		clear_ring()
+		ring.clear()
 		for b in BUTTONS:
 			set_button_led(b, BUTTON_COLORS[b])
 		set_status(Color(0.1, 1.0, 0.2))
-		set_health(health)
+		_set_health(health)
 
 
 func _run_idle_animation() -> void:
@@ -209,7 +206,7 @@ func _run_idle_animation() -> void:
 	for i in LED_COUNT:
 		var hue := fmod(float(i) / LED_COUNT + t * 0.08, 1.0)
 		var v := 0.25 + 0.2 * sin(t * 1.4 + i * 0.26)
-		set_ring_led(i, Color.from_hsv(hue, 0.85, v))
+		ring.set_led(i, Color.from_hsv(hue, 0.85, v))
 	# the icons light up one after another in their own colour
 	var active := int(t * 1.2) % BUTTONS.size()
 	for k in BUTTONS.size():
@@ -222,63 +219,7 @@ func _run_idle_animation() -> void:
 
 # ---------------------------------------------------------------- LEDs
 
-func set_ring_led(index: int, color: Color) -> void:
-	index = posmod(index, LED_COUNT)
-	_ring_colors[index] = color
-	var on := color.v > 0.01
-	_ring.set_instance_color(index, Color(color.r, color.g, color.b, 1.0) if on else Color(0, 0, 0, 0))
-
-
-## colors: up to LED_COUNT entries, starting at LED_00.
-func set_ring(colors: Array) -> void:
-	for i in mini(colors.size(), LED_COUNT):
-		set_ring_led(i, colors[i])
-
-
-## Current colours of the 48 ring LEDs (e.g. to mirror them on a screen).
-func get_ring_colors() -> Array[Color]:
-	return _ring_colors.duplicate()
-
-
-func fill_ring(color: Color) -> void:
-	for i in LED_COUNT:
-		set_ring_led(i, color)
-
-
-## The ring LEDs of tile.glb (LED_00..47) replaced by one MultiMesh.
-func _build_ring() -> void:
-	var leds: Array[MeshInstance3D] = []
-	for i in LED_COUNT:
-		var mi := _model.find_child("LED_%02d" % i, true, false) as MeshInstance3D
-		assert(mi != null, "tile.glb is missing node LED_%02d" % i)
-		leds.append(mi)
-	_ring = MultiMesh.new()
-	_ring.transform_format = MultiMesh.TRANSFORM_3D
-	_ring.use_colors = true
-	_ring.mesh = leds[0].mesh
-	_ring.instance_count = LED_COUNT
-	var to_tile := global_transform.affine_inverse()
-	for i in LED_COUNT:
-		_ring.set_instance_transform(i, to_tile * leds[i].global_transform)
-		leds[i].queue_free()
-	var mmi := MultiMeshInstance3D.new()
-	mmi.name = "Ring_LEDs"
-	mmi.multimesh = _ring
-	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mat := ShaderMaterial.new()
-	mat.shader = LED_SHADER
-	mat.set_shader_parameter("off_color", OFF_COLOR)
-	mmi.material_override = mat
-	add_child(mmi)
-	_ring_colors.resize(LED_COUNT)
-	_ring_colors.fill(Color.BLACK)
-
-
-func clear_ring() -> void:
-	fill_ring(Color.BLACK)
-
-
-func set_show_number(on: bool) -> void:
+func _set_show_number(on: bool) -> void:
 	show_number = on
 	if _hearts.is_empty():
 		return
@@ -289,10 +230,10 @@ func set_show_number(on: bool) -> void:
 		for h in _hearts:
 			_paint(h, Color.BLACK)
 	else:
-		set_health(health)
+		_set_health(health)
 
 
-func set_health(value: int) -> void:
+func _set_health(value: int) -> void:
 	var was := health
 	health = clampi(value, 0, max_health)
 	if _hearts.is_empty():  # not built yet; _ready() applies it
@@ -321,7 +262,7 @@ func blink_doomed() -> void:
 	_doomed = true
 	var on := true
 	while _doomed:
-		fill_ring(Color.RED if on else Color.BLACK)
+		ring.fill(Color.RED if on else Color.BLACK)
 		for b in BUTTONS:
 			set_button_led(b, Color.RED if on else Color.BLACK)
 		on = not on
@@ -336,17 +277,17 @@ func play_death() -> void:
 	await _electrocute(1.0)
 	_explode()
 	for i in LED_COUNT:
-		set_ring_led(i, Color.RED)
+		ring.set_led(i, Color.RED)
 		await get_tree().create_timer(0.012).timeout
 	for n in 3:
-		fill_ring(Color.BLACK)
+		ring.fill(Color.BLACK)
 		await get_tree().create_timer(0.15).timeout
-		fill_ring(Color.RED)
+		ring.fill(Color.RED)
 		await get_tree().create_timer(0.15).timeout
 	for b in BUTTONS:
 		set_button_led(b, Color.BLACK)
 	var fade := create_tween()
-	fade.tween_method(func(v: float): fill_ring(Color(v, 0, 0)), 1.0, 0.0, 1.0)
+	fade.tween_method(func(v: float): ring.fill(Color(v, 0, 0)), 1.0, 0.0, 1.0)
 	await fade.finished
 	set_status(Color.RED)
 
@@ -379,7 +320,7 @@ func _electrocute(seconds: float) -> void:
 			_bolt(mesh, Vector3(0, glass_y, 0), Vector2.from_angle(randf() * TAU) * 0.33, glass_y)
 		mesh.surface_end()
 		light.light_energy = randf_range(1.0, 5.0)
-		fill_ring(Color(0.6, 0.85, 1.0) if randf() < 0.5 else Color.BLACK)
+		ring.fill(Color(0.6, 0.85, 1.0) if randf() < 0.5 else Color.BLACK)
 		await get_tree().create_timer(0.05).timeout
 		t += 0.05
 	arcs.queue_free()
@@ -641,16 +582,16 @@ func play_attack(color := Color(0.2, 1.0, 0.3)) -> void:
 	fx.emit(tile_id, "attack", color)
 	var half := LED_COUNT / 2
 	for step in half + 1:
-		clear_ring()
+		ring.clear()
 		for trail in 4:  # short fading tail
 			var k := step - trail
 			if k < 0:
 				break
 			var c := color * (1.0 - trail * 0.25)
-			set_ring_led(half - k, c)
-			set_ring_led(half + k, c)
+			ring.set_led(half - k, c)
+			ring.set_led(half + k, c)
 		await get_tree().create_timer(0.012).timeout
-	fill_ring(color)
+	ring.fill(color)
 	await get_tree().create_timer(0.08).timeout
 	_shield_glow()
 
@@ -666,19 +607,19 @@ func play_hit(color := Color(1.0, 0.1, 0.05)) -> void:
 	_debris(6, 0.03, 0.6, 0.0, y)                        # a few chips off the glass
 	var half := LED_COUNT / 2
 	for step in half + 1:
-		clear_ring()
+		ring.clear()
 		for trail in 4:
 			var k := step - trail
 			if k < 0:
 				break
 			var c := color * (1.0 - trail * 0.25)
-			set_ring_led(k, c)
-			set_ring_led(-k, c)
+			ring.set_led(k, c)
+			ring.set_led(-k, c)
 		await get_tree().create_timer(0.012).timeout
 	for n in 2:
-		fill_ring(color)
+		ring.fill(color)
 		await get_tree().create_timer(0.1).timeout
-		clear_ring()
+		ring.clear()
 		await get_tree().create_timer(0.08).timeout
 	_shield_glow()
 
@@ -705,7 +646,7 @@ func _build_shield() -> void:
 	add_child(_shield)
 
 
-func set_shielded(on: bool) -> void:
+func _set_shielded(on: bool) -> void:
 	var changed := on != shielded
 	shielded = on
 	if _shield == null or not changed:
@@ -723,9 +664,9 @@ func set_shielded(on: bool) -> void:
 
 func _shield_glow() -> void:
 	if shielded:
-		fill_ring(SHIELD_COLOR * 0.35)
+		ring.fill(SHIELD_COLOR * 0.35)
 	else:
-		clear_ring()
+		ring.clear()
 
 
 ## An attack hits the shield: red stops at the front of the ring, the ring
@@ -746,15 +687,15 @@ func play_block(color := Color(1.0, 0.1, 0.05)) -> void:
 	t.tween_property(_shield_mat, "shader_parameter/flash", 0.0, 0.8)
 	t.tween_method(func(v): _shield_mat.set_shader_parameter("ripple", v), 0.0, 1.0, 0.9)
 	for step in 4:  # the red only gets a few LEDs in
-		clear_ring()
+		ring.clear()
 		for k in step + 1:
-			set_ring_led(k, color)
-			set_ring_led(-k, color)
+			ring.set_led(k, color)
+			ring.set_led(-k, color)
 		await get_tree().create_timer(0.03).timeout
 	for n in 3:
-		fill_ring(SHIELD_COLOR)
+		ring.fill(SHIELD_COLOR)
 		await get_tree().create_timer(0.1).timeout
-		fill_ring(SHIELD_COLOR * 0.2)
+		ring.fill(SHIELD_COLOR * 0.2)
 		await get_tree().create_timer(0.07).timeout
 	_shield_mat.set_shader_parameter("ripple", -1.0)
 	_shield_glow()
@@ -765,11 +706,11 @@ func revive(lives := -1) -> void:
 	is_dead = false
 	if lives > 0:
 		max_health = clampi(lives, 1, HEART_COUNT)
-	set_health(max_health)
+	_set_health(max_health)
 	set_status(Color(0.1, 1.0, 0.2))
 
 
-## What a display node's copy of this tile needs (Replica; Arena.replica_fields).
+## What a display node's copy of this tile needs (Replica; ArenaMirror.fields).
 ## The ring and the icons are not in it: the display runs the tile's own logic
 ## and animations itself (TileFirmware, the idle / invite animations).
 func replica_state() -> Dictionary:
@@ -850,10 +791,6 @@ func set_pressure(button: StringName, value: float) -> void:
 		button_pressed.emit(tile_id, button)
 	elif was_pressed and not is_pressed(button):
 		button_released.emit(tile_id, button)
-
-
-func get_pressure(button: StringName) -> float:
-	return _pressure[button]
 
 
 func is_pressed(button: StringName) -> bool:

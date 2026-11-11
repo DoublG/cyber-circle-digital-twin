@@ -505,7 +505,8 @@ godot-4 --rendering-method gl_compatibility --path . -- --replica --show=1,2 --m
 * Tests (two processes on one PC): `game/tests/run_replica_test.sh` – at each
   moment (lobby, intro, quiz, attack, extermination, scoreboard, rhythm round)
   the display compares its state with the master's (`mark … state EQUAL`) and
-  both save their screens, compared by `tests/compare_shots.gd`. A bad
+  both save their screens as drawn at the same game clock (a display follows
+  the master's), compared by `tests/compare_shots.gd`. A bad
   network: `PROXY="--loss 10 --jitter 50 --blackout 18:9" REPLICA_TAIL=10
   tests/run_replica_test.sh` (`tests/udp_proxy.py`: 10 % loss, jitter, 9 s
   dark – the moments in the dark are missing, the state is equal again after).

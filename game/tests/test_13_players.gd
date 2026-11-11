@@ -69,23 +69,23 @@ func _ready() -> void:
 	await _record_until(func(): return quiz._phase == "answers")
 	await _record(1.5)
 	var view: QuizView = game.screen_wall.shared_views[0]
-	_inside(view, view._player_cards.values().map(func(c): return c.panel), "quiz answers: card")
-	_no_overlap(view._player_cards.values().map(func(c): return c.panel), "quiz answers: cards")
+	_inside(view, view._player_cards.values(), "quiz answers: card")
+	_no_overlap(view._player_cards.values(), "quiz answers: cards")
 	check(view._player_cards.size() == 13, "quiz: 13 player cards (%d)" % view._player_cards.size())
 	await _shot(view, "50_13_quiz_answers")
 	await _record_until(func(): return quiz._phase == "reveal")
 	await _record(0.3)
-	var before := view._player_cards.values().map(func(c): return c.panel.global_position)
+	var before := view._player_cards.values().map(func(c): return c.global_position)
 	var scale_before: Vector2 = view._player_grid.scale
 	await _record(3.5)                              # the cards turn one by one
-	var after := view._player_cards.values().map(func(c): return c.panel.global_position)
+	var after := view._player_cards.values().map(func(c): return c.global_position)
 	check(before.size() == after.size()
 		and range(before.size()).all(func(i): return before[i].distance_to(after[i]) < 0.5)
 		and view._player_grid.scale.is_equal_approx(scale_before),
 		"reveal: the cards do not move when the result line appears (%s -> %s)" % [before.slice(0, 1), after.slice(0, 1)])
 	check(view._shown_ok.size() == 13, "reveal: every card turned (%d)" % view._shown_ok.size())
-	check(view._player_cards.values().all(func(c): return is_zero_approx(c.panel.rotation) \
-		and c.panel.scale.is_equal_approx(Vector2.ONE)), "reveal: the shake / pop ended (no card tilted or scaled)")
+	check(view._player_cards.values().all(func(c): return is_zero_approx(c.rotation) \
+		and c.scale.is_equal_approx(Vector2.ONE)), "reveal: the shake / pop ended (no card tilted or scaled)")
 	check(RIGHT.all(func(id): return _card_is(view, id, Retro.GOOD, true, false) and _card_width(view, id) >= 10),
 		"reveal: the right ones: a thick glowing green border")
 	check((WRONG + [11]).all(func(id): return _card_is(view, id, Retro.BAD, false, true) and _card_width(view, id) <= 5),
@@ -105,7 +105,7 @@ func _ready() -> void:
 	await _record_until(func(): return game.state == GameManager.State.SCOREBOARD)
 	await _record(0.3)
 	check(game.screen_wall.shared_views[0] is ScoreboardView, "quiz: straight to the scoreboard")
-	await _record_until(func(): return game._lives_shown)
+	await _record_until(func(): return game.views.lives_shown)
 	await _record(2.0)
 	_check_board("quiz scoreboard", 13)
 	var board: ScoreboardView = game.screen_wall.shared_views[0]
@@ -142,7 +142,7 @@ func _ready() -> void:
 	check(places == ["1", "2", "2", "3", "4", "4", "5", "6", "7", "7", "8", "9"], "UITSLAG places: %s" % [places])
 	await _shot(uitslag, "53_13_uitslag")
 	await _record_until(func(): return game.screen_wall.shared_views[0] is ScoreboardView)
-	await _record_until(func(): return game._lives_shown)
+	await _record_until(func(): return game.views.lives_shown)
 	await _record(2.5)
 	_check_board("Ritme scoreboard", 12)
 	await _shot(game.screen_wall.shared_views[0], "54_13_scoreboard")
@@ -251,12 +251,12 @@ func check(ok: bool, what: String) -> void:
 
 ## A quiz card's frame after the reveal: its border colour, a glow or not, dimmed or not.
 func _card_is(view, id: int, color: Color, glow: bool, dimmed: bool) -> bool:
-	var c: Dictionary = view._player_cards[id]
-	var st: StyleBoxFlat = c.panel.get_theme_stylebox("panel")
-	var dim: bool = c.panel.modulate.a < 0.99
+	var c: QuizPlayerCard = view._player_cards[id]
+	var st: StyleBoxFlat = c.get_theme_stylebox("panel")
+	var dim: bool = c.modulate.a < 0.99
 	return st.border_color.is_equal_approx(color) and (st.shadow_size > 0) == glow and dim == dimmed
 
 
 func _card_width(view, id: int) -> int:
-	var st: StyleBoxFlat = view._player_cards[id].panel.get_theme_stylebox("panel")
+	var st: StyleBoxFlat = view._player_cards[id].get_theme_stylebox("panel")
 	return st.border_width_top

@@ -121,7 +121,7 @@ func receive(msg: Dictionary) -> void:
 		_program = msg.program
 		_running = false
 		if _program.get("game", "") != "clock":       # (clock - Ritme: only the time, nothing shown)
-			tile.fill_ring(Color(0.15, 0.15, 0.15))  # armed: dim white ring
+			tile.ring.fill(Color(0.15, 0.15, 0.15))  # armed: dim white ring
 			_icons(&"")
 	if msg.has("start") and str(msg.start) == str(_program.get("id", "")):
 		_running = true
@@ -131,7 +131,7 @@ func receive(msg: Dictionary) -> void:
 		_n = 0
 		_streak = 0
 		if _program.get("game", "") != "clock":
-			tile.clear_ring()
+			tile.ring.clear()
 		match _program.get("game", ""):
 			"simon":
 				_level = int(_program.start_level)
@@ -150,7 +150,7 @@ func receive(msg: Dictionary) -> void:
 				tile.set_button_led(b, CyberTile.BUTTON_COLORS[b])
 		else:
 			_piet = {}
-			tile.clear_ring()
+			tile.ring.clear()
 			_icons(&"")
 	if msg.get("show") is Dictionary:
 		var seg: Array = msg.show.get("ring", [])
@@ -164,12 +164,12 @@ func receive(msg: Dictionary) -> void:
 			var gap := 1 if count > 1 else 0
 			for i in range(from + gap, to - gap):
 				colors[i] = Color(seg[k])
-		tile.set_ring(colors)
+		tile.ring.set_all(colors)
 		var ic: Array = msg.show.get("icons", [])
 		for k in 4:
 			tile.set_button_led(CyberTile.BUTTONS[k], Color(ic[k]) if k < ic.size() else Color.BLACK)
 	elif msg.has("show") and not msg.show:
-		tile.clear_ring()
+		tile.ring.clear()
 		_icons(&"")
 	if msg.has("pause"):
 		_paused = bool(msg.pause)
@@ -179,7 +179,7 @@ func receive(msg: Dictionary) -> void:
 		_open = -1
 		if not shown:
 			return
-		tile.clear_ring()
+		tile.ring.clear()
 		for b in CyberTile.BUTTONS:
 			tile.set_button_led(b, CyberTile.BUTTON_COLORS[b])
 
@@ -191,7 +191,7 @@ func _process(delta: float) -> void:
 		for i in CyberTile.LED_COUNT:              # the light with a fading tail
 			var behind := posmod(int(_piet_pos) - i, CyberTile.LED_COUNT)
 			colors.append(_piet.color * (1.0 - behind / 6.0) if behind < 6 else Color.BLACK)
-		tile.set_ring(colors)
+		tile.ring.set_all(colors)
 	if not _running or _paused:
 		return
 	_clock += delta * 1000.0
@@ -223,7 +223,7 @@ func _show(index: int) -> void:
 	_opened_at = _clock
 	var windows: Array = _program.windows
 	_window = float(windows[mini(_streak, windows.size() - 1)])
-	tile.fill_ring(Color(step.color))
+	tile.ring.fill(Color(step.color))
 	_icons(StringName(step.button))
 	step_started.emit(tile.tile_id, index, step)
 
@@ -262,10 +262,10 @@ func _close(button: StringName) -> void:
 func _flash(outcome: String) -> void:
 	var c: Color = {"hit": Color(0.1, 1.0, 0.3), "nogo_ok": CyberTile.SHIELD_COLOR,
 		"wrong": Color.RED, "nogo_fail": Color.RED}.get(outcome, Color.BLACK)
-	tile.fill_ring(c)
+	tile.ring.fill(c)
 	await get_tree().create_timer(FLASH_TIME).timeout
 	if _open < 0:
-		tile.clear_ring()
+		tile.ring.clear()
 
 
 ## Only the step's icon lit (in its own colour); &"" = all off.
@@ -296,18 +296,18 @@ func _simon_process() -> void:
 			_phase = "watch"
 			_index = 0
 			_lit = false
-			tile.clear_ring()
+			tile.ring.clear()
 			_send_n({"level": _level, "outcome": "watch"})
 		"watch":
 			if not _lit:
 				var step: Dictionary = _program.sequence[_index]
-				tile.fill_ring(Color(step.color))
+				tile.ring.fill(Color(step.color))
 				_icons(&"")
 				tile.set_button_led(StringName(step.button), Color(step.color))
 				_lit = true
 				_due = _clock + _show_on()
 			else:
-				tile.clear_ring()
+				tile.ring.clear()
 				_icons(&"")
 				_lit = false
 				_index += 1
@@ -387,7 +387,7 @@ func _progress() -> void:
 	var colors := []
 	for i in CyberTile.LED_COUNT:
 		colors.append(Color(0.9, 0.9, 0.9) if i < CyberTile.LED_COUNT * _index / _level else Color(0.06, 0.06, 0.06))
-	tile.set_ring(colors)
+	tile.ring.set_all(colors)
 
 
 func _blink(button: StringName, color: Color) -> void:
@@ -413,7 +413,7 @@ func _cyclone_process(delta: float) -> void:
 	if _clock >= float(_program.length):
 		_running = false
 		_phase = ""
-		tile.clear_ring()
+		tile.ring.clear()
 		_send_n({"done": true, "reason": "time", "best": _best})
 		return
 	if _phase == "hold":
@@ -440,7 +440,7 @@ func _cyclone_draw() -> void:
 		var d := absi(posmod(i - _target + CyberTile.LED_COUNT / 2, CyberTile.LED_COUNT) - CyberTile.LED_COUNT / 2)
 		colors.append(Color.RED if d == 0 else (Color(1.0, 0.8, 0.0) if d <= yellow else Color.BLACK))
 	colors[int(_pos) % CyberTile.LED_COUNT] = Color(0.1, 1.0, 0.25)   # (float rounding can give 48.0)
-	tile.set_ring(colors)
+	tile.ring.set_all(colors)
 
 
 func _cyclone_press() -> void:
@@ -455,7 +455,7 @@ func _cyclone_press() -> void:
 		_best = maxi(_best, _level)
 	else:
 		_level = 0                        # a miss: back to the first level
-	tile.fill_ring({"red": Color(0.1, 1.0, 0.25), "yellow": Color(1.0, 0.8, 0.0)}.get(outcome, Color.RED))
+	tile.ring.fill({"red": Color(0.1, 1.0, 0.25), "yellow": Color(1.0, 0.8, 0.0)}.get(outcome, Color.RED))
 	_phase = "hold"
 	_due = _clock + float(_program.result_ms)
 

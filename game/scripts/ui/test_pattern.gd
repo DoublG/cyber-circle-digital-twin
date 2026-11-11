@@ -175,7 +175,7 @@ func _draw_tiles(w: float) -> void:
 
 ## The overview: every place of the installation at a glance, and the display nodes.
 func _draw_overview(w: float) -> void:
-	var ids := range(1, wall.arena.tiles.size() + 1).filter(func(id): return wall.arena.players.is_installed(id))
+	var ids := range(1, wall.arena.tiles.size() + 1).filter(func(id): return wall.arena.installation.is_installed(id))
 	var per_row := 9
 	var cw := 150.0
 	var ch := 70.0

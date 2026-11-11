@@ -98,15 +98,15 @@ func _ready() -> void:
 
 func _gallery() -> void:
 	DirAccess.make_dir_recursive_absolute(_shots)
-	game.set_mode(GameManager.Mode.SETUP)
+	game.modes.change(GameManager.Mode.SETUP)
 	say("SETUP: test screens; on the tiles the hearts show the place number in binary")
 	await _wait(2.0)
 	await _snap("setup")
-	game.set_mode(GameManager.Mode.CLOSED)
+	game.modes.change(GameManager.Mode.CLOSED)
 	say("Setup locked: closed")
 	await _wait(1.5)
 	await _snap("closed")
-	game.set_mode(GameManager.Mode.OPEN)
+	game.modes.change(GameManager.Mode.OPEN)
 	say("Open, nobody playing: idle, the overview invites visitors")
 	await _wait(3.0)
 	await _snap("idle")
@@ -160,7 +160,7 @@ func _gallery() -> void:
 	await _wait(3.0)
 	await _snap("quiz_reveal")
 	await _until(func(): return game.state == GameManager.State.SCOREBOARD, 30.0)
-	await _until(func(): return game._lives_shown, 15.0)
+	await _until(func(): return game.views.lives_shown, 15.0)
 	say("Scoreboard after the quiz: wrong = -1 life")
 	await _wait(1.5)
 	await _snap("quiz_scoreboard")
@@ -188,7 +188,7 @@ func _gallery() -> void:
 		say("UITSLAG: the round's places, +1 life for the 1st, -1 for the last")
 		await _wait(4.0)
 		await _snap(g[0] + "_uitslag")
-		await _until(func(): return game._lives_shown, 20.0)
+		await _until(func(): return game.views.lives_shown, 20.0)
 		say("Scoreboard: the lives change" + (" - GEËXTERMINEERD" if g[0] == "simon" else ""))
 		await _wait(1.5)
 		await _snap(g[0] + "_scoreboard")
@@ -198,11 +198,11 @@ func _gallery() -> void:
 			say("The robot fires at the exterminated tile; the overview drifts over to watch")
 			await _snap("extermination")
 	await _until(func(): return game.state == GameManager.State.INTRO, 60.0)
-	game.set_mode(GameManager.Mode.PAUSED)
+	game.modes.change(GameManager.Mode.PAUSED)
 	say("Paused by the operator: everything stands still")
 	await _wait(1.5)
 	await _snap("paused")
-	game.set_mode(GameManager.Mode.OPEN)
+	game.modes.change(GameManager.Mode.OPEN)
 
 
 ## Gallery: the whole installation, and the overview, floor screen 1 and
@@ -220,19 +220,19 @@ func _snap(name: String) -> void:
 
 
 func _setup() -> void:
-	game.set_mode(GameManager.Mode.SETUP)
+	game.modes.change(GameManager.Mode.SETUP)
 	say("SETUP: every screen shows its number, its tiles and test colours (the overview too)")
 	await _wait(8.0)
-	game.set_mode(GameManager.Mode.CLOSED)
+	game.modes.change(GameManager.Mode.CLOSED)
 	say("Setup locked: the game is closed, the screens show the free tiles")
 	await _wait(6.0)
-	game.set_mode(GameManager.Mode.OPEN)
+	game.modes.change(GameManager.Mode.OPEN)
 	say("Open: nobody playing - tiles and drones idle, the overview invites visitors")
 	await _wait(12.0)
 
 
 func _joining() -> void:
-	game.set_mode(GameManager.Mode.OPEN)
+	game.modes.change(GameManager.Mode.OPEN)
 	say("Open and idling: the tiles run their attract animation, the drones wait in their park")
 	await _wait(5.0)
 	say("Visitors scan the QR code: their tile lights up in their colour (screens show the invite)")
@@ -268,7 +268,7 @@ func _joining() -> void:
 
 
 func _few() -> void:
-	game.set_mode(GameManager.Mode.OPEN)
+	game.modes.change(GameManager.Mode.OPEN)
 	for i in 3:
 		arena.players.join([1, 5, 9][i], NAMES[i], 12)
 	game.picker.round_types = [QuizRound, RhythmRound]
@@ -292,7 +292,7 @@ func _few() -> void:
 
 
 func _full() -> void:
-	game.set_mode(GameManager.Mode.OPEN)
+	game.modes.change(GameManager.Mode.OPEN)
 	for i in 13:
 		arena.players.join(i + 1, NAMES[i], 12 if i % 4 else 8)
 	for i in 5:
@@ -325,7 +325,7 @@ func _full() -> void:
 
 
 func _mobile() -> void:
-	game.set_mode(GameManager.Mode.OPEN)
+	game.modes.change(GameManager.Mode.OPEN)
 	game.picker.round_types = [QuizRound, SimonRound]
 	for i in 3:
 		arena.players.join([2, 6, 10][i], NAMES[i], 12)
@@ -363,7 +363,7 @@ func _mobile() -> void:
 
 
 func _leaving() -> void:
-	game.set_mode(GameManager.Mode.OPEN)
+	game.modes.change(GameManager.Mode.OPEN)
 	for i in 6:
 		arena.players.join([1, 3, 5, 8, 10, 12][i], NAMES[i], 12)
 	arena.players.join(17, NAMES[14], 12)

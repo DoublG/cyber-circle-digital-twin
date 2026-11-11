@@ -1,0 +1,38 @@
+[gd_scene format=3]
+
+[ext_resource type="FontFile" path="res://fonts/DejaVuSansMono-Bold.ttf" id="1_iko5g"]
+[ext_resource type="Script" path="res://scripts/ui/status_line.gd" id="2_hndp8"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_2ixws"]
+content_margin_left = 24.0
+content_margin_top = 12.0
+content_margin_right = 24.0
+content_margin_bottom = 12.0
+bg_color = Color(0.09, 0.075, 0.06, 0.85)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(1, 0.45, 0.08, 1)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+corner_detail = 1
+
+[node name="StatusLine" type="Label" unique_id=684512827]
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -0.5
+offset_top = -23.0
+offset_right = 0.5
+offset_bottom = -24.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_styles/normal = SubResource("StyleBoxFlat_2ixws")
+theme_override_fonts/font = ExtResource("1_iko5g")
+theme_override_font_sizes/font_size = 40
+theme_override_colors/font_color = Color(1, 0.74, 0.22, 1)
+script = ExtResource("2_hndp8")

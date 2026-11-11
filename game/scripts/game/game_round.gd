@@ -5,8 +5,6 @@ extends RefCounted
 ##                    (make_player_overlay adds round info on top of it)
 ##   mode "shared":   one view, the same on all 5 screens (make_shared_view)
 
-const SYNC_BASE := ["title", "rules", "mode", "on_tile", "players", "points", "duration", "progress_label", "ranked"]
-
 var title := ""
 var rules := ""
 var mode := "personal"
@@ -20,20 +18,13 @@ var game: GameManager
 var players: Array[int] = []      # tile ids taking part in this round
 var points := {}                  # tile_id -> points scored this round
 var time_left := 0.0
-var tile_clock := {}                 # {"game": "clock", "id": ...} while it runs
-var stamped := 0                     # presses timed by their stamp (the rest: on arrival)
-
-
-## Settings for this round from the round plan (web interface), e.g.
-## {"categories": ["Computers"], "duration": 60, "question_count": 5}: every key
-## that is a property of the round is set. Future special rounds and difficulty
-## steering hook in here.
-func configure(options: Dictionary) -> void:
-	for key in options:
-		if key in self:
-			set(key, options[key])
-		else:
-			push_warning("%s: no setting %s" % [title, key])
+var tile_clock := TileClock.new()  # the tiles stamp their presses (Ritme, Zwarte Piet)
+## Display nodes (RoundMirror): the fields this round type's views read, sent
+## on change ...
+var replica_keys: Array = []
+## ... and those of them that keep a RoundState per player ({field name: its
+## class}): sent as plain data and built again on the display node.
+var state_fields := {}
 
 
 ## The settings the operator can change for this round type (web interface
@@ -82,7 +73,7 @@ func button(_tile_id: int, _button: StringName) -> void:
 
 
 ## Called when a player lets go of an icon (only Ritme's hold notes use it;
-## press_time() gives its moment, like for a press).
+## tile_clock.press_time() gives its moment, like for a press).
 func button_up(_tile_id: int, _button: StringName) -> void:
 	pass
 
@@ -90,49 +81,6 @@ func button_up(_tile_id: int, _button: StringName) -> void:
 ## Clean up LEDs etc. when the round ends.
 func finish() -> void:
 	pass
-
-
-# ---------------------------------------------------------------- the tiles' clock
-# For a round the game judges itself where the moment of a press matters
-# (Ritme, Zwarte Piet): the tiles run a "clock" program (nothing on the ring,
-# only the time since its one "start", sent with ours) and stamp every press
-# with it. press_time() is the press's moment on the round's clock: the
-# stamp when there is one (no network jitter; crystal drift over a round
-# ~1 ms), else the moment it arrived.
-
-func start_tile_clock() -> void:
-	tile_clock = {"game": "clock", "id": "%s-%d" % [title.to_lower().replace(" ", "-"), Time.get_ticks_usec()],
-		"length": roundi(duration * 1000.0)}
-	for id in players:                   # the program and its start together: their clocks start with ours
-		if not tile(id).is_dead:
-			game.arena.send_to_tile(id, {"program": tile_clock})
-			game.arena.send_to_tile(id, {"start": tile_clock.id})
-
-
-func stop_tile_clock() -> void:
-	if tile_clock.is_empty():
-		return
-	for id in players:
-		game.arena.send_to_tile(id, {"stop": true})
-	tile_clock = {}
-
-
-## The press being handled now: when it happened (s on the round's clock).
-## `arrived`: the round's clock now (the fallback).
-func press_time(arrived: float) -> float:
-	var stamp: Dictionary = game.arena.press_stamp()
-	if tile_clock.is_empty() or stamp.get("program", "") != tile_clock.id or not stamp.has("t"):
-		return arrived
-	var t := float(stamp.t) / 1000.0
-	if absf(t - arrived) >= 1.0:         # (not sane: a tile that missed a pause or restarted)
-		return arrived
-	stamped += 1
-	return t
-
-
-## The press being handled now carries a stamp of this round's clock.
-func press_stamped() -> bool:
-	return not tile_clock.is_empty() and game.arena.press_stamp().get("program", "") == tile_clock.id
 
 
 ## Personal rounds: extra info drawn on top of a player's view (or null).
@@ -147,18 +95,13 @@ func make_shared_view() -> Control:
 
 # ---------------------------------------------------------------- display nodes (Replica)
 # A display node runs no round: it makes the same round type, with the
-# master's data (replica_init) and fields (replica_sync, on change;
-# replica_live, every frame), and its views read those as here.
+# master's data (replica_init) and fields (RoundMirror: replica_keys, on
+# change; replica_live, every frame), and its views read those as here.
 
 ## A shared round's own countdown (the seconds its view shows, e.g. the quiz's
 ## answer time), for the overview's timer; -1: none.
 func shared_countdown() -> float:
 	return -1.0
-
-
-## The fields this round type's views read (besides SYNC_BASE), sent on change.
-func replica_keys() -> Array:
-	return []
 
 
 ## What is decided at the start (the questions, a chart): sent with the round.
@@ -171,35 +114,6 @@ func replica_live() -> Dictionary:
 	return {"time_left": time_left}
 
 
-## The fields that keep a RoundState per player ({field name: its class}):
-## they are sent as plain data and built again on the display node.
-func state_fields() -> Dictionary:
-	return {}
-
-
-func replica_sync() -> Dictionary:
-	var d := {}
-	var states := state_fields()
-	for k in SYNC_BASE + replica_keys():
-		if k in self:
-			d[k] = RoundState.pack(get(k)) if states.has(k) else get(k)
-	return d
-
-
-## A display node: the master's round.
-func replica_begin(game_manager: GameManager, init: Dictionary) -> void:
-	game = game_manager
-	_replica_set(init)
-
-
-func apply_replica_sync(d: Dictionary) -> void:
-	_replica_set(d)
-
-
-func apply_replica_live(d: Dictionary) -> void:
-	_replica_set(d)
-
-
 ## A display node: this round is over there (stop its videos).
 func replica_end() -> void:
 	pass
@@ -208,20 +122,6 @@ func replica_end() -> void:
 ## A display node: the clocks run on between the master's updates.
 func replica_tick(delta: float) -> void:
 	time_left -= delta
-
-
-func _replica_set(d: Dictionary) -> void:
-	var states := state_fields()
-	for k in d:
-		if not (k in self):
-			continue
-		var cur = get(k)
-		if states.has(k):
-			RoundState.unpack(cur, d[k], states[k])
-		elif cur is Array and (cur as Array).is_typed():
-			(cur as Array).assign(d[k])
-		else:
-			set(k, d[k])
 
 
 ## Round points can go below 0 (they decide this round's places); the total
@@ -239,9 +139,9 @@ func progress(tile_id: int) -> int:
 
 ## How the lives change at the end of this round: {tile_id: +1 / -1}. Lives
 ## only ever change here, by at most 1 (GameManager applies it). Default (the
-## personal rounds): the 1st places +1, the last places -1 (see rank_result).
+## personal rounds): the 1st places +1, the last places -1 (see _rank_result).
 func life_changes() -> Dictionary:
-	var places := rank_result()
+	var places := _rank_result()
 	var last: int = places.values().max() if not places.is_empty() else 0
 	var out := {}
 	if last < 2:
@@ -257,7 +157,7 @@ func life_changes() -> Dictionary:
 ## Places by progress (players still alive), shared when equal: there can be
 ## several 1st and several 2nd places. Shows them (popups, event feed).
 ## Returns {tile_id: place}.
-func rank_result() -> Dictionary:
+func _rank_result() -> Dictionary:
 	var result := places()
 	var alive := result.keys()
 	var levels: int = result.values().max() if not result.is_empty() else 0
@@ -280,7 +180,7 @@ func rank_result() -> Dictionary:
 func places() -> Dictionary:
 	if not ranked:
 		return {}
-	var alive := players.filter(func(id): return not tile(id).is_dead and game.arena.players.is_playing(id))
+	var alive := players.filter(func(id): return not _tile(id).is_dead and game.arena.players.is_playing(id))
 	var levels := []
 	for id in alive:
 		if progress(id) not in levels:
@@ -293,13 +193,13 @@ func places() -> Dictionary:
 	return out
 
 
-func tile(tile_id: int) -> CyberTile:
-	return game.arena.tiles[tile_id - 1]
-
-
 func _start() -> void:
 	pass
 
 
 func _update(_delta: float) -> void:
 	pass
+
+
+func _tile(tile_id: int) -> CyberTile:
+	return game.arena.tiles[tile_id - 1]

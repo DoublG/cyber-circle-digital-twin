@@ -19,13 +19,13 @@ func _init() -> void:
 	await process_frame
 	var game: GameManager = arena.game
 	game.use_database("")
-	game.set_mode(GameManager.Mode.OPEN)
+	game.modes.change(GameManager.Mode.OPEN)
 	game.intro_time = 0.5
 	var sent := {}                                 # tile -> the messages it got
 	arena.tile_message.connect(func(id, msg): sent.get_or_add(id, []).append(msg))
 	for i in 3:
 		arena.players.join(i + 1, "Speler %d" % (i + 1), 12)
-	game.set_planned_round(0, "rhythm")
+	game.picker.set_planned(0, "rhythm")
 	game.start_game()
 	for n in 600:
 		if game.state == GameManager.State.PLAYING and game.current is RhythmRound:
@@ -38,7 +38,7 @@ func _init() -> void:
 		return
 	var msgs: Array = sent.get(1, [])
 	check(msgs.any(func(m): return m.get("program", {}).get("game", "") == "clock"), "the tile got the clock program")
-	check(msgs.any(func(m): return str(m.get("start", "")) == r.tile_clock.id), "... and its start")
+	check(msgs.any(func(m): return str(m.get("start", "")) == r.tile_clock.program.id), "... and its start")
 
 	# the next note, and a press of its icon that arrives 0.5 s late
 	var k := r._first
@@ -46,14 +46,14 @@ func _init() -> void:
 	var icon: StringName = CyberTile.BUTTONS[note.lane]
 	r.clock = note.t + 0.5
 	var stamp := roundi(note.t * 1000.0)
-	arena.apply_command({"tile": 1, "press": str(icon), "t": stamp, "program": r.tile_clock.id})
+	arena.apply_command({"tile": 1, "press": str(icon), "t": stamp, "program": r.tile_clock.program.id})
 	check(r.state[1].judged.get(k, null) == r.points_line,
 		"stamped, 0.5 s late on the network: on the line (%s)" % r.state[1].last[note.lane])
-	check(r.stamped == 1, "counted as stamped")
+	check(r.tile_clock.stamped == 1, "counted as stamped")
 	arena.apply_command({"tile": 2, "press": str(icon)})
 	check(r.state[2].judged.get(k, null) == null, "no stamp, 0.5 s late: not a hit (%s)" % r.state[2].last[note.lane])
 	arena.apply_command({"tile": 3, "press": str(icon), "t": stamp, "program": "an-old-round"})
-	check(r.state[3].judged.get(k, null) == null and r.stamped == 1, "another program's stamp: on arrival")
+	check(r.state[3].judged.get(k, null) == null and r.tile_clock.stamped == 1, "another program's stamp: on arrival")
 	check(arena.press_stamp().is_empty(), "the stamp is gone after the press")
 
 	# a hold note: the tile's press says a release follows ({"hold": 1}), the
@@ -72,13 +72,14 @@ func _init() -> void:
 		var hn: Dictionary = r.notes[h]
 		var hicon := str(CyberTile.BUTTONS[hn.lane])
 		r.clock = hn.t
-		arena.apply_command({"tile": 1, "press": hicon, "hold": 1, "t": roundi(hn.t * 1000.0), "program": r.tile_clock.id})
+		var prog: String = r.tile_clock.program.id
+		arena.apply_command({"tile": 1, "press": hicon, "hold": 1, "t": roundi(hn.t * 1000.0), "program": prog})
 		check(r.state[1].holds.get(h, "") == "on", "hold note pressed: holding")
 		r.clock = hn.t + 0.4
 		await process_frame
 		check(arena.tiles[0].is_pressed(StringName(hicon)), "the icon stays down until the tile's release (not a tap)")
 		r.clock = hn.t + hn.hold + 0.5
-		arena.apply_command({"tile": 1, "release": hicon, "t": roundi((hn.t + hn.hold) * 1000.0), "program": r.tile_clock.id})
+		arena.apply_command({"tile": 1, "release": hicon, "t": roundi((hn.t + hn.hold) * 1000.0), "program": prog})
 		check(r.state[1].holds.get(h, "") == "ok" and r.state[1].last[hn.lane].points == r.points_line,
 			"stamped release, 0.5 s late on the network: let go on the line (%s)" % r.state[1].last[hn.lane])
 		check(not arena.tiles[0].is_pressed(StringName(hicon)), "released")

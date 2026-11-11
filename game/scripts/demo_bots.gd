@@ -27,7 +27,7 @@ func _ready() -> void:
 	var game: GameManager = arena.game
 	game.auto_start_delay = 5.0
 	if game.mode != GameManager.Mode.OPEN:
-		game.set_mode(GameManager.Mode.OPEN)
+		game.modes.change(GameManager.Mode.OPEN)
 
 
 func _process(delta: float) -> void:
@@ -132,7 +132,7 @@ static func code_candidates(length: int, repeats: bool, tries: Array) -> Array:
 
 func _join() -> void:
 	var free: Array = arena.tiles.filter(func(t): return (t.idle and not arena.players.is_pending(t.tile_id)
-		and arena.players.is_enabled(t.tile_id) and not t is DroneTile))
+		and arena.installation.is_enabled(t.tile_id) and not t is DroneTile))
 	if free.is_empty():
 		return
 	var used: Array = arena.players.player_ids().map(func(id): return arena.players.player_name(id))

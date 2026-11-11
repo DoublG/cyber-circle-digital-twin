@@ -51,7 +51,7 @@ func _ready() -> void:
 	check(arena.robot.is_facing_target() and arena.robot._target_yaw == CyberRobot.side_yaw(1),
 		"the robot already faces the first one (Bram) before the lives change")
 	await _shot("29_scoreboard_before")
-	while not game._lives_shown:
+	while not game.views.lives_shown:
 		await get_tree().process_frame
 	await get_tree().create_timer(0.7).timeout
 	await _shot("30_scoreboard_exterminated")

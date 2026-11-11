@@ -99,8 +99,8 @@ func _place(_delta: float) -> void:
 	var a := a0 + t * ORBIT_SPEED
 	var f := smoothstep(0.0, 1.0, _flight)
 	var park := Vector3(sin(a0) * PARK_R, PARK_Y + 0.04 * sin(t * 1.3 + slot), cos(a0) * PARK_R)
-	var ring := Vector3(sin(a) * ORBIT_R, ORBIT_Y + 0.07 * sin(t * 1.7 + slot * 1.3), cos(a) * ORBIT_R)
-	position = park.lerp(ring, f) + Vector3(0, sin(f * PI) * 0.5 - _drop, 0)   # (a swoop on the way)
+	var orbit := Vector3(sin(a) * ORBIT_R, ORBIT_Y + 0.07 * sin(t * 1.7 + slot * 1.3), cos(a) * ORBIT_R)
+	position = park.lerp(orbit, f) + Vector3(0, sin(f * PI) * 0.5 - _drop, 0)   # (a swoop on the way)
 	var to_robot := Vector3(-position.x, 0, -position.z).normalized()
 	if to_robot.is_zero_approx():
 		return
@@ -118,7 +118,7 @@ func _glow() -> void:
 	_light.light_energy = 1.4 if on else 0.0
 
 
-func set_idle(on: bool) -> void:
+func _set_idle(on: bool) -> void:
 	super(on)
 	_glow()
 
@@ -234,7 +234,7 @@ func play_death() -> void:
 		var r := lerpf(Vector2(start.x, start.z).length(), ORBIT_R + 0.6, k)
 		position = Vector3(sin(a) * r, lerpf(start.y, 0.25, k * k), cos(a) * r)
 		basis = Basis.from_euler(Vector3(0.6 * k, a * 3.0, 0.9 * k)), 0.0, 1.0, 1.7)
-	fall.parallel().tween_method(func(v: float): fill_ring(Color(v, 0, 0)), 1.0, 0.0, 1.7)
+	fall.parallel().tween_method(func(v: float): ring.fill(Color(v, 0, 0)), 1.0, 0.0, 1.7)
 	await fall.finished
 	breaking = false
 	smoke.emitting = false

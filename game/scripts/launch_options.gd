@@ -55,7 +55,7 @@ static func apply(arena: Arena) -> void:
 					var ab := part.split("-")
 					for id in range(int(ab[0]), int(ab[-1]) + 1):
 						ids.append(id)
-				arena.players.set_installed.call_deferred(ids)
+				arena.installation.set_installed.call_deferred(ids)
 			"--mobile-screens":
 				arena.screen_wall.mobile_groups = _parse_screens(arena, value, true)
 			"--monitors":

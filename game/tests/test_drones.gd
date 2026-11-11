@@ -92,7 +92,7 @@ func _ready() -> void:
 	for k in [5, 6]:
 		_check_mobile_screen(wall, k)
 	for d in [m1, m2]:
-		var cam: Camera3D = wall._huds[d.tile_id].cell.get_meta(&"camera")
+		var cam: Camera3D = wall._huds[d.tile_id].cell.camera
 		var robot_head: Vector3 = arena.robot.global_position + Vector3(0, 1.3, 0)
 		var on_screen := func(p: Vector3) -> bool:
 			if cam.is_position_behind(p):
@@ -152,7 +152,7 @@ func _ready() -> void:
 	quiz._phase_left = 0.3
 	await _record_until(func(): return quiz._phase == "reveal")
 	await _record(3.0)
-	await _until(func(): return game.state == GameManager.State.SCOREBOARD and game._lives_shown, 30.0)
+	await _until(func(): return game.state == GameManager.State.SCOREBOARD and game.views.lives_shown, 30.0)
 	var board: ScoreboardView = game.screen_wall.shared_views[0]
 	var labels: Array = board._rows.map(func(e): return (e.panel.get_child(0).get_child(2) as Label).text)
 	check(Retro.tile_label(m1.tile_id) in labels and Retro.tile_label(m2.tile_id) in labels,
@@ -162,10 +162,10 @@ func _ready() -> void:
 	game.skip()
 	await _until(func(): return game.state == GameManager.State.PLAYING and game.current is CycloneRound, 30.0)
 	await _wait(arena.screen_wall.tilt_delay + arena.screen_wall.tilt_time + 0.5)
-	var cell: Control = arena.screen_wall._huds[m1.tile_id].cell
-	var rig: Node = cell.get_children().filter(func(c): return c is ScreenWall.DroneCam).front()
+	var cell: ViewCell = arena.screen_wall._huds[m1.tile_id].cell
+	var rig: Node = cell.get_children().filter(func(c): return c is DroneCam).front()
 	check(is_equal_approx(rig.down, 1.0), "drone camera looking down (%.2f)" % rig.down)
-	var top_cam: Camera3D = cell.get_meta(&"camera")
+	var top_cam: Camera3D = cell.camera
 	var v := top_cam.unproject_position(m1.global_position) / Vector2(top_cam.get_viewport().size)
 	check(not top_cam.is_position_behind(m1.global_position) and v.distance_to(Vector2(0.5, 0.5)) < 0.2,
 		"the drone in the middle of the view (%.2f, %.2f)" % [v.x, v.y])

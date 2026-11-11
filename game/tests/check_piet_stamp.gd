@@ -20,11 +20,11 @@ func _init() -> void:
 	arena.simulate_firmware = false                  # (real tiles: presses come in over MQTT)
 	var game: GameManager = arena.game
 	game.use_database("")
-	game.set_mode(GameManager.Mode.OPEN)
+	game.modes.change(GameManager.Mode.OPEN)
 	game.intro_time = 0.5
 	for i in 4:
 		arena.players.join(i + 1, "Speler %d" % (i + 1), 12)
-	game.set_planned_round(0, "zwarte_piet")
+	game.picker.set_planned(0, "zwarte_piet")
 	game.start_game()
 	for n in 600:
 		if game.state == GameManager.State.PLAYING and game.current is ZwartePietRound:
@@ -35,14 +35,14 @@ func _init() -> void:
 	if r == null:
 		quit(1)
 		return
-	check(not r.tile_clock.is_empty(), "the tiles run the round's clock")
+	check(not r.tile_clock.program.is_empty(), "the tiles run the round's clock")
 
 	# 1. the countdown runs out; a kick stamped 0.1 s before the end arrives during the wait
 	var kicker := await _run_out(r)
 	var to: int = r._neighbour(kicker, 1)
 	var before := {kicker: r.points[kicker], to: r.points[to]}
 	arena.apply_command({"tile": kicker, "press": "Square", "t": roundi((r._end_at - 0.1) * 1000.0),
-		"program": r.tile_clock.id})
+		"program": r.tile_clock.program.id})
 	check(r.holder == to and r.late_kicks == 1,
 		"a kick stamped before the end, arriving after it: counts (light at %d)" % r.holder)
 	await _until(func(): return r._end_at < 0.0)
@@ -53,7 +53,7 @@ func _init() -> void:
 	kicker = await _run_out(r)
 	var p: int = r.points[kicker]
 	arena.apply_command({"tile": kicker, "press": "Square", "t": roundi((r._end_at + 0.05) * 1000.0),
-		"program": r.tile_clock.id})
+		"program": r.tile_clock.program.id})
 	check(r.holder == kicker, "a kick stamped after the end: does not count")
 	await _until(func(): return r._end_at < 0.0)
 	check(r.points[kicker] == p - r.penalty, "... the holder is caught")

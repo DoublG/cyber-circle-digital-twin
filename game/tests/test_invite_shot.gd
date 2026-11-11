@@ -12,7 +12,7 @@ func _ready() -> void:
 	add_child(arena)
 	arena.game.use_database("")
 	arena.sound.enabled = false
-	arena.game.set_mode(GameManager.Mode.OPEN)
+	arena.game.modes.change(GameManager.Mode.OPEN)
 	await get_tree().create_timer(1.0).timeout
 	arena.apply_command({"tile": 2, "register": "Anna", "color": "#ff8800"})
 	await get_tree().create_timer(1.0).timeout
@@ -27,7 +27,7 @@ func _ready() -> void:
 	vp.size = Vector2i(627, 1060)
 	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	add_child(vp)
-	var slot := TileSlot.new()
+	var slot := TileSlot.create()
 	slot.tile_id = 2
 	slot.player = "Anna"
 	slot.color = Color("#ff8800")

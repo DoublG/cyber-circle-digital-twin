@@ -1,0 +1,51 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/quiz_player_card.gd" id="1_28fp8"]
+[ext_resource type="Script" path="res://scripts/ui/button_icon.gd" id="2_wl7dl"]
+[ext_resource type="Script" path="res://scripts/ui/shield_icon.gd" id="3_s7s5k"]
+
+[node name="QuizPlayerCard" type="PanelContainer" unique_id=1220844182]
+custom_minimum_size = Vector2(360, 0)
+script = ExtResource("1_28fp8")
+
+[node name="Box" type="VBoxContainer" parent="." unique_id=1159472954]
+layout_mode = 2
+theme_override_constants/separation = 8
+alignment = 1
+
+[node name="NameLabel" type="Label" parent="Box" unique_id=1623210899]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 36
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+horizontal_alignment = 1
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Row" type="HBoxContainer" parent="Box" unique_id=1599974524]
+layout_mode = 2
+theme_override_constants/separation = 18
+alignment = 1
+
+[node name="Icon" type="Control" parent="Box/Row" unique_id=931027830]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(110, 110)
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("2_wl7dl")
+
+[node name="Shield" type="Control" parent="Box/Row" unique_id=971674583]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(60, 72)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+script = ExtResource("3_s7s5k")
+
+[node name="Mark" type="Label" parent="Box/Row" unique_id=629003159]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 80
+theme_override_colors/font_color = Color(0.55, 0.48, 0.4, 1)
+text = "GEEN"
+horizontal_alignment = 1

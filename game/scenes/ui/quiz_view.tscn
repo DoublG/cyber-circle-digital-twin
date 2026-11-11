@@ -1,0 +1,286 @@
+[gd_scene format=3]
+
+[ext_resource type="Theme" path="res://scenes/ui/retro_theme.tres" id="1_44u4u"]
+[ext_resource type="Script" path="res://scripts/ui/quiz_view.gd" id="2_7t07h"]
+[ext_resource type="PackedScene" path="res://scenes/ui/background.tscn" id="3_j12b2"]
+[ext_resource type="PackedScene" path="res://scenes/ui/stripes_right.tscn" id="4_i12rm"]
+[ext_resource type="Script" path="res://scripts/ui/countdown_ring.gd" id="5_klerx"]
+[ext_resource type="Script" path="res://scripts/ui/shield_icon.gd" id="6_72cfw"]
+[ext_resource type="PackedScene" path="res://scenes/ui/quiz_answer_card.tscn" id="7_fcn2d"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_0kvly"]
+content_margin_left = 22.0
+content_margin_top = 11.0
+content_margin_right = 22.0
+content_margin_bottom = 11.0
+bg_color = Color(1, 0.45, 0.08, 1)
+border_color = Color(1, 0.74, 0.22, 1)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+corner_detail = 1
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_fanw3"]
+content_margin_left = 18.0
+content_margin_top = 9.0
+content_margin_right = 18.0
+content_margin_bottom = 9.0
+bg_color = Color(0.09, 0.075, 0.06, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.2, 0.8, 0.75, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+corner_detail = 1
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lvxq8"]
+content_margin_left = 30.0
+content_margin_top = 15.0
+content_margin_right = 30.0
+content_margin_bottom = 15.0
+bg_color = Color(0.09, 0.075, 0.06, 1)
+border_width_left = 4
+border_width_top = 4
+border_width_right = 4
+border_width_bottom = 4
+border_color = Color(0.2, 0.8, 0.75, 1)
+corner_radius_top_left = 28
+corner_radius_top_right = 28
+corner_radius_bottom_right = 28
+corner_radius_bottom_left = 28
+corner_detail = 1
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_mmrmr"]
+content_margin_left = 0.0
+content_margin_top = 0.0
+content_margin_right = 0.0
+content_margin_bottom = 0.0
+bg_color = Color(0.09, 0.075, 0.06, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.55, 0.48, 0.4, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+corner_detail = 1
+
+[node name="QuizView" type="Control" unique_id=1037807440]
+layout_mode = 3
+anchors_preset = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme = ExtResource("1_44u4u")
+script = ExtResource("2_7t07h")
+
+[node name="Background" parent="." unique_id=1369816793 instance=ExtResource("3_j12b2")]
+layout_mode = 1
+
+[node name="Content" type="VBoxContainer" parent="." unique_id=1595003108]
+unique_name_in_owner = true
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 44.0
+offset_top = 36.0
+offset_right = -44.0
+offset_bottom = -36.0
+theme_override_constants/separation = 16
+
+[node name="Top" type="HBoxContainer" parent="Content" unique_id=1114495083]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="Badge" type="PanelContainer" parent="Content/Top" unique_id=108665840]
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_0kvly")
+
+[node name="Label" type="Label" parent="Content/Top/Badge" unique_id=75265399]
+layout_mode = 2
+theme_override_font_sizes/font_size = 52
+theme_override_colors/font_color = Color(0.035, 0.03, 0.028, 1)
+text = "QUIZ"
+horizontal_alignment = 1
+
+[node name="Header" type="Label" parent="Content/Top" unique_id=1928271032]
+layout_mode = 2
+theme_override_font_sizes/font_size = 52
+theme_override_colors/font_color = Color(1, 0.74, 0.22, 1)
+text = "VRAAG"
+
+[node name="Meta" type="Label" parent="Content/Top" unique_id=515633404]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_fanw3")
+theme_override_font_sizes/font_size = 34
+theme_override_colors/font_color = Color(0.2, 0.8, 0.75, 1)
+horizontal_alignment = 1
+
+[node name="StripesRight" parent="Content/Top" unique_id=1436792696 instance=ExtResource("4_i12rm")]
+layout_mode = 2
+
+[node name="Countdown" type="Control" parent="Content/Top" unique_id=1316340874]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(140, 140)
+layout_mode = 2
+script = ExtResource("5_klerx")
+
+[node name="Slide" type="VBoxContainer" parent="Content" unique_id=282104668]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 36
+alignment = 1
+
+[node name="SlideTitle" type="Label" parent="Content/Slide" unique_id=1250652813]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 110
+theme_override_colors/font_color = Color(1, 0.74, 0.22, 1)
+horizontal_alignment = 1
+
+[node name="GridRoom" type="Control" parent="Content/Slide" unique_id=525589750]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="PlayerGrid" type="GridContainer" parent="Content/Slide/GridRoom" unique_id=712590575]
+unique_name_in_owner = true
+layout_mode = 0
+theme_override_constants/h_separation = 24
+theme_override_constants/v_separation = 24
+
+[node name="SlideStatus" type="Label" parent="Content/Slide" unique_id=1090961797]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 52
+theme_override_colors/font_color = Color(0.3, 1, 0.45, 1)
+horizontal_alignment = 1
+
+[node name="Legend" type="HBoxContainer" parent="Content/Slide" unique_id=995394861]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 14
+alignment = 1
+
+[node name="ShieldIcon" type="Control" parent="Content/Slide/Legend" unique_id=1248451755]
+custom_minimum_size = Vector2(40, 48)
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("6_72cfw")
+
+[node name="Label" type="Label" parent="Content/Slide/Legend" unique_id=1135444258]
+layout_mode = 2
+theme_override_font_sizes/font_size = 36
+theme_override_colors/font_color = Color(0.3, 0.75, 1, 1)
+text = "BESCHERMD: VRAAG BOVEN JE LEEFTIJD  ▸  FOUT KOST GEEN LEVEN"
+horizontal_alignment = 1
+
+[node name="QuestionPanel" type="PanelContainer" parent="Content" unique_id=431967980]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_lvxq8")
+
+[node name="Row" type="HBoxContainer" parent="Content/QuestionPanel" unique_id=42129955]
+layout_mode = 2
+theme_override_constants/separation = 30
+
+[node name="Media" type="TextureRect" parent="Content/QuestionPanel/Row" unique_id=2034967195]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+expand_mode = 1
+stretch_mode = 5
+
+[node name="TextArea" type="Control" parent="Content/QuestionPanel/Row" unique_id=387454527]
+unique_name_in_owner = true
+clip_contents = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="Texts" type="VBoxContainer" parent="Content/QuestionPanel/Row/TextArea" unique_id=569576284]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_constants/separation = 16
+alignment = 1
+
+[node name="Question" type="Label" parent="Content/QuestionPanel/Row/TextArea/Texts" unique_id=2056515895]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 62
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="Body" type="Label" parent="Content/QuestionPanel/Row/TextArea/Texts" unique_id=492201113]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 38
+theme_override_colors/font_color = Color(0.85, 0.79050004, 0.68, 1)
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="Answers" type="GridContainer" parent="Content" unique_id=915515301]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+size_flags_stretch_ratio = 0.62
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 14
+columns = 2
+
+[node name="Square" parent="Content/Answers" unique_id=2034161921 instance=ExtResource("7_fcn2d")]
+layout_mode = 2
+
+[node name="Triangle" parent="Content/Answers" unique_id=1756628803 instance=ExtResource("7_fcn2d")]
+layout_mode = 2
+button = &"Triangle"
+
+[node name="Cross" parent="Content/Answers" unique_id=1541033454 instance=ExtResource("7_fcn2d")]
+layout_mode = 2
+button = &"Cross"
+
+[node name="Circle" parent="Content/Answers" unique_id=1036833281 instance=ExtResource("7_fcn2d")]
+layout_mode = 2
+button = &"Circle"
+
+[node name="TimeBar" type="ProgressBar" parent="Content" unique_id=1425002799]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+theme_override_styles/background = SubResource("StyleBoxFlat_mmrmr")
+max_value = 1.0
+show_percentage = false
+
+[node name="Status" type="Label" parent="Content" unique_id=2127226784]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 36
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+horizontal_alignment = 1
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Answered" type="HFlowContainer" parent="Content" unique_id=1670356879]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/h_separation = 10
+theme_override_constants/v_separation = 8
+alignment = 1

@@ -1,6 +1,6 @@
 extends SceneTree
 ## A round's per-player state (RoundState): every player their own, and to a
-## display node and back as plain data (GameRound.replica_sync).
+## display node and back as plain data (RoundMirror.fields).
 ##   godot-4 --headless --path game --script res://tests/check_round_state.gd
 var fails := 0
 
@@ -28,26 +28,26 @@ func _init() -> void:
 	master.state[4].guess = [0, 3]
 	master.state[4].tries = [{"guess": [1, 1, 2], "marks": [2, 0, 1], "green": 1, "yellow": 1}]
 	master.state[4].last = {"at": 7.0, "text": "1 GROEN  1 GEEL", "points": 0}
-	var sync := master.replica_sync()
+	var sync := RoundMirror.fields(master)
 	check(sync.state[4] is Dictionary and sync.state[4].level == 2, "sent as plain data: %s" % [sync.state[4].keys()])
 	check(Replica._clean(sync).state[4].tries.size() == 1, "nothing in it the network drops")
 	var display := CodeRound.new()
-	display.apply_replica_sync(sync.duplicate(true))
+	RoundMirror.apply(display, sync.duplicate(true))
 	var st: CodeRound.PlayerState = display.state.get(4)
 	check(st != null and st.level == 2 and st.guess == [0, 3] and st.tries[0].green == 1
 		and st.last.text == "1 GROEN  1 GEEL",
 		"the display node has the same state, typed again")
 	master.state[4].level = 3
-	check(st.level == 2 and master.replica_sync().state[4].level == 3, "a change on the master: in the next update")
+	check(st.level == 2 and RoundMirror.fields(master).state[4].level == 3, "a change on the master: in the next update")
 
 	# every round type that keeps one
 	for type in RoundPicker.ROUND_TYPES:
 		var r: GameRound = type.new()
-		for field in r.state_fields():
-			var s: RoundState = r.state_fields()[field].new()
+		for field in r.state_fields:
+			var s: RoundState = r.state_fields[field].new()
 			r.get(field)[1] = s
 			var copy: GameRound = type.new()
-			copy.apply_replica_sync(r.replica_sync())
+			RoundMirror.apply(copy, RoundMirror.fields(r))
 			check(copy.get(field).has(1) and copy.get(field)[1].to_dict() == s.to_dict(),
 				"%s.%s: there and back" % [RoundPicker.type_name(type), field])
 

@@ -36,6 +36,11 @@ extends CanvasLayer
 
 const SCREEN_RES := Vector2i(1920, 1080)   # resolution of each physical screen
 const GUTTER := 10                          # px of screen background between split views
+const WALL_SCREEN := preload("res://scenes/ui/wall_screen.tscn")
+const JOIN_PANEL := preload("res://scenes/ui/join_panel.tscn")
+const TIMER_LABEL := preload("res://scenes/ui/timer_label.tscn")
+const PAUSE_BANNER := preload("res://scenes/ui/pause_banner.tscn")
+const FLOATING_TEXT := preload("res://scenes/ui/floating_text.tscn")
 
 @export var multi_window := false
 @export var observer_page := true
@@ -71,7 +76,7 @@ var last_press := {}              # SETUP: tile id -> {"button", "msec"}: the te
 var shared_views: Array = []            # current shared views, one per screen
 
 var _screens: Array[Control] = []       # one root Control per physical screen
-var _huds := {}                         # tile_id -> {cell, name, lives, score, dead}
+var _huds := {}                         # tile_id -> {cell: ViewCell, hud: PlayerHud}
 var _mode := "players"
 var _overlay_factory := Callable()      # players mode: tile_id -> Control (or null)
 var _look_down := false                 # players mode: cameras look at their own tile
@@ -142,7 +147,7 @@ func timer_text() -> String:
 ## A view of the floating observer camera (overview page, empty screens).
 func make_observer_cell() -> Control:
 	var cell := _view_cell(arena.observer.global_transform, 60.0)
-	_followers.append(cell.get_meta(&"camera"))
+	_followers.append(cell.camera)
 	return cell
 
 
@@ -196,7 +201,7 @@ func play_clip(tile_id: int, path: String, from := 0.0) -> float:
 	back.add_child(view)
 	cell.add_child(back)
 	cell.move_child(back, 1)              # over the 3D view, under the frame and the HUD
-	_huds[tile_id]["clip"] = true         # the clip says it all: hide the big status label
+	(_huds[tile_id].hud as PlayerHud).clip_playing = true   # the clip says it all: no big status label
 	update_player(tile_id)
 	player.play()
 	if from > 0.0:
@@ -221,13 +226,10 @@ func popup(tile_id: int, text: String, color: Color, log := true) -> void:
 		arena.game.log_event("%s  %s" % [arena.players.player_name(tile_id).to_upper(), text], color)
 	if not _huds.has(tile_id):
 		return
-	var cell: Control = _huds[tile_id].hud
-	var l := _label(130, color)
+	var l: Label = FLOATING_TEXT.instantiate()
 	l.text = text
-	l.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	l.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	l.grow_vertical = Control.GROW_DIRECTION_BOTH
-	cell.add_child(l)
+	l.add_theme_color_override("font_color", color)
+	_huds[tile_id].hud.add_child(l)
 	var tw := l.create_tween().set_parallel()
 	tw.tween_property(l, "position:y", l.position.y - 80, 0.8)
 	tw.tween_property(l, "modulate:a", 0.0, 0.8).set_delay(0.3)
@@ -317,12 +319,7 @@ func refresh() -> void:
 	_test_patterns(arena.game.mode == GameManager.Mode.SETUP)
 	for screen in _screens:
 		if arena.game.mode == GameManager.Mode.PAUSED:
-			var banner := Retro.label(120, Retro.AMBER, "PAUZE")
-			banner.add_theme_stylebox_override("normal", Retro.panel(Color(Retro.PANEL, 0.92), Retro.ORANGE, 6, 24, 60))
-			banner.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-			banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
-			banner.grow_vertical = Control.GROW_DIRECTION_BOTH
-			screen.add_child(banner)
+			screen.add_child(PAUSE_BANNER.instantiate())
 	for id in _huds:
 		update_player(id)
 	play_death_clips(true)
@@ -371,14 +368,9 @@ func play_death_clips(resume := false) -> void:
 
 ## The timer, top-right on every screen (no player's plate is there).
 func _add_timer_label(screen: Control) -> void:
-	var l := _label(64, Retro.AMBER)
+	var l: Label = TIMER_LABEL.instantiate()
 	l.text = _timer_text
 	l.visible = _timer_text != ""
-	l.add_theme_stylebox_override("normal", Retro.panel(Color(Retro.PANEL, 0.95), Retro.ORANGE, 4, 16, 26))
-	l.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	l.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	l.offset_right = -24
-	l.offset_top = 24
 	screen.add_child(l)
 	_timer_labels.append(l)
 
@@ -387,19 +379,17 @@ func _add_timer_label(screen: Control) -> void:
 func update_player(tile_id: int) -> void:
 	if not _huds.has(tile_id):
 		return
-	var hud: Dictionary = _huds[tile_id]
 	var tile: CyberTile = arena.tiles[tile_id - 1]
-	hud.tile.text = Retro.tile_label(tile_id)
-	hud.name.text = arena.players.player_name(tile_id).to_upper().left(10)
-	hud.lives.text = "♥".repeat(tile.health) + "♡".repeat(tile.max_health - tile.health)
 	var game: GameManager = arena.game
+	var score := Retro.rounds(game.survived.get(tile_id, 0))
 	if game.state == GameManager.State.LOBBY:
-		hud.score.text = "KLAAR"
+		score = "KLAAR"
 	elif game.current and tile_id not in game.current.players:
-		hud.score.text = "VOLGENDE RONDE"
-	else:
-		hud.score.text = Retro.rounds(game.survived.get(tile_id, 0))
-	hud.dead.visible = (tile.is_dead or tile.health == 0) and not hud.get("clip", false)
+		score = "VOLGENDE RONDE"
+	(_huds[tile_id].hud as PlayerHud).show_player(Retro.tile_label(tile_id),
+		arena.players.player_name(tile_id).to_upper().left(10),
+		"♥".repeat(tile.health) + "♡".repeat(tile.max_health - tile.health), score,
+		tile.is_dead or tile.health == 0)
 
 
 # ---------------------------------------------------------------- views
@@ -412,10 +402,9 @@ func _player_view(tile_id: int) -> Control:
 	var eye := tile.global_position - to_robot * 0.05 + Vector3(0, eye_height, 0)
 	var robot_view := Transform3D(Basis(), eye).looking_at(look_at, Vector3.UP)
 	var cell := _view_cell(robot_view, player_fov)
-	var hud := Control.new()          # everything drawn over the view, scaled with the cell
-	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var hud := PlayerHud.create()     # everything drawn over the view, scaled with the cell
 	cell.add_child(hud)
-	cell.resized.connect(func(): _fit_hud(cell, hud))
+	cell.resized.connect(hud.fit.bind(cell, Vector2(SCREEN_RES), hud_min_scale))
 	# (dying, or waiting for the next round: the view stays on the robot)
 	var look_down: bool = _look_down and not tile.is_dead and not arena.dying.has(tile_id) \
 			and arena.game.in_round(tile_id)
@@ -425,34 +414,27 @@ func _player_view(tile_id: int) -> Control:
 	elif look_down:
 		var tile_view := Transform3D(Basis(), eye).looking_at(
 			tile.global_position + to_robot * tile_look_ahead, robot_view.basis.y)
-		tilting = _tile_camera(cell.get_meta(&"camera"), robot_view, tile_view)
+		tilting = _tile_camera(cell.camera, robot_view, tile_view)
 	if tilting:
-		var hint := LookDownHint.new()
+		var hint := LookDownHint.create()
 		hint.lifetime = tilt_delay + tilt_time + 2.0
 		hud.add_child(hint)
-	var labels := _name_plate(hud)
-	var dead := Retro.label(80, Retro.BAD, "GEËXTERMINEERD!")
-	dead.add_theme_stylebox_override("normal", Retro.panel(Color(0.1, 0.0, 0.0, 0.85), Retro.BAD, 6, 24, 40))
-	dead.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	dead.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	dead.grow_vertical = Control.GROW_DIRECTION_BOTH
-	hud.add_child(dead)
+		hud.move_child(hint, 0)       # under the name plate
 	if _overlay_factory.is_valid():
 		var overlay: Control = _overlay_factory.call(tile_id)
 		if overlay:
 			hud.add_child(overlay)
-	_huds[tile_id] = {"cell": cell, "hud": hud, "tile": labels.tile, "name": labels.name, "lives": labels.lives,
-		"score": labels.score, "dead": dead}
+	_huds[tile_id] = {"cell": cell, "hud": hud}
 	return cell
 
 
 ## A drone's view: the camera flies with the drone, and tilts over it when the
 ## players look down. Returns true while that tilt plays (the look-down hint).
-func _drone_camera(cell: Control, drone: DroneTile, look_down: bool) -> bool:
+func _drone_camera(cell: ViewCell, drone: DroneTile, look_down: bool) -> bool:
 	var rig := DroneCam.new()
 	rig.wall = self
 	rig.drone = drone
-	rig.cam = cell.get_meta(&"camera")
+	rig.cam = cell.camera
 	cell.add_child(rig)
 	rig.follow()
 	if not look_down:
@@ -477,53 +459,19 @@ func _tile_camera(cam: Camera3D, robot_view: Transform3D, tile_view: Transform3D
 	return true
 
 
-## One compact line in the top-left corner: [T03] NAME ♥♥♥ 3 RONDES (no overall
-## place: the countdown is in the top-right corner; the place is on the
-## scoreboard). Returns its labels: {tile, name, lives, score}.
-func _name_plate(hud: Control) -> Dictionary:
-	var plate := Retro.panel_container(Color(Retro.PANEL, 0.85), Retro.ORANGE, 3, 14, 14)
-	plate.position = Vector2(30, 26)    # inside the chamfered frame
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 14)
-	plate.add_child(row)
-	var tile_label := Retro.label(36, Retro.BG)
-	tile_label.add_theme_stylebox_override("normal", Retro.panel(Retro.TEAL, Retro.TEAL, 0, 6, 8))
-	row.add_child(tile_label)
-	var name_label := Retro.label(38, Retro.CREAM)
-	row.add_child(name_label)
-	var lives := Retro.label(38, Color(1.0, 0.2, 0.3), "", HORIZONTAL_ALIGNMENT_LEFT)
-	row.add_child(lives)
-	var score := Retro.label(38, Retro.AMBER, "", HORIZONTAL_ALIGNMENT_LEFT)
-	row.add_child(score)
-	hud.add_child(plate)
-	return {"tile": tile_label, "name": name_label, "lives": lives, "score": score}
-
-
 ## A screen without installed places (a partial installation): the call to
 ## action and how to join, instead of an empty screen.
 func _join_panel() -> Control:
-	var panel := PanelContainer.new()
-	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.add_theme_stylebox_override("panel", Retro.panel(Color(Retro.PANEL, 0.95), Retro.ORANGE, 2, 0, 40))
-	var box := VBoxContainer.new()
-	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_theme_constant_override("separation", 40)
-	panel.add_child(box)
-	box.add_child(Retro.label(80, Retro.TEAL, "CYBER CIRCLE CHALLENGE"))
-	var cta := CallToAction.new(64)
-	cta.custom_minimum_size.y = 220
-	box.add_child(cta)
-	var how := Retro.label(40, Retro.CREAM, Texts.join_text())
-	how.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(how)
+	var panel: Control = JOIN_PANEL.instantiate()
+	(panel.get_node("%How") as Label).text = Texts.join_text()
 	return panel
 
 
 func _tile_slot(tile_id: int) -> Control:
-	var slot := TileSlot.new()
+	var slot := TileSlot.create()
 	slot.tile_id = tile_id
-	slot.out_of_service = not arena.players.is_enabled(tile_id)
-	slot.mode = arena.game.mode_name()
+	slot.out_of_service = not arena.installation.is_enabled(tile_id)
+	slot.mode = arena.game.modes.name()
 	var invite: Dictionary = arena.players.pending_info(tile_id)
 	if not invite.is_empty():
 		slot.player = invite.name
@@ -532,37 +480,12 @@ func _tile_slot(tile_id: int) -> Control:
 	return slot
 
 
-## Scale a player HUD with its cell: 1 at full screen, smaller in a split.
-func _fit_hud(cell: Control, hud: Control) -> void:
-	var full := Vector2(SCREEN_RES)
-	var s := clampf(sqrt(cell.size.x * cell.size.y / (full.x * full.y)), hud_min_scale, 1.0)
-	hud.scale = Vector2(s, s)
-	hud.size = cell.size / s
-
-
 ## A cell with its own camera rendering the shared 3D world.
-func _view_cell(xform: Transform3D, fov: float) -> Control:
-	var cell := Control.new()
-	cell.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	cell.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	cell.clip_contents = true
-	var container := SubViewportContainer.new()
-	container.stretch = true
-	container.set_anchors_preset(Control.PRESET_FULL_RECT)
-	cell.add_child(container)
-	var vp := SubViewport.new()
-	vp.physics_object_picking = true   # click the tile icons inside a view
-	vp.msaa_3d = view_msaa
-	vp.scaling_3d_scale = view_scale
-	vp.mesh_lod_threshold = view_lod
-	container.add_child(vp)
-	cell.add_child(Retro.ViewFrame.new())
-	var cam := Camera3D.new()
-	cam.fov = fov
-	cam.transform = xform
-	vp.add_child(cam)
-	cam.current = true
-	cell.set_meta(&"camera", cam)
+func _view_cell(xform: Transform3D, fov: float) -> ViewCell:
+	var cell := ViewCell.create(xform, fov)
+	cell.viewport.msaa_3d = view_msaa
+	cell.viewport.scaling_3d_scale = view_scale
+	cell.viewport.mesh_lod_threshold = view_lod
 	return cell
 
 
@@ -581,100 +504,26 @@ func _tilt(cam: Camera3D, from: Transform3D, to: Transform3D) -> void:
 
 ## The floor screens and then the mobile screens: the tile ids of each screen.
 ## The tiles on each screen (floor screens, then the mobile screens), without
-## the places that are not installed (PlayerRegistry.set_installed).
+## the places that are not installed (Installation.set_installed).
 func groups() -> Array:
 	if arena == null:
 		return screen_groups + mobile_groups
-	return (screen_groups + mobile_groups).map(func(g): return g.filter(func(id): return arena.players.is_installed(id)))
-
-
-## A drone player's camera, third person: behind and well above the drone,
-## looking down past it at the robot - the drone low in the view, the robot
-## above it (the drone flies higher than the robot: from just behind it would
-## cover the robot). down = 1: over the drone, looking down at its top (LEDs,
-## icons; the robot side up), for the rounds on the tile.
-class DroneCam:
-	extends Node
-	var wall: ScreenWall
-	var drone: DroneTile
-	var cam: Camera3D
-	var down := 0.0
-
-	func _process(_delta: float) -> void:
-		follow()
-
-	func follow() -> void:
-		if not is_instance_valid(drone) or not cam.is_inside_tree():
-			return
-		var p := drone.global_position
-		var out := Vector3(p.x, 0, p.z).normalized()
-		if out.is_zero_approx():
-			return
-		var r := minf(Vector2(p.x, p.z).length() + wall.drone_cam_back, 6.0)   # (inside the room)
-		var eye := Vector3(out.x * r, p.y + wall.drone_cam_up, out.z * r)
-		var chase := Transform3D(Basis(), eye).looking_at(wall.look_at.lerp(p, wall.drone_cam_aim), Vector3.UP)
-		var over := Transform3D(Basis(), p + Vector3(0, 0.95, 0) + out * 0.3).looking_at(
-			p + Vector3(0, 0.05, 0) - out * 0.05, -out)
-		cam.global_transform = chase.interpolate_with(over, down)
-		cam.fov = lerpf(wall.player_fov, wall.tile_fov, down)
-
-
-func _label(font_size: int, color: Color) -> Label:
-	var l := Label.new()
-	l.add_theme_font_size_override("font_size", font_size)
-	l.add_theme_color_override("font_color", color)
-	l.add_theme_color_override("font_outline_color", Retro.BG)
-	l.add_theme_constant_override("outline_size", 10)
-	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return l
+	return (screen_groups + mobile_groups).map(func(g): return g.filter(arena.installation.is_installed))
 
 
 # ---------------------------------------------------------------- layout
 
-## Every screen renders at a fixed SCREEN_RES (the real 1080p monitors) and is
-## scaled as a whole to fit, so the layout is identical in the preview and on
-## any monitor.
+## A screen of the wall (WallScreen: rendered at SCREEN_RES, scaled as a whole
+## to fit). Returns what it shows: refresh() replaces its children.
 ## register = false: not one of the 5 player screens (the observer page).
 func _new_screen(parent: Node, register := true) -> Control:
-	var holder := Control.new()
-	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	holder.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	holder.set_anchors_preset(Control.PRESET_FULL_RECT)
-	holder.clip_contents = true
-	parent.add_child(holder)
-	var container := SubViewportContainer.new()
-	container.size = SCREEN_RES
-	holder.add_child(container)
-	var vp := SubViewport.new()
-	vp.size = SCREEN_RES
-	vp.physics_object_picking = true
-	container.add_child(vp)
-	var bg := ColorRect.new()
-	bg.color = Color.BLACK
-	bg.size = SCREEN_RES
-	bg.theme = Retro.theme()
-	vp.add_child(bg)
-	var crt := Retro.crt_overlay()   # stays on top: refresh() only replaces bg's children
-	crt.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	crt.size = SCREEN_RES
-	vp.add_child(crt)
-	if Replica.client and register:  # a display node: the link to the master, over everything
-		var link := _label(34, Retro.AMBER)
-		link.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		link.add_theme_stylebox_override("normal", Retro.panel(Color(Retro.PANEL, 0.92), Retro.ORANGE, 4, 16, 26))
-		link.position = Vector2(SCREEN_RES.x / 2.0 - 500, SCREEN_RES.y - 260)
-		link.size = Vector2(1000, 0)
-		vp.add_child(link)
-		_link.append(link)
-	var fit := func():
-		var k := minf(holder.size.x / SCREEN_RES.x, holder.size.y / SCREEN_RES.y)
-		container.scale = Vector2(k, k)
-		container.position = (holder.size - Vector2(SCREEN_RES) * k) / 2
-	holder.resized.connect(fit)
-	fit.call()
+	var screen: WallScreen = WALL_SCREEN.instantiate()
+	parent.add_child(screen)
 	if register:
-		_screens.append(bg)
-	return bg
+		_screens.append(screen.content)
+		if Replica.client:            # a display node: the link to the master, over everything
+			_link.append(screen.link)
+	return screen.content
 
 
 ## Screen k's own rendered picture (the SubViewport it is drawn in): the
@@ -684,8 +533,7 @@ func screen_viewport(k: int) -> Viewport:
 
 
 func _add_observer_page(parent: Node) -> void:
-	var page := ObserverView.new()
-	page.wall = self
+	var page := ObserverView.create(self)
 	_observer_screen = _new_screen(parent, false)
 	_observer_screen.add_child(page)
 
@@ -708,9 +556,7 @@ func _test_patterns(on: bool) -> void:
 		if old:
 			screen.remove_child(old)
 			old.queue_free()
-		var crt := screen.get_parent().get_child(1) as CanvasItem   # (see _new_screen)
-		if crt:
-			crt.visible = not on
+		(screen.owner as WallScreen).crt.visible = not on
 		if not on:
 			continue
 		var tp := TestPattern.new()

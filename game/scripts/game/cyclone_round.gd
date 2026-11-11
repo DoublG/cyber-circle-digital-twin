@@ -39,6 +39,8 @@ class PlayerState extends RoundState:
 
 
 func _init() -> void:
+	replica_keys = ["state"]   # (what its views read: RoundMirror)
+	state_fields = {"state": PlayerState}   # (sent as plain data: RoundState)
 	title = "Cyclone"
 	progress_label = "LEVEL"
 	mode = "personal"
@@ -97,7 +99,7 @@ func _start() -> void:
 		_last_n[id] = 0
 		_upload(id)
 	for id in players:
-		if not tile(id).is_dead:
+		if not _tile(id).is_dead:
 			game.arena.send_to_tile(id, {"start": program.id})
 
 
@@ -142,16 +144,7 @@ func progress(id: int) -> int:
 	return state[id].best
 
 
-func replica_keys() -> Array:              # (what its overlay reads: Replica)
-	return ["state"]
-
-
-## (Its per-player state goes to the display nodes as plain data: RoundState.)
-func state_fields() -> Dictionary:
-	return {"state": PlayerState}
-
-
 func make_player_overlay(id: int) -> Control:
-	var line := StatusLine.new()
+	var line := StatusLine.create()
 	line.source = func(): return "NIVEAU %d" % ((state[id].level if state.has(id) else 0) + 1)
 	return line

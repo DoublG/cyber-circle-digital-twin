@@ -20,217 +20,47 @@ extends Control
 ## picture ("image") left of the question.
 ## Players for whom the question is too hard (age) get a blue shield badge.
 
+const SCENE := "res://scenes/ui/quiz_view.tscn"
 const Q_SIZE := 62               # question (shrinks to fit)
 const BODY_SIZE := 38            # longer text under it
 const ANSWER_SIZE := 44
 
-var _header: Label
-var _question: Label
-var _body: Label                 # longer question text
-var _q_panel: PanelContainer
-var _media: TextureRect
-var _text_area: Control
-var _grid: GridContainer
 var _fit_keys := {}              # Control -> last fitted text + size
-var _countdown: CountdownRing
-var _cards: Array[PanelContainer] = []
-var _keys: Array[PanelContainer] = []
-var _icons: Array[Retro.ButtonIcon] = []
 var _answer_labels: Array[Label] = []
-var _tags: Array[Label] = []
-var _bar: ProgressBar
-var _status: Label
-var _meta: Label                 # category + age range
-var _legend: HBoxContainer       # "shield = protected" explanation
-var _content: VBoxContainer      # everything below the background (faded between steps)
-var _slide: VBoxContainer        # players slide: timeup / answers / reveal
-var _slide_title: Label
-var _slide_status: Label
-var _player_grid: GridContainer
-var _grid_room: Control          # the cards scale down to fit it (any number of players)
-var _player_cards := {}          # tile_id -> {panel, name, icon, mark, shield}
+var _player_cards := {}          # tile_id -> QuizPlayerCard
 var _shown_ok := {}              # tile_id -> true: the card shows right / wrong (reveal animation)
-var _answered: HFlowContainer    # question step: who answered already (not what)
 var _answered_chips := {}        # tile_id -> Label
 var _last_phase := ""
 
-
-func _init() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(Retro.background())
-	_content = VBoxContainer.new()
-	_content.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_content.offset_left = 44
-	_content.offset_right = -44
-	_content.offset_top = 36
-	_content.offset_bottom = -36
-	_content.add_theme_constant_override("separation", 16)
-	add_child(_content)
-	_content.add_child(_build_header())
-	_content.add_child(_build_players_slide())
-	_content.add_child(_build_question_panel())
-	_content.add_child(_build_answers())
-	_content.add_child(_build_time_bar())
-	_build_bottom()
-
-
-## Header: QUIZ plate + VRAAG, countdown on the right.
-func _build_header() -> Control:
-	var top := HBoxContainer.new()
-	top.add_theme_constant_override("separation", 24)
-	var badge := Retro.panel_container(Retro.ORANGE, Retro.AMBER, 0, 14, 22)
-	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	badge.add_child(Retro.label(52, Retro.BG, "QUIZ"))
-	top.add_child(badge)
-	_header = Retro.label(52, Retro.AMBER, "", HORIZONTAL_ALIGNMENT_LEFT)
-	_header.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	top.add_child(_header)
-	_meta = Retro.label(34, Retro.TEAL)
-	_meta.add_theme_stylebox_override("normal", Retro.panel(Retro.PANEL, Retro.TEAL, 3, 10, 18))
-	_meta.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	top.add_child(_meta)
-	top.add_child(Retro.stripes(false))
-	_countdown = CountdownRing.new()
-	_countdown.custom_minimum_size = Vector2(140, 140)
-	top.add_child(_countdown)
-	return top
+@onready var _content: VBoxContainer = %Content      # everything below the background (faded between steps)
+@onready var _meta: Label = %Meta                    # category + age range
+@onready var _countdown: CountdownRing = %Countdown
+@onready var _slide: VBoxContainer = %Slide          # players slide: timeup / answers / reveal
+@onready var _slide_title: Label = %SlideTitle
+@onready var _grid_room: Control = %GridRoom         # the cards scale down to fit it (any number of players)
+@onready var _player_grid: GridContainer = %PlayerGrid
+@onready var _slide_status: Label = %SlideStatus
+@onready var _legend: HBoxContainer = %Legend        # "shield = protected" explanation
+@onready var _q_panel: PanelContainer = %QuestionPanel
+@onready var _media: TextureRect = %Media
+@onready var _text_area: Control = %TextArea
+@onready var _question: Label = %Question
+@onready var _body: Label = %Body                    # longer question text
+@onready var _grid: GridContainer = %Answers         # the 4 QuizAnswerCards
+@onready var _bar: ProgressBar = %TimeBar
+@onready var _status: Label = %Status
+@onready var _answered: HFlowContainer = %Answered   # question step: who answered already (not what)
 
 
-## Players slide (time up / answers / who was right).
-func _build_players_slide() -> Control:
-	_slide = VBoxContainer.new()
-	_slide.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_slide.alignment = BoxContainer.ALIGNMENT_CENTER
-	_slide.add_theme_constant_override("separation", 36)
-	_slide.visible = false
-	_slide_title = Retro.label(110, Retro.AMBER)
-	_slide.add_child(_slide_title)
-	_player_grid = GridContainer.new()
-	_player_grid.add_theme_constant_override("h_separation", 24)
-	_player_grid.add_theme_constant_override("v_separation", 24)
-	_grid_room = Control.new()
-	_grid_room.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_grid_room.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_grid_room.add_child(_player_grid)
+static func create() -> QuizView:
+	return load(SCENE).instantiate()
+
+
+func _ready() -> void:
+	for card: QuizAnswerCard in _grid.get_children():
+		_answer_labels.append(card.answer)
 	_grid_room.resized.connect(_fit_grid)
 	_player_grid.minimum_size_changed.connect(_fit_grid)
-	_slide.add_child(_grid_room)
-	_slide_status = Retro.label(52, Retro.GOOD)
-	_slide.add_child(_slide_status)
-	_slide.add_child(_build_legend())
-	return _slide
-
-
-## The players slide's explanation of the shield.
-func _build_legend() -> Control:
-	_legend = HBoxContainer.new()
-	_legend.alignment = BoxContainer.ALIGNMENT_CENTER
-	_legend.add_theme_constant_override("separation", 14)
-	var shield := Retro.ShieldIcon.new()
-	shield.custom_minimum_size = Vector2(40, 48)
-	_legend.add_child(shield)
-	_legend.add_child(Retro.label(36, Retro.SHIELD,
-		"BESCHERMD: VRAAG BOVEN JE LEEFTIJD  ▸  FOUT KOST GEEN LEVEN"))
-	return _legend
-
-
-## Question on a console plate: [video] question + text.
-func _build_question_panel() -> Control:
-	_q_panel = Retro.panel_container(Retro.PANEL, Retro.TEAL, 4, 28, 30)
-	_q_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var q_row := HBoxContainer.new()
-	q_row.add_theme_constant_override("separation", 30)
-	_q_panel.add_child(q_row)
-	_media = TextureRect.new()
-	_media.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	_media.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	_media.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_media.visible = false
-	q_row.add_child(_media)
-	var q_texts := VBoxContainer.new()
-	q_texts.alignment = BoxContainer.ALIGNMENT_CENTER
-	q_texts.add_theme_constant_override("separation", 16)
-	_text_area = _holder(q_texts)
-	q_row.add_child(_text_area)
-	_question = Retro.label(Q_SIZE, Retro.CREAM)
-	_question.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	q_texts.add_child(_question)
-	_body = Retro.label(BODY_SIZE, Retro.CREAM.darkened(0.15))
-	_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	q_texts.add_child(_body)
-	return _q_panel
-
-
-## Answers in the same layout as the icons on the tile.
-func _build_answers() -> Control:
-	_grid = GridContainer.new()
-	_grid.columns = 2
-	_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_grid.size_flags_stretch_ratio = 0.62             # compact: the question gets the room
-	_grid.add_theme_constant_override("h_separation", 16)
-	_grid.add_theme_constant_override("v_separation", 14)
-	for b in QuizRound.ANSWER_BUTTONS:
-		_grid.add_child(_build_answer_card(b))
-	return _grid
-
-
-## One answer: the icon's key (as on the tile) and the answer's text.
-func _build_answer_card(b: StringName) -> Control:
-	var col: Color = CyberTile.BUTTON_COLORS[b]
-	var card := PanelContainer.new()
-	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 18)
-	card.add_child(row)
-	# solid coloured key with the icon, like the lit icon on the glass
-	var key := Retro.panel_container(col, col.lightened(0.4), 3, 14, 6)
-	key.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var icon := Retro.ButtonIcon.new()
-	icon.button = b
-	icon.glow = false
-	icon.color = Retro.BG
-	icon.custom_minimum_size = Vector2(84, 84)
-	key.add_child(icon)
-	row.add_child(key)
-	var texts := VBoxContainer.new()
-	texts.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_child(_holder(texts))
-	var tag := Retro.label(22, col, Retro.BUTTON_NAMES[b], HORIZONTAL_ALIGNMENT_LEFT)
-	texts.add_child(tag)
-	var text := Retro.label(ANSWER_SIZE, Retro.CREAM, "", HORIZONTAL_ALIGNMENT_LEFT)
-	text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	texts.add_child(text)
-	_cards.append(card)
-	_keys.append(key)
-	_icons.append(icon)
-	_answer_labels.append(text)
-	_tags.append(tag)
-	return card
-
-
-## The answer time running out.
-func _build_time_bar() -> Control:
-	_bar = ProgressBar.new()
-	_bar.max_value = 1.0
-	_bar.show_percentage = false
-	_bar.custom_minimum_size.y = 20
-	_bar.add_theme_stylebox_override("background", Retro.panel(Retro.PANEL, Retro.DIM, 2, 6, 0))
-	return _bar
-
-
-## The bottom: status text and who answered already.
-func _build_bottom() -> void:
-	_status = Retro.label(36, Retro.CREAM)
-	_status.autowrap_mode = TextServer.AUTOWRAP_OFF
-	_status.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	_status.clip_text = true
-	_content.add_child(_status)
-	_answered = HFlowContainer.new()
-	_answered.alignment = FlowContainer.ALIGNMENT_CENTER
-	_answered.add_theme_constant_override("h_separation", 10)
-	_answered.add_theme_constant_override("v_separation", 8)
-	_content.add_child(_answered)
 
 
 ## state keys: phase (video / read / question / timeup /
@@ -253,7 +83,6 @@ func show_question(state: Dictionary) -> void:
 	var watching := phase == "video"
 	var slide := phase in ["timeup", "answers", "reveal"]
 	var players: Array = state.players
-	_header.text = "VRAAG"
 	var meta: Array = [state.category.to_upper(), state.ages].filter(func(t): return t != "")
 	_meta.text = "  ▸  ".join(meta)
 	_meta.visible = not meta.is_empty()
@@ -276,7 +105,6 @@ func show_question(state: Dictionary) -> void:
 	_media.visible = _media.texture != null
 	_media.size_flags_stretch_ratio = 3.0 if watching else 0.9
 	_body.text = state.text
-	_body.add_theme_color_override("font_color", Retro.CREAM.darkened(0.15))
 	_body.visible = not watching and _body.text != ""
 	var big := _media.visible or _body.visible
 	_q_panel.size_flags_stretch_ratio = 1.15 if big else 1.0
@@ -294,12 +122,7 @@ func show_question(state: Dictionary) -> void:
 		_status.add_theme_color_override("font_color", Retro.TEAL)
 		return
 	for i in 4:
-		var b: StringName = QuizRound.ANSWER_BUTTONS[i]
-		var col: Color = CyberTile.BUTTON_COLORS[b]
-		_cards[i].add_theme_stylebox_override("panel", Retro.panel(col.darkened(0.82), col, 4, 18, 10))
 		_answer_labels[i].text = state.answers[i] if phase == "question" else ""
-		_tags[i].text = Retro.BUTTON_NAMES[b]
-		_tags[i].add_theme_color_override("font_color", col)
 	if phase == "read":                            # the buttons, no answers yet
 		_bar.value = 1.0
 		_update_answered(players)
@@ -360,66 +183,17 @@ func _show_players_slide(phase: String, players: Array) -> void:
 		_slide_title.add_theme_font_size_override("font_size", 80 if many else 96)
 	for id in _player_cards.keys():
 		if not shown.any(func(p): return p.id == id):
-			_player_cards[id].panel.queue_free()
+			_player_cards[id].queue_free()
 			_player_cards.erase(id)
 	for p in shown:
 		if not _player_cards.has(p.id):
-			_player_cards[p.id] = _new_player_card()
-		var c: Dictionary = _player_cards[p.id]
-		c.name.text = "%02d %s" % [p.id, p.name.to_upper()]
-		var answered: bool = p.answer >= 0
-		var col: Color = CyberTile.BUTTON_COLORS[QuizRound.ANSWER_BUTTONS[p.answer]] if answered else Retro.DIM
-		c.icon.visible = answered
-		if answered:
-			c.icon.button = QuizRound.ANSWER_BUTTONS[p.answer]
-			c.icon.color = col
-			c.icon.queue_redraw()
-		var fill := col.darkened(0.7)
-		var border := col
-		var width := 5
-		var glow := 0.0
-		var dim := false
-		c.shield.visible = false
-		if phase == "reveal" and _shown_ok.has(p.id):     # (right / wrong: the card itself, no ✔ / ✘)
-			if p.ok == true:                             # right: thick bright border, glowing
-				fill = Retro.GOOD.darkened(0.45)
-				border = Retro.GOOD
-				width = 12
-				glow = 0.7
-			elif p.protected:                            # wrong but shielded: blue, keeps its life
-				fill = Retro.SHIELD.darkened(0.6)
-				border = Retro.SHIELD
-				width = 9
-				glow = 0.4
-				c.shield.visible = true
-			else:                                        # wrong: thin red border, the card dimmed
-				fill = Retro.BAD.darkened(0.75)
-				border = Retro.BAD
-				width = 4
-				dim = true
-		c.panel.add_theme_stylebox_override("panel", _card_style(fill, border, width, glow))
-		c.panel.modulate = Color(1, 1, 1, 0.5) if dim else Color.WHITE
-		c.mark.text = "" if answered else "GEEN"
-		c.mark.visible = not answered
-		c.mark.add_theme_color_override("font_color", Retro.DIM)
+			_player_cards[p.id] = QuizPlayerCard.create()
+			_player_grid.add_child(_player_cards[p.id])
+		var card: QuizPlayerCard = _player_cards[p.id]
+		card.show_player(p, phase == "reveal" and _shown_ok.has(p.id))
 	_slide_status.modulate.a = 1.0 if phase == "reveal" and _shown_ok.size() >= shown.size() else 0.0
 	var right := shown.filter(func(p): return p.ok == true).size()
 	_slide_status.text = "%d VAN %d SPELERS HADDEN HET GOED" % [right, shown.size()]
-
-
-## A player card's frame: a border wider than the usual 5 grows outwards (the
-## card's content and size stay put), glow > 0: a halo in the border's colour.
-static func _card_style(fill: Color, border: Color, width: int, glow: float) -> StyleBoxFlat:
-	var st := Retro.panel(fill, border, width, 20, 22)
-	var out := maxf(width - 5, 0.0)
-	st.expand_margin_left = out
-	st.expand_margin_right = out
-	st.expand_margin_top = out
-	st.expand_margin_bottom = out
-	if glow > 0.0:
-		st.shadow_color = Color(border, glow)
-		st.shadow_size = 26
-	return st
 
 
 ## The reveal, one card after the other: the card pops into its result (right:
@@ -430,10 +204,9 @@ func _reveal_cards(players: Array) -> void:
 	var step := minf(0.3, 2.4 / maxf(shown.size(), 1.0))  # (13 players: all within 2.4 s)
 	var k := 0
 	for p in shown:
-		var c: Dictionary = _player_cards.get(p.id, {})
-		if c.is_empty():
+		var panel: QuizPlayerCard = _player_cards.get(p.id)
+		if panel == null:
 			continue
-		var panel: PanelContainer = c.panel
 		var id: int = p.id
 		var right: bool = p.ok == true
 		var tw := panel.create_tween()
@@ -468,47 +241,6 @@ func _fit_grid() -> void:
 	_player_grid.scale = Vector2(k, k)
 	_player_grid.size = need
 	_player_grid.position = ((_grid_room.size - need * k) / 2.0).floor()
-
-
-func _new_player_card() -> Dictionary:
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(360, 0)
-	var box := VBoxContainer.new()
-	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_theme_constant_override("separation", 8)
-	panel.add_child(box)
-	var name_label := Retro.label(36, Retro.CREAM)
-	name_label.clip_text = true                    # (the card keeps its width: long names end in …)
-	name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	box.add_child(name_label)
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 18)
-	box.add_child(row)
-	var icon := Retro.ButtonIcon.new()
-	icon.custom_minimum_size = Vector2(110, 110)
-	row.add_child(icon)
-	var shield := Retro.ShieldIcon.new()
-	shield.custom_minimum_size = Vector2(60, 72)
-	shield.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(shield)
-	var mark := Retro.label(80, Retro.CREAM)
-	row.add_child(mark)
-	_player_grid.add_child(panel)
-	return {"panel": panel, "name": name_label, "icon": icon, "mark": mark, "shield": shield}
-
-
-## A plain Control around a container: the text inside can't push the layout
-## (wrapped labels report their full height as minimum size); _fit shrinks it.
-func _holder(content: Control) -> Control:
-	var holder := Control.new()
-	holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	holder.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	holder.clip_contents = true
-	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content.set_anchors_preset(Control.PRESET_FULL_RECT)
-	holder.add_child(content)
-	return holder
 
 
 ## Scale the font sizes of labels (stacked vertically in area) down together
@@ -555,32 +287,3 @@ func _fit_scale(room: Vector2, labels: Array, sizes: Array) -> float:
 			break
 		k -= 0.05
 	return k
-
-
-## Round countdown: segmented ring (like an old dial) with the seconds left.
-class CountdownRing:
-	extends Control
-
-	const SEGMENTS := 24
-	var seconds := -1
-	var symbol := "✔"                # shown instead of the seconds when seconds < 0
-	var fraction := 1.0
-	var color := Color.WHITE
-
-	func _process(_delta: float) -> void:
-		queue_redraw()
-
-	func _draw() -> void:
-		var c := size / 2
-		var r := minf(size.x, size.y) * 0.42
-		draw_circle(c, r + 12, Retro.PANEL)
-		draw_arc(c, r + 12, 0, TAU, 32, Retro.DIM, 3, true)
-		var lit := ceili(fraction * SEGMENTS)
-		for k in SEGMENTS:
-			var a0 := -PI / 2 + TAU * k / SEGMENTS
-			var a1 := a0 + TAU / SEGMENTS * 0.7
-			draw_arc(c, r - 4, a0, a1, 4, color if k < lit else Color(1, 1, 1, 0.08), 14, true)
-		var text := str(seconds) if seconds >= 0 else symbol
-		var fs := int(r * 0.95)
-		var w := Retro.FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		draw_string(Retro.FONT, c + Vector2(-w / 2, fs * 0.36), text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Retro.CREAM)

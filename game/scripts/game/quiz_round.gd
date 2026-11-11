@@ -177,7 +177,7 @@ func _next_question() -> void:
 	_answers.clear()
 	var q: Dictionary = _questions[_index]
 	for id in players:
-		tile(id).shielded = is_protected(id) and not tile(id).is_dead
+		_tile(id).shielded = is_protected(id) and not _tile(id).is_dead
 	var own_time := float(q.get("time", 0))                   # the question's own time (0: the setting)
 	_question_time = own_time / game.tempo if own_time > 0.0 else question_time
 	_stop_video()
@@ -190,7 +190,7 @@ func _next_question() -> void:
 			_phase = "video"
 			for id in players:
 				for b in CyberTile.BUTTONS:
-					game.arena.rt(tile(id)).set_button_led(b, Color.BLACK)
+					game.arena.rt(_tile(id)).set_button_led(b, Color.BLACK)
 			return
 	_read()
 
@@ -218,7 +218,7 @@ func _read() -> void:
 	game.arena.narrator.say(Narrator.question_name(q), str(q.question), "question", {}, true)
 	for id in players:
 		for b in CyberTile.BUTTONS:
-			game.arena.rt(tile(id)).set_button_led(b, Color.BLACK)
+			game.arena.rt(_tile(id)).set_button_led(b, Color.BLACK)
 
 
 func _start_answering() -> void:
@@ -230,7 +230,7 @@ func _start_answering() -> void:
 		game.arena.narrator.say("%s_answer_%d" % [qn, n + 1], Narrator.answer_line(q, n), "answer", {"answer": n + 1})
 	for id in players:
 		for b in CyberTile.BUTTONS:
-			game.arena.rt(tile(id)).set_button_led(b, CyberTile.BUTTON_COLORS[b])
+			game.arena.rt(_tile(id)).set_button_led(b, CyberTile.BUTTON_COLORS[b])
 
 
 func _play_video(file: String, loop: bool) -> void:
@@ -299,7 +299,7 @@ func _update(delta: float) -> void:
 	var status := []
 	for id in players:
 		var answer: int = _answers[id].answer if _answers.has(id) else -1
-		status.append({"id": id, "name": game.arena.players.player_name(id), "dead": tile(id).is_dead,
+		status.append({"id": id, "name": game.arena.players.player_name(id), "dead": _tile(id).is_dead,
 			"answer": answer, "protected": is_protected(id), "streak": game.streaks.get(id, 0),
 			"ok": answer == int(q.correct) if _phase == "reveal" else null})
 	var ages := ""
@@ -366,7 +366,7 @@ func button(id: int, b: StringName) -> void:
 	if was != _answers[id].answer:                         # (for the player's accessible page)
 		game.arena.narrator.say_to(id, "answer", "Je koos %s." % Narrator.ICON_NAMES[_answers[id].answer])
 	for other in CyberTile.BUTTONS:  # only the chosen icon stays lit
-		game.arena.rt(tile(id)).set_button_led(other, CyberTile.BUTTON_COLORS[other] if other == b else Color.BLACK)
+		game.arena.rt(_tile(id)).set_button_led(other, CyberTile.BUTTON_COLORS[other] if other == b else Color.BLACK)
 
 
 func _reveal() -> void:
@@ -377,7 +377,7 @@ func _reveal() -> void:
 	var wrong: Array[int] = []
 	var shielded: Array[int] = []
 	for id in players:
-		if tile(id).is_dead:
+		if _tile(id).is_dead:
 			continue
 		if _answers.has(id) and _answers[id].answer == correct:
 			right.append(id)
@@ -430,7 +430,7 @@ func _count_streak(id: int, right: bool) -> void:
 func life_changes() -> Dictionary:
 	var out := {}
 	for id in players:
-		if tile(id).is_dead or not game.arena.players.is_playing(id):
+		if _tile(id).is_dead or not game.arena.players.is_playing(id):
 			continue
 		var d := (-1 if _wrong.get(id, 0) > 0 else 0) + (1 if _streak_bonus.has(id) else 0)
 		if d != 0:
@@ -442,8 +442,8 @@ func life_changes() -> Dictionary:
 func finish() -> void:
 	_stop_video()
 	for id in players:
-		tile(id).shielded = false
+		_tile(id).shielded = false
 
 
 func make_shared_view() -> Control:
-	return QuizView.new()
+	return QuizView.create()

@@ -1,10 +1,5 @@
 # gdlint (gdtoolkit) settings - run: tests/lint.sh. Everything not named here: gdlint's default.
 max-line-length: 120
-# The big node scripts (arena, game manager, tile, robot, round base class) are
-# each the one door to their part of the game: more public functions than the default 20.
-max-public-methods: 40
-# Message handlers answer "not for me" early, one return per kind of message.
-max-returns: 12
 excluded_directories: !!set
   .git: null
   .godot: null

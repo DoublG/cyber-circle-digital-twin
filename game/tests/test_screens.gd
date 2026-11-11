@@ -114,7 +114,7 @@ func _run() -> void:
 	arena.tiles[2].shielded = true
 	await _wait(0.8)
 	arena.robot_attack([4], Color(1.0, 0.1, 0.05), [2, 3])
-	await _until(func(): return arena.tiles[1].get_ring_colors()[0].b > 0.9, 10.0)
+	await _until(func(): return arena.tiles[1].ring.colors[0].b > 0.9, 10.0)
 	await _wait(0.05)
 	await _shot("13_room_shield_block")
 	get_tree().quit()

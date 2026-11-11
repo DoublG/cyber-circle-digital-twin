@@ -48,7 +48,7 @@ func _ready() -> void:
 	cam.global_position = Vector3(0, 2.4, 5.8)
 	cam.look_at(Vector3(0, 2.0, -3.0))
 	cam.fov = 70.0
-	arena.game.set_mode(GameManager.Mode.OPEN)
+	arena.game.modes.change(GameManager.Mode.OPEN)
 	await get_tree().create_timer(2.0).timeout
 	_shot("82_lights_lobby")
 	arena.cue(&"charge", 0, {"tiles": [1]})

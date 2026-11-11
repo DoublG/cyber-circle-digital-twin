@@ -139,7 +139,7 @@ func _tile_player(cmd: Dictionary, id: int) -> void:
 	if cmd.has("leave"):
 		arena.players.leave(id)
 	if cmd.has("enabled"):
-		arena.players.set_tile_enabled(id, bool(cmd.enabled))
+		arena.installation.set_enabled(id, bool(cmd.enabled))
 	if cmd.has("points") and arena.players.is_playing(id):   # operator: round points + / -
 		var n := int(cmd.points)
 		var game := arena.game
@@ -192,17 +192,17 @@ func _game(cmd: Dictionary) -> void:
 		"next":
 			game.skip()
 		"boot", "shutdown":                      # the robot's show, without changing the mode (a test)
-			game.play_power_show(str(cmd.game))
+			game.modes.play_show(str(cmd.game))
 		"stop":
 			game.stop_game()
 		"plan":                     # {"game": "plan", "slot": 0, "round": "simon"} ("" = random)
-			game.set_planned_round(int(cmd.get("slot", 0)), str(cmd.get("round", "")), cmd.get("options", {}))
+			game.picker.set_planned(int(cmd.get("slot", 0)), str(cmd.get("round", "")), cmd.get("options", {}))
 		"plan_random":
-			game.clear_planned_rounds()
+			game.picker.clear_planned()
 		"mode":                     # {"game": "mode", "mode": "setup" | "closed" | "open" | "paused"}
 			var m := GameManager.Mode.keys().find(str(cmd.get("mode", "")).to_upper())
 			if m >= 0:
-				game.set_mode(m)
+				game.modes.change(m)
 
 
 func _room(cmd: Dictionary) -> void:

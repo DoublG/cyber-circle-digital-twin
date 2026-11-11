@@ -1,0 +1,12 @@
+[gd_scene format=3]
+
+[ext_resource type="Shader" path="res://shaders/crt_overlay.gdshader" id="1_cupqt"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_3h8na"]
+shader = ExtResource("1_cupqt")
+
+[node name="CrtOverlay" type="ColorRect" unique_id=468216943]
+material = SubResource("ShaderMaterial_3h8na")
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2

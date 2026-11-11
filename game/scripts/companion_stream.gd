@@ -121,46 +121,57 @@ func _exit_tree() -> void:
 func _process(delta: float) -> void:
 	if not _running:
 		return
-	_alive += delta
-	if _alive > TIMEOUT:
-		stop("no keep-alive")
-		queue_free()
-		return
-	_gone = 0.0 if (arena.players.is_playing(tile_id) or arena.players.is_pending(tile_id)) else _gone + delta
-	if _gone > LEFT_TIMEOUT:
-		stop("the player left")
+	var why := _stop_reason(delta)
+	if why != "":
+		stop(why)
 		queue_free()
 		return
 	_check += delta
-	if _check > 1.0:                    # the encoder died (e.g. NVENC without an NVIDIA GPU): fall back once
+	if _check > 1.0:
 		_check = 0.0
 		if _pid > 0 and not OS.is_process_running(_pid):
-			if _used_encoder != "libx264" and encoder == "auto":
-				print("stream: %s failed, trying libx264" % _used_encoder)
-				encoder = "libx264"
-				_running = false
-				_pid = -1
-				if _pipe:
-					_pipe.close()
-					_pipe = null
-				start()
-			else:
-				stop("the encoder stopped")
-				queue_free()
+			_encoder_died()
 			return
 	_acc += delta
-	if _acc < 1.0 / fps:
-		return
-	_acc = 0.0
+	if _acc >= 1.0 / fps:
+		_acc = 0.0
+		_capture()
+
+
+## Why the stream ends now ("": it goes on): no keep-alive, or the player left.
+func _stop_reason(delta: float) -> String:
+	_alive += delta
+	if _alive > TIMEOUT:
+		return "no keep-alive"
+	_gone = 0.0 if (arena.players.is_playing(tile_id) or arena.players.is_pending(tile_id)) else _gone + delta
+	return "the player left" if _gone > LEFT_TIMEOUT else ""
+
+
+## The encoder died (e.g. NVENC without an NVIDIA GPU): fall back once.
+func _encoder_died() -> void:
+	if _used_encoder != "libx264" and encoder == "auto":
+		print("stream: %s failed, trying libx264" % _used_encoder)
+		encoder = "libx264"
+		_running = false
+		_pid = -1
+		if _pipe:
+			_pipe.close()
+			_pipe = null
+		start()
+	else:
+		stop("the encoder stopped")
+		queue_free()
+
+
+## One frame of the player's screen to the encoder.
+func _capture() -> void:
 	_mutex.lock()
 	var busy := _busy
 	_mutex.unlock()
 	if busy:
 		return                          # (the encoder is behind: drop this frame)
 	var vp: Viewport = arena.screen_wall.screen_viewport(_screen)
-	if vp == null:
-		return
-	var img := vp.get_texture().get_image()
+	var img := vp.get_texture().get_image() if vp else null
 	if img == null or img.is_empty():
 		return
 	if img.get_format() != Image.FORMAT_RGBA8:

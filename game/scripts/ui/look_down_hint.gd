@@ -4,20 +4,14 @@ extends Control
 ## camera tilts from the robot down to the player's own tile. Fades out by
 ## itself after `lifetime` seconds.
 
+const SCENE := "res://scenes/ui/look_down_hint.tscn"
+
 var lifetime := 4.0
 var _t := 0.0
-var _label: Label
 
 
-func _init() -> void:
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	set_anchors_preset(Control.PRESET_FULL_RECT)
-	_label = Retro.label(44, Retro.AMBER, "KIJK NAAR JE TEGEL")
-	_label.add_theme_stylebox_override("normal", Retro.panel(Color(Retro.PANEL, 0.9), Retro.ORANGE, 4, 18, 30))
-	_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
-	_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_label.offset_top = 190                 # below the player plate
-	add_child(_label)
+static func create() -> LookDownHint:
+	return load(SCENE).instantiate()
 
 
 func _process(delta: float) -> void:

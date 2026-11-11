@@ -9,7 +9,7 @@ extends Node
 ## logic: it follows the master's state and plays its visual events, so it
 ## renders on its own and keeps animating when the network hiccups.
 ##   fields   the state the screens read (players, invites, lives, the game's
-##            state, the round and what its views show: Arena.replica_fields,
+##            state, the round and what its views show: ArenaMirror.fields,
 ##            GameManager.replica_fields), sent as deltas on change (reliable);
 ##            a full snapshot when a display (re)connects
 ##   events   what happens (relay(): a popup, the robot fires, a tile explodes,
@@ -32,6 +32,9 @@ const BEACON_PORT := 7351
 const VERSION := 1
 const LIVE_HZ := 15.0
 const FIELDS_HZ := 10.0
+const CLOCK_WINDOW := 6                   # live messages (0.4 s): the least late one tells the master's clock
+const CLOCK_JUMP := 0.15                  # s: a display's game clock this far off jumps to the master's ...
+const CLOCK_NUDGE := 0.01                 # ... and closer, it eases there: at most this per CLOCK_WINDOW
 const RECONNECT := [1.0, 2.0, 3.0, 5.0]   # s between attempts (then 5 s)
 
 static var server := false               # this is the master, serving displays
@@ -61,6 +64,7 @@ var _t_retry := 0.0
 var _attempt := 0
 var _beacon: PacketPeerUDP
 var _since_snapshot := false             # display: a snapshot arrived on this connection
+var _drifts: Array[float] = []           # display: the master's clock - ours, per live message (CLOCK_WINDOW)
 var _rx_msec := 0                        # display: when the master's last message came in
 var _live_n := 0
 
@@ -148,7 +152,7 @@ func _on_lost() -> void:
 # ---------------------------------------------------------------- master: sending
 
 ## An event for every display: target.method(args) runs there (relay targets:
-## Arena.replica_target). The fields it depends on go out first. Callables and
+## ArenaMirror.target). The fields it depends on go out first. Callables and
 ## objects can't travel: they are left out (null).
 static func relay(target: String, method: StringName, args := []) -> void:
 	if not server or _self == null or _self.peers.is_empty():
@@ -214,7 +218,7 @@ static func _clean(v):
 func _flush_fields() -> void:
 	if peers.is_empty():
 		return
-	var now: Dictionary = arena.replica_fields()
+	var now: Dictionary = arena.mirror.fields()
 	var delta := {}
 	for k in now:
 		if not _sent.has(k) or not _same(_sent[k], now[k]):
@@ -239,7 +243,7 @@ func _send_live() -> void:
 			calls.append(c)
 			_live_last[key] = c
 	_live.clear()
-	var data := {"clock": arena.clock, "fast": arena.replica_fast(), "calls": calls}
+	var data := {"clock": arena.clock, "fast": arena.mirror.fast(), "calls": calls}
 	if var_to_bytes(data).size() > 1200:      # (more than one UDP packet: unreliable fragments get lost)
 		_live_big.rpc(data)
 	else:
@@ -299,7 +303,7 @@ func _hello(info: Dictionary) -> void:
 		"since": Time.get_unix_time_from_system(), "host": host, "metrics": {}}
 	print("replica: display %s (%s) shows screen(s) %s" % [peers[id].node, host, peers[id].screens])
 	_flush_fields()                        # (the others are up to date: the deltas from here go to all)
-	_snapshot.rpc_id(id, {"fields": arena.replica_fields(), "clock": arena.clock, "fast": arena.replica_fast()})
+	_snapshot.rpc_id(id, {"fields": arena.mirror.fields(), "clock": arena.clock, "fast": arena.mirror.fast()})
 	stats.snapshots += 1
 	peers_changed.emit()
 
@@ -337,12 +341,26 @@ func peer_list() -> Array:
 	return out
 
 
+## display: the game clock in step with the master's. A message is never early,
+## only late (after a hitch here a few old ones come at once), so of the last
+## CLOCK_WINDOW the one that is furthest on tells the master's clock. A small
+## difference is eased away, without a visible jump.
+func _follow_clock(master: float) -> void:
+	_drifts.append(master - arena.clock)
+	if _drifts.size() < CLOCK_WINDOW:
+		return
+	var drift: float = _drifts.max()
+	_drifts.clear()
+	arena.clock += drift if absf(drift) > CLOCK_JUMP else clampf(drift, -CLOCK_NUDGE, CLOCK_NUDGE)
+
+
 ## master -> display: everything, on (re)connect.
 @rpc("authority", "call_remote", "reliable")
 func _snapshot(data: Dictionary) -> void:
 	arena.clock = float(data.get("clock", arena.clock))
-	arena.apply_replica(data.get("fields", {}), true)
-	arena.apply_replica_fast(data.get("fast", {}))
+	_drifts.clear()
+	arena.mirror.apply(data.get("fields", {}), true)
+	arena.mirror.apply_fast(data.get("fast", {}))
 	stats.snapshots += 1
 	_rx_msec = Time.get_ticks_msec()
 	_since_snapshot = true
@@ -355,7 +373,7 @@ func _snapshot(data: Dictionary) -> void:
 func _delta(fields: Dictionary) -> void:
 	if not _since_snapshot:
 		return
-	arena.apply_replica(fields, false)
+	arena.mirror.apply(fields, false)
 	stats.deltas += 1
 	_rx_msec = Time.get_ticks_msec()
 
@@ -366,11 +384,11 @@ func _event(target: String, method: StringName, args: Array) -> void:
 		return
 	stats.events += 1
 	_rx_msec = Time.get_ticks_msec()
-	if arena.replica_skip(target, method, args):
+	if arena.mirror.skip(target, method, args):
 		if debug:
 			print("replica: skipped %s.%s (its own tile: from MQTT)" % [target, method])
 		return                               # (its own tiles: it had that from MQTT already)
-	var obj: Object = arena.replica_target(target)
+	var obj: Object = arena.mirror.target(target)
 	if obj == null or not obj.has_method(method):
 		push_warning("replica: no %s.%s" % [target, method])
 		return
@@ -390,12 +408,10 @@ func _live_msg(data: Dictionary) -> void:
 		return
 	stats.live += 1
 	_rx_msec = Time.get_ticks_msec()
-	var c := float(data.get("clock", arena.clock))
-	if absf(c - arena.clock) > 0.15:          # (small drift: let it run, it is smoother)
-		arena.clock = c
-	arena.apply_replica_fast(data.get("fast", {}))
+	_follow_clock(float(data.get("clock", arena.clock)))
+	arena.mirror.apply_fast(data.get("fast", {}))
 	for call in data.get("calls", []):
-		var obj: Object = arena.replica_target(str(call[0]))
+		var obj: Object = arena.mirror.target(str(call[0]))
 		if obj and obj.has_method(call[1]):
 			obj.callv(call[1], call[2])
 

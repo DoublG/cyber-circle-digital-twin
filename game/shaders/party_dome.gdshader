@@ -11,6 +11,7 @@ uniform float spot_size : hint_range(0.05, 0.6) = 0.3;
 uniform float spot_fill : hint_range(0.0, 1.0) = 0.65;  // fraction of cells with a spot
 uniform float brightness = 3.0;
 uniform float color_cycle = 0.1;         // hue shift per second
+uniform float clock = 0.0;               // s: the game's clock (the same on every display node)
 
 varying vec3 local_pos;
 
@@ -34,7 +35,7 @@ void fragment() {
 	vec3 col = vec3(0.0);
 	float spot = 0.0;
 	if (enabled) {
-		float a = TIME * spin_speed;
+		float a = clock * spin_speed;
 		mat3 rot = mat3(vec3(cos(a), 0.0, -sin(a)), vec3(0.0, 1.0, 0.0), vec3(sin(a), 0.0, cos(a)));
 		vec3 p = rot * normalize(local_pos) * spot_density;
 		vec3 cell = floor(p);
@@ -54,7 +55,7 @@ void fragment() {
 		}
 		vec3 h = hash3(best_id + 17.0);
 		spot = (1.0 - smoothstep(spot_size * 0.6, spot_size, best)) * step(1.0 - spot_fill, h.y);
-		col = hsv2rgb(vec3(fract(h.x + TIME * color_cycle), 0.85, 1.0));
+		col = hsv2rgb(vec3(fract(h.x + clock * color_cycle), 0.85, 1.0));
 	}
 	ALBEDO = mix(shell_color.rgb, col, spot * 0.6);
 	EMISSION = col * spot * brightness;

@@ -1,0 +1,44 @@
+[gd_scene format=3]
+
+[node name="ObserverRow" type="HBoxContainer" unique_id=1061655735]
+theme_override_constants/separation = 14
+
+[node name="Tile" type="Label" parent="." unique_id=1684296903]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 34
+theme_override_colors/font_color = Color(0.2, 0.8, 0.75, 1)
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="PlayerName" type="Label" parent="." unique_id=1985906508]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 34
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Hearts" type="Label" parent="." unique_id=1981316522]
+custom_minimum_size = Vector2(110, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 30
+theme_override_colors/font_color = Color(1, 0.2, 0.3, 1)
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Score" type="Label" parent="." unique_id=1403137115]
+custom_minimum_size = Vector2(190, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 34
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Rank" type="Label" parent="." unique_id=1680004788]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 30
+theme_override_colors/font_color = Color(0.2, 0.8, 0.75, 1)
+clip_text = true
+text_overrun_behavior = 3

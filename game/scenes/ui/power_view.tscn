@@ -1,0 +1,72 @@
+[gd_scene format=3]
+
+[ext_resource type="Theme" path="res://scenes/ui/retro_theme.tres" id="1_8fsfw"]
+[ext_resource type="Script" path="res://scripts/ui/power_view.gd" id="2_2t821"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_yvn06"]
+bg_color = Color(0.1, 0.1, 0.1, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.3, 1, 0.45, 0.5)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_451wo"]
+bg_color = Color(0.3, 1, 0.45, 1)
+
+[node name="PowerView" type="Control" unique_id=1757055821]
+layout_mode = 3
+anchors_preset = 0
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+theme = ExtResource("1_8fsfw")
+script = ExtResource("2_2t821")
+
+[node name="Bg" type="ColorRect" parent="." unique_id=206223346]
+unique_name_in_owner = true
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0, 0, 0, 1)
+
+[node name="Box" type="VBoxContainer" parent="." unique_id=399395394]
+layout_mode = 1
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 120.0
+offset_top = 80.0
+offset_right = -120.0
+offset_bottom = -80.0
+theme_override_constants/separation = 36
+alignment = 1
+
+[node name="Lines" type="Label" parent="Box" unique_id=678962080]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 44
+theme_override_colors/font_color = Color(0.3, 1, 0.45, 1)
+
+[node name="Bar" type="ProgressBar" parent="Box" unique_id=1511827579]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 34)
+layout_mode = 2
+theme_override_styles/background = SubResource("StyleBoxFlat_yvn06")
+theme_override_styles/fill = SubResource("StyleBoxFlat_451wo")
+max_value = 1.0
+show_percentage = false
+
+[node name="Big" type="Label" parent="Box" unique_id=342629778]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 130
+theme_override_colors/font_color = Color(1, 0.74, 0.22, 1)
+horizontal_alignment = 1
+
+[node name="Sub" type="Label" parent="Box" unique_id=637534366]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_font_sizes/font_size = 60
+theme_override_colors/font_color = Color(1, 0.93, 0.8, 1)
+horizontal_alignment = 1
+autowrap_mode = 3

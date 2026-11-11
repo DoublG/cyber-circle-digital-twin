@@ -27,20 +27,20 @@ func _ready() -> void:
 	sv.size = Vector2i(1920, 1080)
 	sv.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	add_child(sv)
-	game.set_mode(GameManager.Mode.CLOSED)
+	game.modes.change(GameManager.Mode.CLOSED)
 	await get_tree().create_timer(1.0).timeout
 	for show in [["boot", [3.0, 7.0, 11.0, 14.6, 16.5]], ["shutdown", [1.0, 5.0, 11.0, 15.0, 20.0]]]:
 		var at := Retro.game_clock
-		game.set_mode(GameManager.Mode.OPEN if show[0] == "boot" else GameManager.Mode.CLOSED)
+		game.modes.change(GameManager.Mode.OPEN if show[0] == "boot" else GameManager.Mode.CLOSED)
 		for c in sv.get_children():
 			c.queue_free()
-		sv.add_child(PowerView.new(show[0], at))
+		sv.add_child(PowerView.create(show[0], at))
 		for t in show[1]:
 			await get_tree().create_timer(t - (Retro.game_clock - at)).timeout
 			var name := "89_power_%s_%04.1f" % [show[0], t]
 			vp.get_texture().get_image().save_png(ProjectSettings.globalize_path("res://tests/shots/%s_robot.png" % name))
 			sv.get_texture().get_image().save_png(ProjectSettings.globalize_path("res://tests/shots/%s_screen.png" % name))
-		while game.power_show != "":
+		while game.modes.power_show != "":
 			await get_tree().process_frame
 	print("DONE")
 	get_tree().quit()

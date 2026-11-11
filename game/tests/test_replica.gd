@@ -3,10 +3,12 @@ extends Node
 ## a display node showing screens 2, 4 and 6): players join, an invite, a quiz,
 ## an attack, an extermination, the scoreboard, a rhythm round. At each moment the master marks
 ## it: the display compares its replicated state with the master's (it prints
-## "mark <name> state EQUAL") and saves its screens; the master saves its own.
+## "mark <name> state EQUAL") and saves its screens; the master saves its own -
+## both as drawn at the same game clock, AHEAD s on.
 ## Run: godot --path . res://tests/test_replica.tscn -- --serve-replicas=7361
 
 const ARENA := preload("res://scenes/arena.tscn")
+const AHEAD := 0.25                       # s (the mark is at the display well before)
 
 var arena: Arena
 var out := ""
@@ -43,40 +45,32 @@ func _ready() -> void:
 		print("TEST FAIL no display connected")
 		get_tree().quit(1)
 		return
-	await _wait(3.0)                          # (the snapshot; the display builds its screens)
-	await _moment("lobby")
+	await _moment("lobby", 3.0)             # (the snapshot; the display builds its screens)
 	arena.game.picker.random_rounds = false
 	arena.game.picker.round_types = [preload("res://scripts/game/quiz_round.gd"),
 		preload("res://scripts/game/rhythm_round.gd")]
 	arena.game.start_game()
-	await _wait(2.0)
-	await _moment("intro")
-	await _wait(3.0)
-	await _moment("quiz")
+	await _moment("intro", 1.0)               # (halfway the intro: it takes 2 s)
+	await _moment("quiz", 4.0)
 	arena.robot_attack([2], Color(1, 0.1, 0.05))
-	await _wait(2.5)
-	await _moment("attack")
+	await _moment("attack", 2.5)
 	arena.apply_command({"tile": 10, "health": 0})   # exterminated
-	await _wait(6.0)
-	await _moment("death")
+	await _moment("death", 6.0)
 	arena.game.skip()                         # to the scoreboard
-	await _wait(3.0)
-	await _moment("scores")
+	await _moment("scores", 3.0)
 	arena.game.skip()                         # the next round: rhythm (a personal round: overlays, the round's clock)
 	while arena.game.state != GameManager.State.PLAYING:
 		await _wait(0.2)
-	await _wait(4.0)
-	await _moment("rhythm")
+	await _moment("rhythm", 4.0)
 	var tail := float(OS.get_environment("REPLICA_TAIL"))   # (a bad network: time to reconnect, then check again)
 	if tail > 0.0:
 		await _wait(tail)
 		while arena.replica.peers.is_empty() and tail < 60.0:
 			await _wait(0.5)
 			tail += 0.5
-		await _wait(2.0)
-		await _moment("after")
+		await _moment("after", 2.0)
 	print("TEST replica stats ", arena.replica.stats, " ", arena.replica.peer_list())
-	arena.replica_mark("quit")
+	arena.mirror.mark("quit", arena.clock)
 	await _wait(2.0)
 	print("TEST done")
 	get_tree().quit()
@@ -107,9 +101,12 @@ func _report(what: String) -> void:
 			int(m.get("primitives", 0)) / 1000, m.get("cpu"), m.get("rss_mb"), arena.replica.peer_link(id)])
 
 
-func _moment(name: String) -> void:
-	arena.replica_mark(name)
-	await RenderingServer.frame_post_draw
+## The moment `after` s from now: marked AHEAD before it, drawn at its game clock.
+func _moment(name: String, after: float) -> void:
+	await _wait(after - AHEAD)
+	var at := arena.clock + AHEAD
+	arena.mirror.mark(name, at)
+	await arena.mirror.drawn(at)
 	for k in [2, 4, 6]:
 		var img: Image = arena.screen_wall.screen_viewport(k - 1).get_texture().get_image()
 		img.save_png("%s/%s_master%d.png" % [out, name, k])

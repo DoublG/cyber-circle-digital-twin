@@ -60,10 +60,10 @@ func greet(tile_id: int, color: Color) -> void:
 	_ev(&"greet", [tile_id, color])
 	_hw({"look": _side(tile_id), "glow": {"side": _side(tile_id), "color": _hex(color), "ms": 600}})
 	var tile := _tile(tile_id)
-	tile.fill_ring(color)
-	get_tree().create_timer(0.6).timeout.connect(func():
-		if is_instance_valid(tile) and not tile.idle and not tile.is_dead:
-			tile.clear_ring())
+	tile.ring.fill(color)
+	tile.create_tween().tween_callback(func():       # (the tile's own tween: gone with the tile)
+		if not tile.idle and not tile.is_dead:
+			tile.ring.clear()).set_delay(0.6)
 	arena.cables.packet(tile_id, color, func(): robot.look_at_side(_side(tile_id)))
 
 
@@ -77,9 +77,9 @@ func feedback(tile_id: int, color: Color, hold := 0.25, to_robot := true) -> voi
 		arena.cables.packet(tile_id, color, Callable(), false)
 		return
 	arena.cables.packet(tile_id, color, func():
-		robot.set_side_glow(_side(tile_id), color, 2.0)
+		robot.lights.set_side_glow(_side(tile_id), color, 2.0)
 		await get_tree().create_timer(hold).timeout
-		robot.set_side_glow(_side(tile_id), Color.BLACK))
+		robot.lights.set_side_glow(_side(tile_id), Color.BLACK))
 
 
 # ---------------------------------------------------------------- attacks
@@ -175,13 +175,13 @@ func mood(name: String) -> void:
 	_hw({"mood": name})
 	match name:
 		"lobby":
-			robot.set_bulb_effect("rainbow")
+			robot.lights.set_effect("rainbow")
 			robot.release_head()
 		"intro":
-			robot.set_party_lamp(true)
-			robot.set_bulb_effect("rainbow")
+			robot.lights.set_party_lamp(true)
+			robot.lights.set_effect("rainbow")
 		"playing":
-			robot.set_bulb_effect("chase")
+			robot.lights.set_effect("chase")
 
 
 ## The game opens: the robot comes to life (robot.play_boot, ~18 s; the real
@@ -212,9 +212,9 @@ func celebrate(tile_id: int) -> void:
 	_ev(&"celebrate", [tile_id])
 	_hw({"celebrate": _side(tile_id), "mood": "scoreboard"})
 	var side := _side(tile_id)
-	robot.set_bulb_effect("none")
-	robot.set_all_bulbs(Color.BLACK)
-	robot.set_side_bulbs(side, Color(1.0, 0.75, 0.2))
+	robot.lights.set_effect("none")
+	robot.lights.set_all_bulbs(Color.BLACK)
+	robot.lights.set_side_bulbs(side, Color(1.0, 0.75, 0.2))
 	robot.look_at_side(side)
 
 
@@ -235,19 +235,19 @@ func command(cmd: Dictionary) -> void:
 		"look_at_tile":
 			robot.look_at_side(_side(int(cmd.tile)))
 		"bulb_effect":
-			robot.set_bulb_effect(str(cmd.effect), float(cmd.get("speed", 1.0)))
+			robot.lights.set_effect(str(cmd.effect), float(cmd.get("speed", 1.0)))
 		"bulbs":
-			robot.set_bulb_effect("none")
+			robot.lights.set_effect("none")
 			if cmd.has("side"):
-				robot.set_side_bulbs(int(cmd.side), Color(cmd.color))
+				robot.lights.set_side_bulbs(int(cmd.side), Color(cmd.color))
 			else:
-				robot.set_all_bulbs(Color(cmd.color))
+				robot.lights.set_all_bulbs(Color(cmd.color))
 		"dome":
-			robot.set_dome_color(Color(cmd.color))
+			robot.lights.set_dome_color(Color(cmd.color))
 		"party":
-			robot.set_party_lamp(bool(cmd.get("on", true)))
+			robot.lights.set_party_lamp(bool(cmd.get("on", true)))
 			if cmd.has("speed"):
-				robot.set_party_spin_speed(float(cmd.speed))
+				robot.lights.set_party_spin_speed(float(cmd.speed))
 		"spin":
 			robot.idle_spin_deg = float(cmd.get("speed", robot.idle_spin_deg))
 		"smoke":
@@ -256,27 +256,28 @@ func command(cmd: Dictionary) -> void:
 
 ## The operator's command for the real robot.
 func _hardware_command(cmd: Dictionary) -> Dictionary:
+	var hw := {}
 	match str(cmd.get("robot", "")):
 		"head":
-			return {"go": CyberRobot.nearest_side(deg_to_rad(float(cmd.angle)))}
+			hw = {"go": CyberRobot.nearest_side(deg_to_rad(float(cmd.angle)))}
 		"fire":
-			return {"attack": {"sides": [_side(int(cmd.tile)) if cmd.has("tile") else 0], "color": "#ff1a0d"}}
+			hw = {"attack": {"sides": [_side(int(cmd.tile)) if cmd.has("tile") else 0], "color": "#ff1a0d"}}
 		"release", "spin":
-			return {"idle": true}
+			hw = {"idle": true}
 		"look_at_tile":
-			return {"go": _side(int(cmd.tile))}
+			hw = {"go": _side(int(cmd.tile))}
 		"bulb_effect":
-			return {"bulb_effect": str(cmd.effect)}
+			hw = {"bulb_effect": str(cmd.effect)}
 		"bulbs":
-			return {"bulbs": {"side": int(cmd.get("side", -1)), "color": str(cmd.color)}}
+			hw = {"bulbs": {"side": int(cmd.get("side", -1)), "color": str(cmd.color)}}
 		"dome":
-			return {"dome": str(cmd.color)}
+			hw = {"dome": str(cmd.color)}
 		"party":
-			return {"party": bool(cmd.get("on", true))}
+			hw = {"party": bool(cmd.get("on", true))}
 		"smoke":
-			return {"smoke": float(cmd.get("seconds", 3.0))}
+			hw = {"smoke": float(cmd.get("seconds", 3.0))}
 		"home":
-			return {"home": str(cmd.get("dir", "auto"))}
+			hw = {"home": str(cmd.get("dir", "auto"))}
 		"stop":
-			return {"stop": true}
-	return {}
+			hw = {"stop": true}
+	return hw

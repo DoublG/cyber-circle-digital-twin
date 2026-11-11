@@ -52,6 +52,19 @@ func of_round(type_name: String) -> Dictionary:
 	return values.get(type_name, {})
 
 
+## A new round's settings: the operator's for its type, then this round's in
+## the round plan (web interface), e.g. {"categories": ["Computers"],
+## "duration": 60, "question_count": 5}: every key that is a property of the
+## round is set. Future special rounds and difficulty steering hook in here.
+func configure(r: GameRound, type_name: String, options: Dictionary) -> void:
+	for given in [of_round(type_name), options]:
+		for key in given:
+			if key in r:
+				r.set(key, given[key])
+			else:
+				push_warning("%s: no setting %s" % [r.title, key])
+
+
 ## Every setting with its range, default and current value, per group ("game"
 ## and each round type, ...) - for the web interface:
 ## [{group, title, items: [{key, label, min, max, step, unit, default, value}]}].

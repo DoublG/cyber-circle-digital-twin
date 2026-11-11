@@ -6,27 +6,25 @@ extends Label
 ## every node shows the same at the same time, at the game's pace;
 ## offset: another slogan than its neighbours (e.g. the tile number).
 
+const SCENE := "res://scenes/ui/call_to_action.tscn"
+
 var interval := 10.0                # s per slogan (time to read it on a split view)
-var offset := 0
-var _index := 0
+var offset := 0:
+	set(v):
+		offset = v
+		if is_inside_tree():            # (set after it went on screen: pick again, now)
+			_process(0.0)
+var _index := -1
 var _t := 0.0
 
 
-func _init(font_size := 72) -> void:
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	add_theme_font_override("font", Retro.FONT)
-	add_theme_font_size_override("font_size", font_size)
-	add_theme_color_override("font_color", Retro.AMBER)
-	add_theme_color_override("font_outline_color", Color(Retro.ORANGE, 0.6))
-	add_theme_constant_override("outline_size", 10)
-	_index = -1
+static func create() -> CallToAction:
+	return load(SCENE).instantiate()
 
 
-## The first slogan when it goes on screen - not in _init: the caller sets
-## offset after new(), and a slogan picked before that (offset 0, the same on
-## every tile) flashed for one frame each time a tile's view was rebuilt.
+## The first slogan when it goes on screen (with the caller's offset: a slogan
+## picked before that - offset 0, the same on every tile - flashed for one
+## frame each time a tile's view was rebuilt).
 func _ready() -> void:
 	_process(0.0)
 

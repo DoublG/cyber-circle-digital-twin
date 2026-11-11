@@ -26,8 +26,9 @@ extends Node3D
 ##
 ## The real installation: its messages (MQTT, WebSocket, ...) come in through
 ## apply_command(); ArenaCommands lists them all and handles them.
-## Who is on which place: PlayerRegistry (players); the light strips in the
-## ducts: CableLights (cables); the command line: LaunchOptions.
+## Who is on which place: PlayerRegistry (players); which places can be used:
+## Installation (installation); the light strips in the ducts: CableLights
+## (cables); the command line: LaunchOptions.
 ##
 ## Messages to the tiles go through send_to_tile() / the tile_message signal
 ## (programs for rounds the tile runs itself). simulate_firmware = true runs
@@ -36,7 +37,7 @@ extends Node3D
 ##
 ## Display nodes (Replica, docs/SETUP.md §4): the master serves them
 ## (--serve-replicas); a display node runs this same scene with --replica: no
-## game logic, it follows the master's state (replica_fields / apply_replica)
+## game logic, it follows the master's state (ArenaMirror: mirror)
 ## and plays its events (the tiles through rt(), sounds, lights, popups) on
 ## its own screens (--show). The robot is an NPC (RobotNpc): never steered over
 ## the network - on every node it acts by itself on the game's events.
@@ -68,6 +69,7 @@ const PERSONAL := {
 
 var tiles: Array[CyberTile] = []
 var players := PlayerRegistry.new(self)    # who is on which place
+var installation := Installation.new(self) # the places that can be used (installed, in service)
 var cables := CableLights.new(self)        # the light strips between the tiles and the robot
 var commands := ArenaCommands.new(self)    # the installation's messages (apply_command)
 var observer: ObserverRig          # floating camera for the overview page (visitors)
@@ -83,6 +85,7 @@ var clip_started := {}             # tile_id -> clock when the death clip starte
 var streams := {}                  # tile_id -> CompanionStream (only while one is asked for)
 var voice_export := ""             # --voice-export=FILE: write the lines, then quit
 var replica: Replica               # --serve-replicas (master) / --replica (a display node)
+var mirror := ArenaMirror.new(self)  # what the display nodes follow, and what a display node does itself
 var replica_screens: Array = []    # a display node: the screens it shows (--show)
 var replica_view := {}             # a display node: its render settings (--view-scale, ...)
 var own_tiles_live := false        # a display node: its own tiles' commands come over MQTT
@@ -108,13 +111,10 @@ func _ready() -> void:
 	add_child(observer)
 	observer.setup(self)
 	if Replica.client:
-		_replica_render_settings()
+		mirror.render_settings()
 	screen_wall.setup(self)
 	_add_replica()
-	if Replica.client:
-		game.setup_replica(self)
-	else:
-		game.setup(self)
+	game.setup(self)
 	lights.setup(self)
 	if voice_export != "":
 		_export_voice.call_deferred()
@@ -232,153 +232,6 @@ func _firmware_report(cmd: Dictionary) -> void:
 	apply_command(cmd)
 
 
-# ---------------------------------------------------------------- display nodes (Replica)
-
-## What the screens of a display node read, as data (sent as deltas on change).
-func replica_fields() -> Dictionary:
-	var t := []
-	for tile in tiles:
-		t.append(tile.replica_state())
-	var f := players.replica_fields()
-	f.merge({"dying": dying.keys(), "clip_waiting": clip_waiting, "clip_started": clip_started, "tiles": t,
-		"texts": Texts.values,
-		"sound": {"volume": sound.volume, "music_volume": sound.music_volume, "enabled": sound.enabled},
-		"voice": {"enabled": narrator.enabled, "output": narrator.output, "volume": narrator.volume},
-		"lights": {"brightness": lights.brightness, "flashes": lights.flashes},
-		"robot_on": robot.powered or game.power_show == "boot"})   # (a show: the NPC event plays it)
-	f.merge(game.replica_fields(), true)
-	return f
-
-
-## A display node: the master's fields (full: a snapshot, the screens are rebuilt).
-func apply_replica(f: Dictionary, full: bool) -> void:
-	players.apply_replica(f)
-	if f.has("clip_waiting"):
-		clip_waiting = f.clip_waiting
-	if f.has("clip_started"):
-		clip_started = f.clip_started
-	if f.has("dying"):
-		dying = {}
-		for id in f.dying:
-			dying[int(id)] = 1
-	if f.has("tiles"):
-		for i in mini(tiles.size(), f.tiles.size()):
-			tiles[i].apply_replica_state(f.tiles[i])
-	if f.has("texts"):
-		Texts.apply(f.texts)
-	if f.has("robot_on") and full and bool(f.robot_on) != robot.powered:
-		robot.set_powered(bool(f.robot_on))      # (joined while it is off / on: no show)
-	if f.has("sound"):
-		sound.volume = int(f.sound.volume)
-		sound.music_volume = int(f.sound.get("music_volume", sound.music_volume))
-	if f.has("voice"):
-		narrator.enabled = int(f.voice.enabled)
-		narrator.output = int(f.voice.output)
-		narrator.volume = int(f.voice.volume)
-	if f.has("lights"):
-		lights.brightness = int(f.lights.brightness)
-		lights.flashes = int(f.lights.flashes)
-		lights.refresh()
-	game.apply_replica(f, full)
-	if full:
-		screen_wall.refresh()
-
-
-## What changes every frame (sent LIVE_HZ, unreliable): the round's clocks, the robot's head.
-func replica_fast() -> Dictionary:
-	return {"round": game.current.replica_live() if game.current else {}, "robot": robot.replica_pose()}
-
-
-func apply_replica_fast(d: Dictionary) -> void:
-	if game.current and d.has("round"):
-		game.current.apply_replica_live(d.round)
-	if d.has("robot"):
-		robot.apply_replica_pose(d.robot)
-
-
-## The object a relayed event is for (Replica.relay targets).
-func replica_target(target: String) -> Object:
-	if target.begins_with("tile:"):
-		var id := int(target.substr(5))
-		return tiles[id - 1] if id >= 1 and id <= tiles.size() else null
-	match target:
-		"arena": return self
-		"cables": return cables
-		"npc": return npc
-		"wall": return screen_wall
-		"game": return game
-		"round": return game.current
-		"sound": return sound
-		"narrator": return narrator
-		"lights": return lights
-	return null
-
-
-## A display node: a relayed event it takes from MQTT itself (its own tiles).
-func replica_skip(target: String, method: StringName, args: Array) -> bool:
-	if not own_tiles_live:
-		return false
-	if target.begins_with("tile:") and method in [&"press_button", &"hold_button", &"release_button"]:
-		return is_own_tile(int(target.substr(5)))
-	if target == "npc" and method == &"press":
-		return is_own_tile(int(args[0]))
-	if target == "arena" and method == &"replica_tile_msg":
-		return is_own_tile(int(args[0]))
-	return false
-
-
-## A display node: a tile on one of its screens.
-func is_own_tile(tile_id: int) -> bool:
-	var groups: Array = screen_wall.groups()
-	for k in replica_screens:
-		if int(k) >= 1 and int(k) <= groups.size() and tile_id in groups[int(k) - 1]:
-			return true
-	return false
-
-
-## A display node: a message for a tile's own logic (from the master, or MQTT for its own tiles).
-func replica_tile_msg(tile_id: int, msg: Dictionary) -> void:
-	if tile_id >= 1 and tile_id <= tiles.size():
-		(tiles[tile_id - 1].get_node("Firmware") as TileFirmware).receive(msg)
-
-
-## Tests: a moment both sides note - the master sends its fields' digests,
-## a display node compares its own with them and saves its screens (--shots=DIR).
-func replica_mark(name: String, digests := {}) -> void:
-	if Replica.server:
-		Replica.relay("arena", &"replica_mark", [name, Replica.digests(replica_fields())])
-		return
-	var mine := Replica.digests(replica_fields())
-	var diff := digests.keys().filter(func(k): return mine.get(k) != digests[k])
-	print("replica: mark %s state %s" % [name, "EQUAL" if diff.is_empty() else "DIFFERENT %s" % [diff]])
-	if replica_shots == "":
-		return
-	await RenderingServer.frame_post_draw
-	DirAccess.make_dir_recursive_absolute(replica_shots)
-	for k in replica_screens:
-		var vp := screen_wall.screen_viewport(int(k) - 1)
-		if vp:
-			vp.get_texture().get_image().save_png("%s/%s_screen%d.png" % [replica_shots, name, int(k)])
-	print("replica: shot %s" % name)
-	if name == "quit":
-		get_tree().quit()
-
-
-## A display node: its 3D views lighter (a Pi): resolution, MSAA, mesh detail,
-## small parts hidden further away.
-func _replica_render_settings() -> void:
-	var detail := float(replica_view.get("detail", 3.0))
-	var detail_size := float(replica_view.get("detail_size", 0.2))
-	if detail > 0.0:
-		for g in find_children("*", "GeometryInstance3D", true, false):
-			if (g as GeometryInstance3D).get_aabb().get_longest_axis_size() < detail_size:
-				(g as GeometryInstance3D).visibility_range_end = detail
-	screen_wall.view_scale = float(replica_view.get("view_scale", 0.75))
-	screen_wall.view_msaa = {0: Viewport.MSAA_DISABLED, 2: Viewport.MSAA_2X, 4: Viewport.MSAA_4X}.get(
-		int(replica_view.get("msaa", 2)), Viewport.MSAA_2X)
-	screen_wall.view_lod = float(replica_view.get("lod", 4.0))
-
-
 # ---------------------------------------------------------------- the floor
 
 ## Hide the floor parts of the places that are not installed: the duct to the
@@ -389,14 +242,14 @@ func show_installed() -> void:
 	var floor_model := _floor_model()
 	var n := Retro.FLOOR_TILES
 	for id in range(1, n + 1):
-		var on := players.is_installed(id)
+		var on := installation.is_installed(id)
 		for part in ["Tile_Ducts_%02d", "Spoke_%02d", "Cable_%02d", "Label_%02d", "Spoke_Light_%02d"]:
 			var node := floor_model.find_child(part % id, true, false) as Node3D
 			if node:
 				node.visible = on
 		var ring := floor_model.find_child("Ring_%02d" % id, true, false) as Node3D   # to the next tile
 		if ring:
-			ring.visible = on and players.is_installed(id % n + 1)
+			ring.visible = on and installation.is_installed(id % n + 1)
 
 
 # ---------------------------------------------------------------- attacks
@@ -552,7 +405,7 @@ func press_stamp() -> Dictionary:
 
 ## Send a message to a tile's own controller (programs, start, stop).
 func send_to_tile(tile_id: int, msg: Dictionary) -> void:
-	Replica.relay("arena", &"replica_tile_msg", [tile_id, msg])   # (the display nodes run the tile logic too: it shows)
+	Replica.relay("mirror", &"tile_msg", [tile_id, msg])   # (the display nodes run the tile logic too: it shows)
 	tile_message.emit(tile_id, msg)
 	if simulate_firmware:
 		(tiles[tile_id - 1].get_node("Firmware") as TileFirmware).receive(msg)
@@ -583,7 +436,7 @@ func _on_button_pressed(tile_id: int, button: StringName) -> void:
 	if Replica.client:                           # a display: show the press at once (the master decides)
 		if players.is_pending(tile_id):
 			tile.activation_press(button)
-		elif own_tiles_live and is_own_tile(tile_id) and not tile.idle:
+		elif own_tiles_live and mirror.is_own_tile(tile_id) and not tile.idle:
 			npc.press(tile_id, CyberTile.BUTTON_COLORS[button])   # (its own tiles: from MQTT, at once)
 		return
 	if players.is_pending(tile_id):  # activation: press all 4 icons
@@ -602,7 +455,7 @@ func _on_button_pressed(tile_id: int, button: StringName) -> void:
 func _on_button_released(tile_id: int, button: StringName) -> void:
 	if Replica.client or players.is_pending(tile_id) or tiles[tile_id - 1].idle:
 		return
-	game.on_button_up(tile_id, button)
+	game.on_button(tile_id, button, false)
 
 
 ## Last life lost: queue the robot's death animation; the tile plays its effect
@@ -754,9 +607,9 @@ func _on_robot_hit(target: Vector3) -> void:
 			continue
 		if Vector2(tile.global_position.x, tile.global_position.z).distance_to(Vector2(target.x, target.z)) < 0.4:
 			for i in 3:                              # (the robot's own hit: on every node by itself)
-				tile.fill_ring(Color.RED)
+				tile.ring.fill(Color.RED)
 				await get_tree().create_timer(0.1).timeout
-				tile.clear_ring()
+				tile.ring.clear()
 				await get_tree().create_timer(0.1).timeout
 
 
