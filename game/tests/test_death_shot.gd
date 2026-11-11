@@ -8,7 +8,7 @@ extends Node
 ## the overview watches the robot fire (a popup over the floating camera); the
 ## next round starts while the extermination runs on. The death clip only
 ## plays in the player's own split screen view, never over a shared screen.
-## Run (with a display): godot --path . res://tests/test_death_shot.tscn
+## Run (with a display): godot --path . --disable-vsync res://tests/test_death_shot.tscn
 
 const ARENA := preload("res://scenes/arena.tscn")
 

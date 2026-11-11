@@ -1,6 +1,6 @@
 extends Node
 ## Screenshot of the reaction round (player views looking at their tiles).
-## Run (with a display): godot --path . res://tests/test_reaction_shot.tscn
+## Run (with a display): godot --path . --disable-vsync res://tests/test_reaction_shot.tscn
 
 const ARENA := preload("res://scenes/arena.tscn")
 

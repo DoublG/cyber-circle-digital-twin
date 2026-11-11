@@ -1,7 +1,7 @@
 extends Node
 ## Screenshots of the camera tilting down to the tile in a round played on the
 ## tile (Cyclone): halfway with the arrow hint, then looking at the tile.
-## Run (with a display): godot --path . res://tests/test_tilt_shot.tscn
+## Run (with a display): godot --path . --disable-vsync res://tests/test_tilt_shot.tscn
 
 const ARENA := preload("res://scenes/arena.tscn")
 

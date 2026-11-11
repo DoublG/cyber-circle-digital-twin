@@ -1,7 +1,7 @@
 extends Node
 ## Screenshots of the overview page for visitors (floating observer camera,
 ## rules, scores, event feed) during a Cyclone round, plus the full preview.
-## Run (with a display): godot --path . res://tests/test_observer_shot.tscn
+## Run (with a display): godot --path . --disable-vsync res://tests/test_observer_shot.tscn
 
 const ARENA := preload("res://scenes/arena.tscn")
 

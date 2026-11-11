@@ -1,7 +1,7 @@
 extends Node
 ## The robot's shows in pictures: the robot (3D) and a screen (PowerView) at
 ## moments of the boot and the shutdown. tests/shots/89_power_*.png
-##   godot --path godot res://tests/test_power_shot.tscn      (needs a display)
+##   godot --path godot --disable-vsync res://tests/test_power_shot.tscn      (needs a display)
 
 const ARENA := preload("res://scenes/arena.tscn")
 

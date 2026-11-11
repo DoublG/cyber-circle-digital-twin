@@ -2,7 +2,7 @@ extends Node
 ## Screenshot of the split-screen layouts in a round on the tile (Simon):
 ## screen 1: 3 players; screen 2: 2 players + a free tile; screen 3: 1 player,
 ## an invited tile and a free one; screen 4: only an invite (overview + slots).
-## Run (with a display): godot --path . res://tests/test_split_shot.tscn
+## Run (with a display): godot --path . --disable-vsync res://tests/test_split_shot.tscn
 
 const ARENA := preload("res://scenes/arena.tscn")
 

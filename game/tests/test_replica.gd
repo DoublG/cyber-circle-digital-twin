@@ -5,7 +5,7 @@ extends Node
 ## it: the display compares its replicated state with the master's (it prints
 ## "mark <name> state EQUAL") and saves its screens; the master saves its own -
 ## both as drawn at the same game clock, AHEAD s on.
-## Run: godot --path . res://tests/test_replica.tscn -- --serve-replicas=7361
+## Run: godot --path . --disable-vsync res://tests/test_replica.tscn -- --serve-replicas=7361
 
 const ARENA := preload("res://scenes/arena.tscn")
 const AHEAD := 0.25                       # s (the mark is at the display well before)

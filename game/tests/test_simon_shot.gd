@@ -1,6 +1,6 @@
 extends Node
 ## Screenshot of the Simon round (player views with the Simon overlay).
-## Run (with a display): godot --path . res://tests/test_simon_shot.tscn
+## Run (with a display): godot --path . --disable-vsync res://tests/test_simon_shot.tscn
 
 const ARENA := preload("res://scenes/arena.tscn")
 

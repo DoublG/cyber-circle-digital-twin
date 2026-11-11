@@ -1,6 +1,6 @@
 extends Node
 ## Renders the screen wall at key moments of a game and saves screenshots
-## to res://tests/shots/. Run (with a display): godot --path . res://tests/test_screens.tscn
+## to res://tests/shots/. Run (with a display): godot --path . --disable-vsync res://tests/test_screens.tscn
 
 const ARENA := preload("res://scenes/arena.tscn")
 
