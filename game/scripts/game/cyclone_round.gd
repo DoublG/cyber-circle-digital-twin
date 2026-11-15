@@ -45,6 +45,7 @@ func _init() -> void:
 	progress_label = "LEVEL"
 	mode = "personal"
 	on_tile = true
+	tile_countdown = false     # (its own green light runs round the ring: no second one)
 	duration = 40.0
 	rules = ("Een groen lampje draait rondjes op jouw tegel.\n"
 		+ "Druk op een knop op het moment dat het op het RODE lampje staat.\n"

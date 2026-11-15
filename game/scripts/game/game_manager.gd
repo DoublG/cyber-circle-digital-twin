@@ -80,6 +80,9 @@ enum Mode { SETUP, CLOSED, OPEN, PAUSED }
 
 var arena: Arena
 var screen_wall: ScreenWall
+var _countdown_sent := false           # the real tiles run the countdown LED now (_show_countdown)
+var _countdown_total := 0.0
+var _countdown_to: Array = []          # ... on these tiles
 var picker := RoundPicker.new(self)        # which round comes next: the plan, the randomizer
 var questions := QuestionPicker.new(self)  # the quiz's questions and which category is next
 var standings := Standings.new(self)       # the ranking of the event (records from the database)
@@ -248,6 +251,8 @@ func _process(delta: float) -> void:
 	if Replica.client:                   # a display node: the round's clocks run on between the master's updates
 		if current and mode != Mode.PAUSED:
 			current.replica_tick(delta)
+			current.countdown.x -= delta
+		_show_countdown()
 		return
 	if mode == Mode.PAUSED:
 		return                           # frozen: no timers, no rounds
@@ -281,6 +286,40 @@ func _process(delta: float) -> void:
 			_timer -= delta
 			if _timer <= 0.0:
 				_next_round()
+	_show_countdown()
+
+
+## The round's countdown (GameRound.countdown): one green LED once round the
+## outer ring of every player's tile - on the 3D tiles here, and sent to the
+## real tiles, which count down themselves (frozen by {"pause"}): a message
+## when it starts (or its length changes) and when it ends.
+func _show_countdown() -> void:
+	var cd := Vector2(-1.0, 0.0)
+	if current and (Replica.client or state == State.PLAYING):
+		cd = current.countdown
+	var on := cd.x > 0.0 and cd.y > 0.0
+	var led := clampi(int((1.0 - cd.x / cd.y) * CyberTile.LED_COUNT), 0, CyberTile.LED_COUNT - 1) if on else -1
+	for t: CyberTile in arena.tiles:
+		var mine := on and t.tile_id in current.players and not t.is_dead
+		t.ring.set_countdown(led if mine else -1)
+	if Replica.client:
+		return
+	if on and (not _countdown_sent or cd.y != _countdown_total):
+		for id in current.players:
+			if not arena.tiles[id - 1].is_dead:
+				arena.send_to_tile(id, {"countdown": {"length": roundi(cd.y * 1000.0), "left": roundi(cd.x * 1000.0)}})
+		_countdown_to = current.players.duplicate()
+	elif not on and _countdown_sent:
+		for id in _countdown_to:
+			arena.send_to_tile(id, {"countdown": false})
+		_countdown_to = []
+	elif on:
+		for id in _countdown_to.duplicate():        # exterminated during the round: off there
+			if arena.tiles[id - 1].is_dead:
+				arena.send_to_tile(id, {"countdown": false})
+				_countdown_to.erase(id)
+	_countdown_sent = on
+	_countdown_total = cd.y
 
 
 # ---------------------------------------------------------------- flow
@@ -345,6 +384,7 @@ func _next_round() -> void:
 	settings.configure(current, type_name, entry.get("options", {}))   # the operator's, this round's in the plan
 	_apply_tempo(current)
 	current.prepare(self, arena.players.player_ids().filter(func(id): return not arena.tiles[id - 1].is_dead))
+	current.adapt_rules()                                  # (other life settings: the rules say them)
 	Texts.dress(current, type_name)                        # the operator's name and rules for this game
 	_set_state(State.INTRO)
 	arena.narrator.say("round_" + type_name, "%s. %s" % [current.title, current.rules], "round", {}, true)
@@ -450,6 +490,8 @@ func _begin_round() -> void:
 func _end_round() -> void:
 	current.finish()
 	var changes := _life_plan(current.life_changes())
+	for id in current.players:                   # (the round's shields: until the lives are decided)
+		arena.tiles[id - 1].shielded = false
 	var doomed := changes.keys().filter(func(id): return arena.tiles[id - 1].health + changes[id] <= 0)
 	arena.aim_at_doomed(doomed)                  # the robot turns to the first one already
 	views.lives_shown = false

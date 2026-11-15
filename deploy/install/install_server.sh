@@ -35,7 +35,11 @@ grep -q "^A11Y_VIDEO=" "$ENV_FILE" || sed -n '/^# ---.*accessible page/,/^CONTRO
     "$HERE/cybercircle.env.example" >> "$ENV_FILE"         # (an older settings file: add the new block)
 grep -q "^MQTT_DISPLAY_USER=" "$ENV_FILE" || printf '%s\n' "# the display nodes' MQTT user: only reads its own tiles (mosquitto-cybercircle.acl)" \
     "MQTT_DISPLAY_USER=display" "MQTT_DISPLAY_PASSWORD=change-me" >> "$ENV_FILE"   # (an older settings file)
-for key in MQTT_PASSWORD MQTT_DISPLAY_PASSWORD DB_PASSWORD STREAM_PASSWORD; do   # never empty or the example's "change-me"
+grep -q "^MQTT_DEVICE_USER=" "$ENV_FILE" || printf '%s\n' "# the tiles' and the robot's MQTT user: only their own topics (mosquitto-cybercircle.acl)" \
+    "MQTT_DEVICE_USER=device" "MQTT_DEVICE_PASSWORD=change-me" >> "$ENV_FILE"       # (an older settings file)
+grep -q "^OTA_PASSWORD=" "$ENV_FILE" || printf '%s\n' "# flashing the tiles and the robot over the network (flash_tiles.sh ota <IP>)" \
+    "OTA_PASSWORD=change-me" >> "$ENV_FILE"                                         # (an older settings file)
+for key in MQTT_PASSWORD MQTT_DISPLAY_PASSWORD MQTT_DEVICE_PASSWORD OTA_PASSWORD DB_PASSWORD STREAM_PASSWORD; do   # never empty or the example's "change-me"
     if grep -qE "^$key=(change-me)?$" "$ENV_FILE"; then
         sed -i "s/^$key=.*/$key=$(secret)/" "$ENV_FILE"
         echo "$key: a random password"
@@ -69,7 +73,9 @@ sed -e "s/@MQTT_PORT@/${MQTT_PORT:-1883}/" -e "s/@MQTT_WS_PORT@/${MQTT_WS_PORT:-
 rm -f /etc/mosquitto/cybercircle.passwd
 mosquitto_passwd -b -c /etc/mosquitto/cybercircle.passwd "$MQTT_USER" "$MQTT_PASSWORD"
 mosquitto_passwd -b /etc/mosquitto/cybercircle.passwd "${MQTT_DISPLAY_USER:-display}" "$MQTT_DISPLAY_PASSWORD"
+mosquitto_passwd -b /etc/mosquitto/cybercircle.passwd "${MQTT_DEVICE_USER:-device}" "$MQTT_DEVICE_PASSWORD"
 sed -e "s/@MQTT_USER@/$MQTT_USER/" -e "s/@MQTT_DISPLAY_USER@/${MQTT_DISPLAY_USER:-display}/" \
+    -e "s/@MQTT_DEVICE_USER@/${MQTT_DEVICE_USER:-device}/" \
     -e "s/@PREFIX@/${MQTT_PREFIX:-cybercircle}/" "$HERE/mosquitto-cybercircle.acl" > /etc/mosquitto/cybercircle.acl
 chown mosquitto:mosquitto /etc/mosquitto/cybercircle.passwd /etc/mosquitto/cybercircle.acl
 chmod 600 /etc/mosquitto/cybercircle.passwd /etc/mosquitto/cybercircle.acl
@@ -162,5 +168,6 @@ Done. Web interface: $scheme://$SERVER_IP:${CONTROL_PORT:-8080}/   (the app: /gm
   settings      $ENV_FILE
   logs          journalctl -u cybercircle-control -f
   game computer copy $ENV_FILE there, then: sudo deploy/install/install_game.sh
-  tiles         deploy/install/flash_tiles.sh (broker $SERVER_IP:${MQTT_PORT:-1883}, user $MQTT_USER)
+  tiles, robot  deploy/install/flash_tiles.sh, flash_robot.sh (broker $SERVER_IP:${MQTT_PORT:-1883}, user ${MQTT_DEVICE_USER:-device})
+                boards flashed before with user $MQTT_USER keep working; flash them again when convenient
 EOF

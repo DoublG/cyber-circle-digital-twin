@@ -1,3 +1,4 @@
+import 'package:cc_gamemaster/src/api.dart';
 import 'package:cc_gamemaster/src/model.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -80,5 +81,24 @@ void main() {
     final all = GameState.fromJson({'floor_tiles': 13, 'tile_count': 18});   // (an older game: everything)
     expect(all.floorPlaces.length, 13);
     expect(all.mobilePlaces.length, 5);
+  });
+
+  test('this event: games off, questions as normal / on / off', () {
+    final s = Selection.fromJson({
+      'event': {'name': 'Maker Faire'},
+      'games': [{'type': 'quiz', 'title': 'Quiz', 'off': false}, {'type': 'code', 'title': 'Code kraken', 'off': true}],
+      'questions': [
+        {'id': 1, 'category': 'Online', 'question': 'Wat is phishing?', 'min_age': 8, 'max_age': 16, 'active': 1, 'event': null, 'on': 1},
+        {'id': 2, 'category': 'Event', 'question': 'Waar staan we?', 'min_age': 0, 'max_age': 99, 'active': 0, 'event': 1, 'on': 1},
+        {'id': 3, 'category': 'Online', 'question': 'Wat is een virus?', 'min_age': 10, 'max_age': 16, 'active': 1, 'event': 0, 'on': 0},
+      ],
+    });
+    expect(s.eventName, 'Maker Faire');
+    expect(s.gamesOff, ['code']);
+    expect(s.questions[0].event, null);
+    expect(s.questions[1].event, true);
+    expect(s.questions[1].active, false);
+    expect(s.questions[2].on, false);
+    expect(s.questions[2].minAge, 10);
   });
 }

@@ -5,7 +5,7 @@
 
 namespace smoke {
 void begin();
-void loop();
+void tick();                        // the cut-off: from the control task (control.cpp), every ms
 bool puff(float seconds);           // false: too soon after the last one (or 0 s)
 bool on();
 void off();                         // at once

@@ -67,6 +67,7 @@ async def publish(topic, payload, retain):
 
 
 names = {}                                          # writer -> client id (the $SYS log lines)
+wills = {}                                          # writer -> (topic, payload, retain): sent when it goes without a DISCONNECT
 
 
 async def sys_log(text):
@@ -89,8 +90,12 @@ async def handle_mqtt(writer, header, body):
             cid = body[p + 2:p + 2 + cid_len].decode()
             p += 2 + cid_len
             if flags & 0x04:                        # will topic + message
+                parts = []
                 for _ in range(2):
-                    p += 2 + struct.unpack("!H", body[p:p + 2])[0]
+                    n = struct.unpack("!H", body[p:p + 2])[0]
+                    parts.append(body[p + 2:p + 2 + n])
+                    p += 2 + n
+                wills[writer] = (parts[0].decode(), parts[1], bool(flags & 0x20))
             user = ""
             if flags & 0x80:
                 ul = struct.unpack("!H", body[p:p + 2])[0]
@@ -178,6 +183,7 @@ async def client(reader, writer):
     except (asyncio.IncompleteReadError, ConnectionError):
         pass
     clients.pop(writer, None)
+    wills.pop(writer, None)
     writer.close()
     if writer in names:
         await sys_log(f"Client {names.pop(writer)} closed its connection.")
@@ -207,7 +213,8 @@ async def tcp_client(reader, writer):
                     break
                 header, body = buf[0], bytes(buf[i:i + length])
                 del buf[:i + length]
-                if header >> 4 == 14:               # DISCONNECT
+                if header >> 4 == 14:               # DISCONNECT: a clean goodbye, no last will
+                    wills.pop(writer, None)
                     raise ConnectionError
                 await handle_mqtt(writer, header, body)
     except (asyncio.IncompleteReadError, ConnectionError):
@@ -215,6 +222,8 @@ async def tcp_client(reader, writer):
     clients.pop(writer, None)
     raw.discard(writer)
     writer.close()
+    if writer in wills:                             # gone without one (killed, the cable): its last will
+        await publish(*wills.pop(writer))
     if writer in names:
         await sys_log(f"Client {names.pop(writer)} closed its connection.")
 

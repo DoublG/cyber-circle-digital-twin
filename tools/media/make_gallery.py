@@ -267,6 +267,13 @@ def main():
             if s.tap("T01", role=None):
                 s.save(s.phone, "app", "tegel_detail_speler")
                 s.tap("Back")
+            qs = call("GET", "/api/questions/all")             # this event: a game off, questions on / off
+            call("PUT", "/api/selection", {"games_off": ["code"],
+                                           "questions": {str(qs[1]["id"]): False, str(qs[4]["id"]): False}})
+            s.tab("Event")
+            s.save(s.phone, "app", "event_spellen")
+            s.scroll(900)
+            s.save(s.phone, "app", "event_vragen")
             s.tab("Instellingen")
             s.save(s.phone, "app", "instellingen")
             for i in range(4):

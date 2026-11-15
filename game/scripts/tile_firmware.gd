@@ -21,6 +21,11 @@ extends Node
 ##   {"start": "<program id>"}
 ##   {"stop": true}
 ##   {"pause": true} / {"pause": false}   game paused: freeze the program's clock
+##   {"countdown": {"length": ms, "left": ms}} / {"countdown": false}
+##       The round's time (all rounds but Cyclone): one green LED once round the
+##       outer ring, on top of what it shows (not on the inner ring); the tile
+##       counts down itself, frozen while paused. (Here the game draws it on the
+##       3D tile itself: GameManager._show_countdown.)
 ##   {"piet": {"on": true, "speed": 20, "color": "#ff2a00"}} / {"piet": {"on": false}}
 ##       Zwarte Piet (run by the game): a light with a tail runs around the
 ##       ring at `speed` LEDs/s while this tile has it; presses are reported

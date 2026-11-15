@@ -25,7 +25,7 @@ COL = {
     "video": "#8250df",  # HDMI / DisplayPort
     "audio": "#1a7f37",  # analogue audio
     "dmx": "#d4730b",    # DMX512
-    "p24": "#a40e26",    # 12 V (the ATX supply: tiles, robot motor)
+    "p24": "#a40e26",    # 12 V (the tiles' own supply; the ATX in the robot: the motor)
     "p5": "#cf222e",     # 5 V
     "p33": "#e16f24",    # 3.3 V
     "gnd": "#24292f",    # ground
@@ -230,7 +230,7 @@ def architecture():
 
     d.box(380, 640, 255, 110, "Tiles  T01–T13 + M1–M5", [
         "ESP32 + Ethernet (WT32-ETH01),",
-        "58 WS2812B LEDs, 4 pressure sensors.",
+        "105 LEDs (2 rings), 4 pressure sensors.",
         "Runs the tile games itself (Reactie,",
         "Simon, Cyclone, Zwarte Piet)."], fill="#ffffff", lsize=11)
     d.box(645, 640, 145, 110, "Robot (ESP32)", [
@@ -314,17 +314,17 @@ def network():
 
 def tile():
     d = Diagram(1400, 960, "One tile – wiring",
-                "ESP32 module with Ethernet (default WT32-ETH01), one WS2812B chain of 58 LEDs, 4 pressure sensors (FSR). "
+                "ESP32 module with Ethernet (default WT32-ETH01), one chain of 105 12 V LEDs (WS2815), 4 pressure sensors (FSR). "
                 "Pins: firmware/tile/include/config.h")
     # ------------------------------------------------ power
     d.zone(20, 90, 330, 400, "POWER", FILL["warn"])
-    d.box(40, 120, 290, 70, "12 V DC in  (the ATX in the robot)", ["its 12 V rail · 2-core 1.5 mm², fuse 2 A per tile"], fill="#ffffff", lsize=11)
-    d.box(40, 230, 290, 80, "DC-DC buck 12 V → 5 V, 5 A", ["(or a local 5 V / 5 A supply)", "set to 5.1 V before connecting"], fill="#ffffff")
+    d.box(40, 120, 290, 70, "12 V DC in  (the tiles' 12 V supply)", ["2-core 1.5 mm², fuse 3 A per tile", "the LEDs run on it directly"], fill="#ffffff", lsize=11)
+    d.box(40, 230, 290, 80, "DC-DC buck 12 V → 5 V, ≥ 1 A", ["only the ESP32 + the 74AHCT125", "set to 5.1 V before connecting"], fill="#ffffff")
     d.line([(120, 190), (120, 230)], "p24", None)
     d.text(128, 214, "+12 V", 11, color=COL["p24"], weight="700")
     d.line([(240, 190), (240, 230)], "gnd", None)
     d.text(248, 214, "GND", 11, color=COL["gnd"], weight="700")
-    d.box(40, 350, 290, 120, "5 V rail (terminal block)", ["1000 µF / 10 V electrolytic across", "+5 V – GND at the LED input", "(protects the first LED at power-on)", "all grounds joined here"], fill="#ffffff")
+    d.box(40, 350, 290, 120, "5 V rail (terminal block)", ["ESP32 + level shifter (~0.3 A)", "1000 µF / 25 V across +12 V – GND", "at the LED input (power-on)", "all grounds joined here"], fill="#ffffff")
     d.line([(120, 310), (120, 350)], "p5", None)
     d.text(128, 334, "+5 V", 11, color=COL["p5"], weight="700")
     d.line([(240, 310), (240, 350)], "gnd", None)
@@ -368,10 +368,10 @@ def tile():
     d.line([(1210, 200), (1250, 200), (1250, 290)], "sig", None)
     d.text(1258, 250, "DIN", 11, color=COL["sig"], weight="700")
 
-    chain = [("Ring", "48 LEDs  #0–47", "#0 = LED_00, facing the robot,", "then clockwise seen from above"),
-             ("Hearts", "5 LEDs  #48–52", "heart 1 (nearest the logo)", "first"),
-             ("Icons", "4 LEDs  #53–56", "under the glass: Square,", "Triangle, Cross, Circle"),
-             ("Status", "1 LED  #57", "blue net · amber no place", "green ready · red no network")]
+    chain = [("Outer ring", "48 LEDs  #0–47", "#0 = LED_00, facing the robot,", "then clockwise seen from above"),
+             ("Inner ring", "48 LEDs  #48–95", "around the logo: shows what", "the outer ring shows"),
+             ("Hearts", "5 LEDs  #96–100", "heart 1 (nearest the logo)", "first"),
+             ("Buttons", "4 LEDs  #101–104", "under the pucks: Square,", "Triangle, Cross, Circle")]
     y = 290
     for i, (a, b, c, e) in enumerate(chain):
         d.box(1150, y, 230, 92, a, [b, c, e], fill="#ffffff", lsize=11)
@@ -379,11 +379,11 @@ def tile():
             d.line([(1250, y + 92), (1250, y + 112)], "sig", None)
             d.text(1258, y + 106, "DOUT → DIN", 10, color=COL["sig"], weight="600")
         y += 112
-    # LED power: injection at the start and at the end of the ring
-    d.line([(330, 365), (380, 365), (380, 100), (1395 - 35, 100), (1360, 290)], "p5", None, width=2.6)
-    d.text(1352, 94, "+5 V to the LEDs, 1.0 mm² + GND alongside: into the ring at its start (#0) and its end (#47)", 11.5,
-           color=COL["p5"], weight="700", anchor="end")
-    d.line([(1360, 100), (1392, 100), (1392, 340), (1380, 340)], "p5", None, width=2.6)
+    # LED power: 12 V straight from the feed, injected at the start and at the end of the outer ring
+    d.line([(330, 150), (380, 150), (380, 100), (1395 - 35, 100), (1360, 290)], "p24", None, width=2.6)
+    d.text(1352, 94, "+12 V to the LEDs, 1.0 mm² + GND alongside: into the outer ring at its start (#0) and its end (#47)", 11.5,
+           color=COL["p24"], weight="700", anchor="end")
+    d.line([(1360, 100), (1392, 100), (1392, 340), (1380, 340)], "p24", None, width=2.6)
     d.line([(1010, 240), (1010, 270)], "p5", None, end=False)
     d.text(1018, 262, "5 V + GND", 10.5, color=COL["p5"], weight="600")
 
@@ -410,7 +410,7 @@ def tile():
     d.text(200, 755, "optional, pin → GND", 10, color=MUTED)
     d.text(40, 840, "Pressed = the reading rises above its resting value (measured at power-up:", 11)
     d.text(40, 856, "nobody on the tile then) by SENSOR_PRESS (600) – released below 350.", 11)
-    d.text(40, 878, "Shielded 2-core or twisted pair to each FSR; keep away from the LED 5 V.", 11)
+    d.text(40, 878, "Shielded 2-core or twisted pair to each FSR; keep away from the LED power.", 11)
     sensors = [("Square", "IO32", 310), ("Triangle", "IO33", 350), ("Cross", "IO39", 390), ("Circle", "IO35", 430)]
     for name, io, yy in [(n, i, y + 250) for n, i, y in sensors]:
         d.rect(300, yy - 14, 150, 28, "#ffffff", MUTED, rx=4)
@@ -437,15 +437,15 @@ def tile():
         d.line([p, (840, p[1])], "usb", None, width=1.4, start=True, end=False)
 
     d.note(520, 620, 600, [
-        "!LEDs: 58 × 60 mA = 3.5 A at full white; BRIGHTNESS 160 → ≤ 2.2 A  ⇒  5 V / 5 A buck",
-        "ESP32 + Ethernet: ~250 mA. One tile ≈ 12 W max (≈ 1.1 A at 12 V); 13 tiles ≈ 15 A on 12 V",
-        "!Why 12 V: 5 V over 10 m of cable loses volts; the ATX 12 V rail to each tile, 5 V made there",
-        "Level shifter: WS2812B at 5 V wants ≥ 3.5 V data; 3.3 V often works, not always",
+        "!LEDs (12 V, WS2815 ~20 mA each): 105 → ~2.1 A full white; BRIGHTNESS 160 → ~1.3 A",
+        "ESP32 + Ethernet: ~250 mA at 5 V (~0.1 A at 12 V)  ⇒  fuse 3 A per tile; LED_MAX_MA 2500",
+        "!13 tiles: ~18 A on 12 V at BRIGHTNESS 160, ~29 A full white: the tiles' own 12 V supply",
+        "Level shifter: the LEDs' data wants 5 V logic; 3.3 V often works, not always",
         "Other modules: Olimex ESP32-POE (ETH addr 0, power 12, clock GPIO17 out: config.h) – PoE",
         "802.3af gives only ~13 W: lower BRIGHTNESS to ≤ 100 or keep the 12 V feed for the LEDs",
         "!Always wired: every tile on Ethernet (there is no wifi build)"],
         title="Power budget & choices", size=11.5)
-    d.legend(1150, 760, [("p24", "12 V (ATX)"), ("p5", "5 V"), ("p33", "3.3 V"), ("gnd", "ground"), ("sig", "signal"),
+    d.legend(1150, 760, [("p24", "12 V (tiles' supply)"), ("p5", "5 V"), ("p33", "3.3 V"), ("gnd", "ground"), ("sig", "signal"),
                          ("usb", "serial (flashing)"), ("eth", "Ethernet")])
     d.save("tile_wiring.svg")
 
@@ -458,7 +458,7 @@ def robot():
                 "40 WS2812B LEDs (body + eye), relays for the 230 V star light and smoke. Pins: firmware/robot/include/config.h")
     # ------------------------------------------------ power
     d.zone(20, 90, 330, 250, "POWER  (ATX supply)", FILL["warn"])
-    d.box(40, 118, 290, 92, "ATX 12 V rail (yellow)", ["→ the H-bridge (B+ / B−) + motor, fused", "and the 13 tiles (a fuse each, ~15 A)",
+    d.box(40, 118, 290, 92, "ATX 12 V rail (yellow)", ["→ the H-bridge (B+ / B−) + motor, fused", "(the tiles have their own 12 V supply)",
                                                      "(a 24 V motor: a step-up, or a 12 V one)"], fill="#ffffff", lsize=11)
     d.box(40, 220, 290, 100, "ATX 5 V rail (red)", ["ESP32 + Ethernet ~250 mA, LEDs:", "40 × 60 mA = 2.4 A full white,",
                                                     "~1.5 A at LED_BRIGHTNESS 160", "all grounds joined (black = GND)"], fill="#ffffff", lsize=11)
@@ -564,10 +564,10 @@ def robot():
         "Flashing later: pio run -e ota -t upload --upload-port <IP>  (OTA_PASSWORD).",
         "!230 V (star light, smoke): mains-rated relays, fused + earthed, wired by someone qualified.",
         "Topics: robot/cmd (from the master), robot/config, robot/state, robot/event, robot/hello.",
-        "!One ATX in the robot powers it all: 12 V → motor + 13 tiles, 5 V → ESP32 + LEDs.",
-        "≥ 450 W with ≥ 25 A on 12 V; PS_ON (green) to GND switches it on."],
+        "!The ATX in the robot powers the robot only: 12 V → motor, 5 V → ESP32 + LEDs.",
+        "The tiles have their own 12 V supply. PS_ON (green) to GND switches the ATX on."],
         title="Good to know", size=11.5)
-    d.legend(1130, 770, [("p24", "12 V (motor, tiles)"), ("p5", "5 V"), ("p33", "3.3 V"), ("gnd", "ground"), ("sig", "signal"),
+    d.legend(1130, 770, [("p24", "12 V (motor)"), ("p5", "5 V"), ("p33", "3.3 V"), ("gnd", "ground"), ("sig", "signal"),
                          ("eth", "Ethernet")])
     d.save("robot_wiring.svg")
 
@@ -658,7 +658,7 @@ def av():
 
 def floor():
     d = Diagram(1400, 900, "Floor plan – where the cables run (top view, example)",
-                "13 tiles round the robot; T01 faces the robot side, numbered clockwise. Every tile: one Cat6 + one 12 V feed (the ATX in the robot)")
+                "13 tiles round the robot; T01 faces the robot side, numbered clockwise. Every tile: one Cat6 + one 12 V feed (the tiles' 12 V supply)")
     cx, cy, r = 470, 480, 300
     d.circle(cx, cy, r + 70, "#f6f8fa", "#8c959f", 1.5)
     d.text(cx, cy - r - 82, "the room wall (pillars, consoles, screens)", 11, anchor="middle", color=MUTED)
@@ -692,8 +692,9 @@ def floor():
              title="In each duct")
     d.note(980, 220, 390, [
         "Inside the robot: screen Pi 1–3, the floor switch, the",
-        "ATX supply (12 V to every tile, a fuse per tile, and",
-        "the head motor; 5 V to the robot's ESP32 + LEDs), the",
+        "ATX supply (12 V to the head motor, 5 V to the",
+        "robot's ESP32 + LEDs; the tiles: their own 12 V supply,",
+        "a fuse per tile), the",
         "230 V relays (star light, smoke: robot_wiring.svg),",
         "one Cat6 uplink and the mains to the tech rack.",
         "HDMI from the Pis to screens 1–5: active / optical",

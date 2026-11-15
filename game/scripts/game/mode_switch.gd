@@ -156,6 +156,6 @@ func _zap() -> void:
 
 func _pause_tiles(on: bool) -> void:
 	var current := game.current
-	if current and current.on_tile:
+	if current and (current.on_tile or current.countdown.x > 0.0):   # (a program, or the countdown LED)
 		for id in current.players:
 			game.arena.send_to_tile(id, {"pause": on})

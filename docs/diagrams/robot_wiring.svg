@@ -7,7 +7,7 @@
 <rect x="40" y="118" width="290" height="92" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
 <text x="52" y="140" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">ATX 12 V rail (yellow)</text>
 <text x="52" y="168.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">→ the H-bridge (B+ / B−) + motor, fused</text>
-<text x="52" y="183.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">and the 13 tiles (a fuse each, ~15 A)</text>
+<text x="52" y="183.5" font-size="11" text-anchor="start" font-weight="400" fill="#57606a">(the tiles have their own 12 V supply)</text>
 <text x="52" y="198.5" font-size="11" text-anchor="start" font-weight="400" fill="#57606a">(a 24 V motor: a step-up, or a 12 V one)</text>
 <rect x="40" y="220" width="290" height="100" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
 <text x="52" y="242" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">ATX 5 V rail (red)</text>
@@ -163,12 +163,12 @@
 <text x="32" y="878.0" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">Flashing later: pio run -e ota -t upload --upload-port &lt;IP&gt;  (OTA_PASSWORD).</text>
 <text x="32" y="894.5" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">230 V (star light, smoke): mains-rated relays, fused + earthed, wired by someone qualified.</text>
 <text x="32" y="911.0" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">Topics: robot/cmd (from the master), robot/config, robot/state, robot/event, robot/hello.</text>
-<text x="32" y="927.5" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">One ATX in the robot powers it all: 12 V → motor + 13 tiles, 5 V → ESP32 + LEDs.</text>
-<text x="32" y="944.0" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">≥ 450 W with ≥ 25 A on 12 V; PS_ON (green) to GND switches it on.</text>
+<text x="32" y="927.5" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">The ATX in the robot powers the robot only: 12 V → motor, 5 V → ESP32 + LEDs.</text>
+<text x="32" y="944.0" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">The tiles have their own 12 V supply. PS_ON (green) to GND switches the ATX on.</text>
 <rect x="1130" y="770" width="250" height="150" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
 <text x="1142" y="790" font-size="12" text-anchor="start" font-weight="700" fill="#24292f">Legend</text>
 <polyline points="1144,806 1190,806" fill="none" stroke="#a40e26" stroke-width="2.2" stroke-linejoin="round"/>
-<text x="1202" y="810" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">12 V (motor, tiles)</text>
+<text x="1202" y="810" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">12 V (motor)</text>
 <polyline points="1144,826 1190,826" fill="none" stroke="#cf222e" stroke-width="2.2" stroke-linejoin="round"/>
 <text x="1202" y="830" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">5 V</text>
 <polyline points="1144,846 1190,846" fill="none" stroke="#e16f24" stroke-width="2.2" stroke-linejoin="round"/>

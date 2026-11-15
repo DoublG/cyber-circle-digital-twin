@@ -35,6 +35,7 @@ struct CFastLED {
     void attach(CRGB *leds, int count);
     void setBrightness(uint8_t b) { brightness = b; }
     void clear(bool = false);
+    void setMaxPowerInVoltsAndMilliamps(uint8_t, uint32_t) {}
     void show();
     uint8_t brightness = 255;
 };

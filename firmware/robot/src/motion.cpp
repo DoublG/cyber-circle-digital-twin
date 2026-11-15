@@ -28,6 +28,17 @@ int unwound(int pos, const Config &c) {
     return best == NO_POSITION ? pos : best;
 }
 
+bool limitWindow(float &lo, float &hi, float hardLo, float hardHi, float defaultLo, float defaultHi) {
+    float wasLo = lo, wasHi = hi;
+    if (!(lo == lo)) lo = defaultLo;         // (NaN: flash that was never written properly)
+    if (!(hi == hi)) hi = defaultHi;
+    if (lo < hardLo) lo = hardLo;
+    if (lo > 0) lo = 0;
+    if (hi > hardHi) hi = hardHi;
+    if (hi < 0) hi = 0;
+    return !(lo == wasLo && hi == wasHi);
+}
+
 float turns(int pos, const Config &c) { return (float)pos / c.sides; }
 int sideOf(int pos, const Config &c) { return mod(pos, c.sides); }
 
@@ -41,6 +52,8 @@ bool Planner::goAbs(int p) {
     if (!known || p < cfg.minPos || p > cfg.maxPos) return false;
     target = p;
     error = "";
+    creeping = false;
+    settleLeft = 0;
     dir = target > pos ? 1 : (target < pos ? -1 : 0);
     return true;
 }
@@ -48,6 +61,16 @@ bool Planner::goAbs(int p) {
 void Planner::stop() {
     dir = 0;
     target = pos;
+    creeping = false;
+    settleLeft = 0;                             // (stopped on purpose / an error: stays where it is)
+}
+
+bool Planner::creepBack() {
+    if (dir != 0 || !known || pos != target || past == 0 || settleLeft <= 0) return false;
+    settleLeft--;
+    dir = -past;                                // back over the mark it coasted past: the same mark
+    creeping = true;
+    return true;
 }
 
 void Planner::onMarkLeave(int moving) {
@@ -59,7 +82,10 @@ void Planner::onMarkEnter() {
     bool same = past != 0 && dir == -past;      // back over the mark it had just passed
     past = 0;
     if (same) {
-        if (pos == target) dir = 0;
+        if (pos == target) {
+            dir = 0;
+            creeping = false;                   // (a creep that coasts off again: settleLeft decides)
+        }
         return;
     }
     pos += dir;
@@ -67,8 +93,11 @@ void Planner::onMarkEnter() {
         error = "cable limit";
         dir = 0;
         target = pos;
+        creeping = false;
+        settleLeft = 0;
     } else if (pos == target) {
         dir = 0;
+        settleLeft = cfg.settleTries;           // arrived: it may creep back if it coasts off
     }
 }
 
@@ -77,13 +106,17 @@ int Planner::onHome() {
     int correction = nearest - pos;
     pos = nearest;
     known = true;
-    if (dir != 0 && pos == target) dir = 0;
-    else if (dir != 0) dir = target > pos ? 1 : (target < pos ? -1 : 0);
+    if (dir != 0 && pos == target) {
+        dir = 0;
+        creeping = false;
+    } else if (dir != 0) {
+        dir = target > pos ? 1 : (target < pos ? -1 : 0);
+    }
     return correction;
 }
 
 int Planner::drive() {
-    if (!known || pos == target) dir = 0;
+    if (!known || (pos == target && !creeping)) dir = 0;
     return dir;
 }
 
@@ -133,6 +166,27 @@ void Homing::found(Planner &p) {
     p.target = 0;
     p.dir = 0;
     p.past = 0;
+    p.creeping = false;
+    p.settleLeft = 0;
+}
+
+bool Debounce::sample(bool raw, uint8_t n) {
+    if (raw) { if (level < n) level++; }
+    else if (level > 0) level--;
+    if (!on && level >= n) { on = true; return true; }
+    if (on && level == 0) { on = false; return true; }
+    return false;
+}
+
+bool Drive::update(int want, uint32_t now, uint32_t reverseMs) {
+    int next = want;
+    if (out != 0 && want == -out) next = 0;                     // the other way: by way of a stop
+    else if (out == 0 && want != 0 && want == -last && now - since < reverseMs) next = 0;   // ... and a pause
+    if (next == out) return false;
+    if (out != 0) last = out;
+    out = next;
+    since = now;
+    return true;
 }
 
 }  // namespace motion

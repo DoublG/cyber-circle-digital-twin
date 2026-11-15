@@ -47,18 +47,30 @@ function shown(hex, offColor) {          // dim LEDs brighter on screen, so they
   const k = m < 140 ? 140 / m : 1, c = x => Math.min(255, Math.round(x * k));
   return `rgb(${c(r)},${c(g)},${c(b)})`;
 }
+function glow(hex) {                    // the plate tinted towards the LED's colour, as much as it is bright
+  const v = parseInt(hex.slice(1), 16), r = v >> 16, g = (v >> 8) & 255, b = v & 255, m = Math.max(r, g, b);
+  if (m < 30) return 'none';            // (as the game's tile_glow shader: dark = the plain white plate)
+  const a = 0.8 * m / 255, k = 255 / m, P = [220, 220, 214];
+  const mix = (x, i) => Math.round(P[i] * (1 - a) + x * k * a);
+  return `rgb(${mix(r, 0)},${mix(g, 1)},${mix(b, 2)})`;
+}
 async function tick() {
   try {
     const s = await (await fetch('/state')).json();
     $('mac').textContent = s.mac; $('off').style.display = 'none';
     s.ring.forEach((c, i) => $('led_' + i).setAttribute('fill', shown(c, '#262626')));
+    (s.inner || []).forEach((c, i) => $('inled_' + i) && $('inled_' + i).setAttribute('fill', shown(c, '#262626')));
+    (s.inner || s.ring).forEach((c, i) => {   // (the stroke too: no hairline between the sectors)
+      const el = $('glow_' + i), col = glow(c);
+      if (el) { el.setAttribute('fill', col); el.setAttribute('stroke', col); }
+    });
     s.hearts.forEach((c, i) => $('heart_' + i).setAttribute('fill', shown(c, '#260006')));
     s.icons.forEach((c, i) => {
       const g = $('icon_' + ICONS[i]), col = shown(c, '#8f8f8a');
       g.setAttribute('stroke', col);
       g.style.filter = c === '#000000' ? 'none' : `url(#glow) drop-shadow(0 0 10px ${col})`;
     });
-    $('status').setAttribute('fill', shown(s.status, '#262626'));
+    if ($('status')) $('status').setAttribute('fill', shown(s.status, '#262626'));
     $('log').textContent = s.log.join('\n');
   } catch (e) { $('off').style.display = 'inline'; }
   setTimeout(tick, 60);
@@ -140,11 +152,19 @@ static void answer(int fd, const std::string &req, const CRGB *leds, const std::
             for (int i = 0; i < n; i++) s += (i ? ",\"" : "\"") + hex(leds[first + i]) + "\"";
             return s + "]";
         };
+        auto innerArr = [&]() {                 // the inner ring in its own order (LED 0 at the robot, clockwise)
+            std::string s = "[";
+            for (int i = 0; i < INNER_COUNT; i++) {
+                int k = (((INNER_REVERSE ? -i : i) + INNER_OFFSET) % INNER_COUNT + INNER_COUNT) % INNER_COUNT;
+                s += (i ? ",\"" : "\"") + hex(leds[INNER_FIRST + k]) + "\"";
+            }
+            return s + "]";
+        };
         std::string lg = "[";
         for (auto &l : log) lg += (lg.size() > 1 ? "," : "") + jsonStr(l);
         reply(fd, "application/json",
               "{\"mac\":" + jsonStr(mac) + ",\"ring\":" + arr(RING_FIRST, RING_COUNT) + ",\"hearts\":" + arr(HEART_FIRST, HEART_COUNT) +
-                  ",\"icons\":" + arr(ICON_FIRST, 4) + ",\"status\":\"" + hex(leds[STATUS_LED]) + "\",\"log\":" + lg + "]}");
+                  ",\"icons\":" + arr(ICON_FIRST, 4) + (INNER_COUNT > 0 ? ",\"inner\":" + innerArr() : std::string()) + ",\"status\":\"" + (STATUS_LED >= 0 ? hex(leds[STATUS_LED < 0 ? 0 : STATUS_LED]) : std::string("#000000")) + "\",\"log\":" + lg + "]}");
     } else if (path.rfind("/press", 0) == 0) {
         int i = -1, down = 0;
         sscanf(path.c_str(), "/press?i=%d&down=%d", &i, &down);

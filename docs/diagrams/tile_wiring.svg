@@ -1,15 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1400" height="960" viewBox="0 0 1400 960" font-family="Helvetica, Arial, sans-serif">
 <rect width="100%" height="100%" fill="#ffffff"/>
 <text x="24" y="38" font-size="24" text-anchor="start" font-weight="700" fill="#24292f">One tile – wiring</text>
-<text x="24" y="62" font-size="13" text-anchor="start" font-weight="400" fill="#57606a">ESP32 module with Ethernet (default WT32-ETH01), one WS2812B chain of 58 LEDs, 4 pressure sensors (FSR). Pins: firmware/tile/include/config.h</text>
+<text x="24" y="62" font-size="13" text-anchor="start" font-weight="400" fill="#57606a">ESP32 module with Ethernet (default WT32-ETH01), one chain of 105 12 V LEDs (WS2815), 4 pressure sensors (FSR). Pins: firmware/tile/include/config.h</text>
 <rect x="20" y="90" width="330" height="400" rx="14" fill="#ffebe9" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
 <text x="34" y="110" font-size="13" text-anchor="start" font-weight="700" fill="#57606a">POWER</text>
 <rect x="40" y="120" width="290" height="70" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
-<text x="52" y="142" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">12 V DC in  (the ATX in the robot)</text>
-<text x="52" y="170.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">its 12 V rail · 2-core 1.5 mm², fuse 2 A per tile</text>
+<text x="52" y="142" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">12 V DC in  (the tiles&#x27; 12 V supply)</text>
+<text x="52" y="170.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">2-core 1.5 mm², fuse 3 A per tile</text>
+<text x="52" y="185.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">the LEDs run on it directly</text>
 <rect x="40" y="230" width="290" height="80" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
-<text x="52" y="252" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">DC-DC buck 12 V → 5 V, 5 A</text>
-<text x="52" y="281.5" font-size="12" text-anchor="start" font-weight="400" fill="#57606a">(or a local 5 V / 5 A supply)</text>
+<text x="52" y="252" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">DC-DC buck 12 V → 5 V, ≥ 1 A</text>
+<text x="52" y="281.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">only the ESP32 + the 74AHCT125</text>
 <text x="52" y="297.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">set to 5.1 V before connecting</text>
 <polyline points="120,190 120,230" fill="none" stroke="#a40e26" stroke-width="2.2" stroke-linejoin="round"/>
 <polygon points="120.0,230.0 115.9,220.9 124.1,220.9" fill="#a40e26"/>
@@ -19,9 +20,9 @@
 <text x="248" y="214" font-size="11" text-anchor="start" font-weight="700" fill="#24292f">GND</text>
 <rect x="40" y="350" width="290" height="120" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
 <text x="52" y="372" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">5 V rail (terminal block)</text>
-<text x="52" y="401.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">1000 µF / 10 V electrolytic across</text>
-<text x="52" y="417.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">+5 V – GND at the LED input</text>
-<text x="52" y="433.5" font-size="12" text-anchor="start" font-weight="400" fill="#57606a">(protects the first LED at power-on)</text>
+<text x="52" y="401.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">ESP32 + level shifter (~0.3 A)</text>
+<text x="52" y="417.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">1000 µF / 25 V across +12 V – GND</text>
+<text x="52" y="433.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">at the LED input (power-on)</text>
 <text x="52" y="449.5" font-size="12" text-anchor="start" font-weight="400" fill="#24292f">all grounds joined here</text>
 <polyline points="120,310 120,350" fill="none" stroke="#cf222e" stroke-width="2.2" stroke-linejoin="round"/>
 <polygon points="120.0,350.0 115.9,340.9 124.1,340.9" fill="#cf222e"/>
@@ -84,7 +85,7 @@
 <polygon points="1250.0,290.0 1245.9,280.9 1254.1,280.9" fill="#9a6700"/>
 <text x="1258" y="250" font-size="11" text-anchor="start" font-weight="700" fill="#9a6700">DIN</text>
 <rect x="1150" y="290" width="230" height="92" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
-<text x="1162" y="312" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Ring</text>
+<text x="1162" y="312" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Outer ring</text>
 <text x="1162" y="340.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">48 LEDs  #0–47</text>
 <text x="1162" y="355.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">#0 = LED_00, facing the robot,</text>
 <text x="1162" y="370.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">then clockwise seen from above</text>
@@ -92,31 +93,31 @@
 <polygon points="1250.0,402.0 1245.9,392.9 1254.1,392.9" fill="#9a6700"/>
 <text x="1258" y="396" font-size="10" text-anchor="start" font-weight="600" fill="#9a6700">DOUT → DIN</text>
 <rect x="1150" y="402" width="230" height="92" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
-<text x="1162" y="424" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Hearts</text>
-<text x="1162" y="452.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">5 LEDs  #48–52</text>
-<text x="1162" y="467.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">heart 1 (nearest the logo)</text>
-<text x="1162" y="482.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">first</text>
+<text x="1162" y="424" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Inner ring</text>
+<text x="1162" y="452.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">48 LEDs  #48–95</text>
+<text x="1162" y="467.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">around the logo: shows what</text>
+<text x="1162" y="482.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">the outer ring shows</text>
 <polyline points="1250,494 1250,514" fill="none" stroke="#9a6700" stroke-width="2.2" stroke-linejoin="round"/>
 <polygon points="1250.0,514.0 1245.9,504.9 1254.1,504.9" fill="#9a6700"/>
 <text x="1258" y="508" font-size="10" text-anchor="start" font-weight="600" fill="#9a6700">DOUT → DIN</text>
 <rect x="1150" y="514" width="230" height="92" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
-<text x="1162" y="536" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Icons</text>
-<text x="1162" y="564.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">4 LEDs  #53–56</text>
-<text x="1162" y="579.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">under the glass: Square,</text>
-<text x="1162" y="594.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Triangle, Cross, Circle</text>
+<text x="1162" y="536" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Hearts</text>
+<text x="1162" y="564.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">5 LEDs  #96–100</text>
+<text x="1162" y="579.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">heart 1 (nearest the logo)</text>
+<text x="1162" y="594.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">first</text>
 <polyline points="1250,606 1250,626" fill="none" stroke="#9a6700" stroke-width="2.2" stroke-linejoin="round"/>
 <polygon points="1250.0,626.0 1245.9,616.9 1254.1,616.9" fill="#9a6700"/>
 <text x="1258" y="620" font-size="10" text-anchor="start" font-weight="600" fill="#9a6700">DOUT → DIN</text>
 <rect x="1150" y="626" width="230" height="92" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
-<text x="1162" y="648" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Status</text>
-<text x="1162" y="676.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">1 LED  #57</text>
-<text x="1162" y="691.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">blue net · amber no place</text>
-<text x="1162" y="706.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">green ready · red no network</text>
-<polyline points="330,365 380,365 380,100 1360,100 1360,290" fill="none" stroke="#cf222e" stroke-width="2.6" stroke-linejoin="round"/>
-<polygon points="1360.0,290.0 1355.9,280.9 1364.1,280.9" fill="#cf222e"/>
-<text x="1352" y="94" font-size="11.5" text-anchor="end" font-weight="700" fill="#cf222e">+5 V to the LEDs, 1.0 mm² + GND alongside: into the ring at its start (#0) and its end (#47)</text>
-<polyline points="1360,100 1392,100 1392,340 1380,340" fill="none" stroke="#cf222e" stroke-width="2.6" stroke-linejoin="round"/>
-<polygon points="1380.0,340.0 1389.1,335.9 1389.1,344.1" fill="#cf222e"/>
+<text x="1162" y="648" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Buttons</text>
+<text x="1162" y="676.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">4 LEDs  #101–104</text>
+<text x="1162" y="691.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">under the pucks: Square,</text>
+<text x="1162" y="706.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Triangle, Cross, Circle</text>
+<polyline points="330,150 380,150 380,100 1360,100 1360,290" fill="none" stroke="#a40e26" stroke-width="2.6" stroke-linejoin="round"/>
+<polygon points="1360.0,290.0 1355.9,280.9 1364.1,280.9" fill="#a40e26"/>
+<text x="1352" y="94" font-size="11.5" text-anchor="end" font-weight="700" fill="#a40e26">+12 V to the LEDs, 1.0 mm² + GND alongside: into the outer ring at its start (#0) and its end (#47)</text>
+<polyline points="1360,100 1392,100 1392,340 1380,340" fill="none" stroke="#a40e26" stroke-width="2.6" stroke-linejoin="round"/>
+<polygon points="1380.0,340.0 1389.1,335.9 1389.1,344.1" fill="#a40e26"/>
 <polyline points="1010,240 1010,270" fill="none" stroke="#cf222e" stroke-width="2.2" stroke-linejoin="round"/>
 <text x="1018" y="262" font-size="10.5" text-anchor="start" font-weight="600" fill="#cf222e">5 V + GND</text>
 <rect x="20" y="520" width="470" height="420" rx="14" fill="#dafbe1" stroke="#8c959f" stroke-width="1.5" stroke-dasharray="6 4"/>
@@ -142,7 +143,7 @@
 <text x="200" y="755" font-size="10" text-anchor="start" font-weight="400" fill="#57606a">optional, pin → GND</text>
 <text x="40" y="840" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Pressed = the reading rises above its resting value (measured at power-up:</text>
 <text x="40" y="856" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">nobody on the tile then) by SENSOR_PRESS (600) – released below 350.</text>
-<text x="40" y="878" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Shielded 2-core or twisted pair to each FSR; keep away from the LED 5 V.</text>
+<text x="40" y="878" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Shielded 2-core or twisted pair to each FSR; keep away from the LED power.</text>
 <rect x="300" y="546" width="150" height="28" rx="4" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
 <text x="312" y="564" font-size="12" text-anchor="start" font-weight="700" fill="#24292f">Square</text>
 <text x="440" y="564" font-size="12" text-anchor="end" font-weight="700" fill="#9a6700">IO32</text>
@@ -184,17 +185,17 @@
 <polygon points="788.0,416.0 797.1,411.9 797.1,420.1" fill="#6e7781"/>
 <rect x="520" y="620" width="600" height="153.5" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
 <text x="532" y="640" font-size="12.5" text-anchor="start" font-weight="700" fill="#24292f">Power budget &amp; choices</text>
-<text x="532" y="662" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">LEDs: 58 × 60 mA = 3.5 A at full white; BRIGHTNESS 160 → ≤ 2.2 A  ⇒  5 V / 5 A buck</text>
-<text x="532" y="678.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">ESP32 + Ethernet: ~250 mA. One tile ≈ 12 W max (≈ 1.1 A at 12 V); 13 tiles ≈ 15 A on 12 V</text>
-<text x="532" y="695.0" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">Why 12 V: 5 V over 10 m of cable loses volts; the ATX 12 V rail to each tile, 5 V made there</text>
-<text x="532" y="711.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">Level shifter: WS2812B at 5 V wants ≥ 3.5 V data; 3.3 V often works, not always</text>
+<text x="532" y="662" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">LEDs (12 V, WS2815 ~20 mA each): 105 → ~2.1 A full white; BRIGHTNESS 160 → ~1.3 A</text>
+<text x="532" y="678.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">ESP32 + Ethernet: ~250 mA at 5 V (~0.1 A at 12 V)  ⇒  fuse 3 A per tile; LED_MAX_MA 2500</text>
+<text x="532" y="695.0" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">13 tiles: ~18 A on 12 V at BRIGHTNESS 160, ~29 A full white: the tiles&#x27; own 12 V supply</text>
+<text x="532" y="711.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">Level shifter: the LEDs&#x27; data wants 5 V logic; 3.3 V often works, not always</text>
 <text x="532" y="728.0" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">Other modules: Olimex ESP32-POE (ETH addr 0, power 12, clock GPIO17 out: config.h) – PoE</text>
 <text x="532" y="744.5" font-size="11.5" text-anchor="start" font-weight="400" fill="#24292f">802.3af gives only ~13 W: lower BRIGHTNESS to ≤ 100 or keep the 12 V feed for the LEDs</text>
 <text x="532" y="761.0" font-size="11.5" text-anchor="start" font-weight="700" fill="#24292f">Always wired: every tile on Ethernet (there is no wifi build)</text>
 <rect x="1150" y="760" width="250" height="170" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1.5"/>
 <text x="1162" y="780" font-size="12" text-anchor="start" font-weight="700" fill="#24292f">Legend</text>
 <polyline points="1164,796 1210,796" fill="none" stroke="#a40e26" stroke-width="2.2" stroke-linejoin="round"/>
-<text x="1222" y="800" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">12 V (ATX)</text>
+<text x="1222" y="800" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">12 V (tiles&#x27; supply)</text>
 <polyline points="1164,816 1210,816" fill="none" stroke="#cf222e" stroke-width="2.2" stroke-linejoin="round"/>
 <text x="1222" y="820" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">5 V</text>
 <polyline points="1164,836 1210,836" fill="none" stroke="#e16f24" stroke-width="2.2" stroke-linejoin="round"/>

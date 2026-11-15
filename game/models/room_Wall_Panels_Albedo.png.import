@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://cwnlvwv2i75pa"
-path="res://.godot/imported/room_Wall_Panels_Albedo.png-e730f69d7982e8a6eea18172286d730d.ctex"
+path.s3tc="res://.godot/imported/room_Wall_Panels_Albedo.png-e730f69d7982e8a6eea18172286d730d.s3tc.ctex"
+path.etc2="res://.godot/imported/room_Wall_Panels_Albedo.png-e730f69d7982e8a6eea18172286d730d.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "be74ba2dedaf6151e96b13e35665d9b3"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://models/room_Wall_Panels_Albedo.png"
-dest_files=["res://.godot/imported/room_Wall_Panels_Albedo.png-e730f69d7982e8a6eea18172286d730d.ctex"]
+dest_files=["res://.godot/imported/room_Wall_Panels_Albedo.png-e730f69d7982e8a6eea18172286d730d.s3tc.ctex", "res://.godot/imported/room_Wall_Panels_Albedo.png-e730f69d7982e8a6eea18172286d730d.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +42,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

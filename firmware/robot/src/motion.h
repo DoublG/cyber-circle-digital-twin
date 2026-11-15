@@ -17,6 +17,7 @@ struct Config {
     int sides = 13;         // marks per turn (= robot sides = floor tiles)
     int minPos = -19;       // the window, in marks from the start (-1.5 turns)
     int maxPos = 19;        // (+1.5 turns)
+    int settleTries = 2;    // coasted off the target mark: creep back onto it this often at most
 };
 
 // The absolute position for `side` (0 .. sides-1) closest to `pos` inside the
@@ -29,6 +30,9 @@ int unwound(int pos, const Config &c);
 
 // Marks to turns (for the state report) and the side a position faces.
 float turns(int pos, const Config &c);
+// The cable window (in turns) as it may be used: inside the hard limits, the
+// start position (0) inside it; not a number: the default. True: it was changed.
+bool limitWindow(float &lo, float &hi, float hardLo, float hardHi, float defaultLo, float defaultHi);
 int sideOf(int pos, const Config &c);
 
 class Planner {
@@ -48,6 +52,13 @@ public:
     int past = 0;           // the head left the last mark this way (0: on a mark) - a
                             // DC motor coasts past the mark it stops on: back over it
                             // again is the same mark, not the next one
+    int settleLeft = 0;     // creeps back onto the target still allowed (set on arrival)
+    bool creeping = false;  // creeping back onto the target mark now
+
+    // Arrived, the head has stopped and coasted off the target mark (the motor -
+    // a used drill motor - coasts a different distance every time): creep back
+    // onto it, slowly. true: the motor runs again (dir), the mark ends it.
+    bool creepBack();
 
     // The mark sensor: the head comes onto a mark / leaves it (`moving`: the way
     // it turns, also while coasting after a stop).
@@ -92,6 +103,32 @@ public:
 private:
     int origin = 0;         // the estimated start of the search (marks from home)
     int span = 0;
+};
+
+// A sensor read at a fixed rate (the control task: 1 kHz), debounced by
+// integration: every active sample counts up, every inactive one down; `on`
+// changes at n and at 0. A spike shorter than n samples is never an edge, and
+// - unlike a lockout after the first edge - a bouncing edge cannot swallow the
+// real one that follows it.
+struct Debounce {
+    bool on = false;
+    uint8_t level = 0;
+
+    void reset(bool v, uint8_t n) { on = v; level = v ? n : 0; }
+    bool sample(bool raw, uint8_t n);   // true: `on` changed with this sample
+};
+
+// What the planner wants -> what the H-bridge gets. Never straight from one
+// way to the other: first a stop (the brake), and the head stands still for
+// reverseMs before it is driven the other way (the gears, the bridge, the cable).
+class Drive {
+public:
+    int out = 0;            // the bridge now: -1 / 0 (brake) / +1
+    int last = 0;           // the way it drove last: the head still turns that way while it coasts
+    uint32_t since = 0;     // when `out` changed last (the soft start, the pause before reversing)
+
+    bool update(int want, uint32_t now, uint32_t reverseMs);   // true: `out` changed
+    int turning() const { return out != 0 ? out : last; }
 };
 
 }  // namespace motion

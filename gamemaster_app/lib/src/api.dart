@@ -81,6 +81,46 @@ class Hardware {
   }
 }
 
+/// The current event's selection (the gamemasters choose it, a new event: all as normal):
+/// which games are played and which questions asked.
+class EventGame {
+  EventGame(this.type, this.title, this.off);
+  final String type;             // quiz, cyclone, reaction, rhythm, simon, zwarte_piet, code
+  final String title;
+  final bool off;                // not played at this event
+}
+
+class EventQuestion {
+  EventQuestion(this.id, this.category, this.question, this.minAge, this.maxAge, this.active, this.event, this.on);
+  final int id;
+  final String category;
+  final String question;
+  final int minAge, maxAge;
+  final bool active;             // normally asked (the question's own setting)
+  final bool? event;             // this event's choice, null = as normal
+  final bool on;                 // asked now
+
+  factory EventQuestion.fromJson(Map<String, dynamic> j) => EventQuestion(
+      (j['id'] as num).toInt(), '${j['category'] ?? ''}', '${j['question']}', (j['min_age'] as num? ?? 0).toInt(),
+      (j['max_age'] as num? ?? 99).toInt(), j['active'] == 1 || j['active'] == true,
+      j['event'] == null ? null : (j['event'] == 1 || j['event'] == true), j['on'] == 1 || j['on'] == true);
+}
+
+class Selection {
+  Selection(this.eventName, this.games, this.questions);
+  final String eventName;
+  final List<EventGame> games;
+  final List<EventQuestion> questions;
+
+  factory Selection.fromJson(Map<String, dynamic> j) => Selection(
+        '${(j['event'] as Map?)?['name'] ?? ''}',
+        [for (final g in (j['games'] as List? ?? [])) EventGame('${g['type']}', '${g['title']}', g['off'] == true)],
+        [for (final q in (j['questions'] as List? ?? [])) EventQuestion.fromJson(q as Map<String, dynamic>)],
+      );
+
+  List<String> get gamesOff => [for (final g in games) if (g.off) g.type];
+}
+
 class Config {
   Config(this.mqtt, this.prefix, this.floorTiles, this.places, this.t01Clock);
   final String mqtt;             // ws://host:port of the broker
@@ -181,6 +221,17 @@ class Api {
   /// Sign of life: this device, used by this gamemaster now (0 = logged out).
   Future<void> session(String device, int gamemaster) =>
       _send('POST', '/api/session', {'device': device, 'gamemaster': gamemaster});
+
+  /// This event: the games and the questions (on / off).
+  Future<Selection> selection() async =>
+      Selection.fromJson(await _send('GET', '/api/selection') as Map<String, dynamic>);
+
+  /// Change this event's selection: gamesOff (the whole list); questions {id: on / off / null = as normal}.
+  Future<Selection> setSelection({List<String>? gamesOff, Map<int, bool?> questions = const {}}) async =>
+      Selection.fromJson(await _send('PUT', '/api/selection', {
+        if (gamesOff != null) 'games_off': gamesOff,
+        'questions': {for (final e in questions.entries) '${e.key}': e.value},
+      }) as Map<String, dynamic>);
 
   /// Cancel an invite / remove a player from their place.
   Future<void> leave(int tile) => _send('POST', '/api/tiles/$tile/leave');

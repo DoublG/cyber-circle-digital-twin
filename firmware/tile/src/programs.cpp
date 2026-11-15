@@ -8,7 +8,10 @@ namespace programs {
 
 static JsonDocument doc;                    // the program (kept until the next one)
 static JsonObject prog;
-static String game, id;
+enum class Game : uint8_t { Reaction, Simon, Cyclone, Clock };
+static Game game = Game::Reaction;
+static String id;
+static bool loaded = false;                 // a program was taken (a start needs one)
 static bool running = false, paused = false;
 static bool armed = false;                  // a program arrived, not started yet: the dim ring
 static float clockMs = 0;                   // ms since the start (tile-local; stands still when paused)
@@ -16,12 +19,15 @@ static CRGB pRing[RING_COUNT];
 static CRGB pIcons[4];
 static int n = 0;                           // results counter per start ("n": the game drops duplicates)
 static uint32_t flashUntil = 0;             // a short result flash on the ring
+static bool cdOn = false;                   // the round's countdown LED (all rounds but Cyclone)
+static float cdLength = 0, cdLeft = 0;      // ms
 
 // reaction
 static int next = 0, openStep = -1, streak = 0;
 static float openedAt = 0, window = 0;
 // simon
-static String phase;                        // pause / watch / repeat (simon), run / hold (cyclone)
+enum class Phase : uint8_t { None, Pause, Watch, Repeat, Run, Hold };   // simon: pause, watch, repeat; cyclone: run, hold
+static Phase phase = Phase::None;
 static int level = 0, index = 0, best = 0;
 static bool lit = false;
 static float due = 0, turnStart = 0;
@@ -112,7 +118,7 @@ static float showOn() {
 }
 
 static void simonPause() {
-    phase = "pause";
+    phase = Phase::Pause;
     pIconsOnly(-1, CRGB::Black);
     due = clockMs + prog["pause_ms"].as<float>();
 }
@@ -124,7 +130,7 @@ static void progress() {                    // the ring as a progress bar while 
 
 static void simonEnd(const char *reason) {
     running = false;
-    phase = "";
+    phase = Phase::None;
     pIconsOnly(-1, CRGB::Black);
     JsonDocument r;
     r["done"] = true;
@@ -151,8 +157,8 @@ static void simonFail(int button) {         // wrong icon or too slow: back to t
 static void simonUpdate() {
     if (clockMs >= prog["length"].as<float>()) { simonEnd("time"); return; }
     if (clockMs < due) return;
-    if (phase == "pause") {
-        phase = "watch";
+    if (phase == Phase::Pause) {
+        phase = Phase::Watch;
         index = 0;
         lit = false;
         pFill(CRGB::Black);
@@ -160,7 +166,7 @@ static void simonUpdate() {
         r["level"] = level;
         r["outcome"] = "watch";
         result(r, true);
-    } else if (phase == "watch") {
+    } else if (phase == Phase::Watch) {
         if (!lit) {
             JsonObject step = prog["sequence"][index];
             CRGB c = parseColor(step["color"]);
@@ -175,7 +181,7 @@ static void simonUpdate() {
             index++;
             due = clockMs + prog["show_off"].as<float>();
             if (index >= level) {           // the player's turn
-                phase = "repeat";
+                phase = Phase::Repeat;
                 index = 0;
                 turnStart = clockMs;
                 due = clockMs + prog["input_ms"].as<float>();
@@ -187,13 +193,13 @@ static void simonUpdate() {
                 result(r, true);
             }
         }
-    } else if (phase == "repeat") {
+    } else if (phase == Phase::Repeat) {
         simonFail(-1);                      // too slow
     }
 }
 
 static void simonPress(int button) {
-    if (phase != "repeat") return;
+    if (phase != Phase::Repeat) return;
     JsonObject step = prog["sequence"][index];
     if (button != iconByName(step["button"])) { simonFail(button); return; }
     pIcons[button] = parseColor(step["color"]);
@@ -225,12 +231,16 @@ static void simonPress(int button) {
 
 static void cycloneTurn() {
     JsonArray targets = prog["targets"];
+    if (targets.size() == 0) {              // (receive() does not take such a program: never divide by 0)
+        running = false;
+        return;
+    }
     JsonObject t = targets[turnCount % targets.size()];
     turnCount++;
     target = t["led"];
     dir = t["dir"];
     pos = (target + RING_COUNT / 2) % RING_COUNT;   // start opposite the red LED
-    phase = "run";
+    phase = Phase::Run;
 }
 
 static int offset() {                       // LEDs from the red one (+ = past it)
@@ -251,7 +261,7 @@ static void cycloneDraw() {
 static void cycloneUpdate(float dt) {
     if (clockMs >= prog["length"].as<float>()) {
         running = false;
-        phase = "";
+        phase = Phase::None;
         pFill(CRGB::Black);
         JsonDocument r;
         r["done"] = true;
@@ -260,7 +270,7 @@ static void cycloneUpdate(float dt) {
         result(r, true);
         return;
     }
-    if (phase == "hold") {
+    if (phase == Phase::Hold) {
         if (clockMs >= due) cycloneTurn();
         return;
     }
@@ -270,7 +280,7 @@ static void cycloneUpdate(float dt) {
 }
 
 static void cyclonePress() {
-    if (phase != "run") return;
+    if (phase != Phase::Run) return;
     int yellow = prog["levels"][level]["yellow"];
     int off = offset();
     const char *outcome = off == 0 ? "red" : (abs(off) <= yellow ? "yellow" : "miss");
@@ -288,7 +298,7 @@ static void cyclonePress() {
         level = 0;                          // a miss: back to the first level
     }
     pFill(!strcmp(outcome, "red") ? GREEN : (!strcmp(outcome, "yellow") ? YELLOW : CRGB::Red));
-    phase = "hold";
+    phase = Phase::Hold;
     due = clockMs + prog["result_ms"].as<float>();
 }
 
@@ -299,16 +309,26 @@ void receive(JsonObjectConst msg) {
         doc.clear();
         doc.set(msg["program"]);
         prog = doc.as<JsonObject>();
-        game = prog["game"] | "reaction";
+        const char *g = prog["game"] | "";
+        game = !strcmp(g, "simon") ? Game::Simon : !strcmp(g, "cyclone") ? Game::Cyclone
+             : !strcmp(g, "clock") ? Game::Clock : Game::Reaction;
         id = prog["id"] | "";
         running = false;
-        armed = game != "clock";            // (the clock program shows nothing)
+        loaded = true;
+        // What comes in is not trusted to be whole (a cut-off or hand-made message):
+        // a program the tile cannot run is not taken, rather than half run.
+        if (game == Game::Cyclone && (prog["targets"].size() == 0 || prog["levels"].size() == 0)) {
+            Serial.printf("program %s: cyclone without targets or levels - not taken\n", id.c_str());
+            loaded = false;
+            id = "";
+        }
+        armed = loaded && game != Game::Clock;  // (the clock program shows nothing)
         if (armed) {
             pFill(CRGB(38, 38, 38));        // armed: dim white ring
             pIconsOnly(-1, CRGB::Black);
         }
     }
-    if (!msg["start"].isNull() && id == String((const char *)(msg["start"] | ""))) {
+    if (loaded && !msg["start"].isNull() && id == String((const char *)(msg["start"] | ""))) {
         running = true;
         armed = false;
         clockMs = 0;
@@ -317,11 +337,11 @@ void receive(JsonObjectConst msg) {
         n = 0;
         streak = 0;
         best = 0;
-        if (game != "clock") pFill(CRGB::Black);
-        if (game == "simon") {
+        if (game != Game::Clock) pFill(CRGB::Black);
+        if (game == Game::Simon) {
             level = prog["start_level"];
             simonPause();
-        } else if (game == "cyclone") {
+        } else if (game == Game::Cyclone) {
             level = 0;
             turnCount = 0;
             pIconsOnly(-1, CRGB::Black);
@@ -356,18 +376,29 @@ void receive(JsonObjectConst msg) {
         pFill(CRGB::Black);
         pIconsOnly(-1, CRGB::Black);
     }
+    if (msg["countdown"].is<JsonObjectConst>()) {
+        cdLength = msg["countdown"]["length"] | 0.0f;
+        cdLeft = msg["countdown"]["left"] | cdLength;
+        cdOn = cdLength > 0 && cdLeft > 0;
+    } else if (msg["countdown"].is<bool>() && !msg["countdown"].as<bool>()) {
+        cdOn = false;
+    }
     if (!msg["pause"].isNull()) paused = msg["pause"];
     if (!msg["stop"].isNull()) {
         shown = false;
         running = false;
         armed = false;
         openStep = -1;
-        phase = "";
+        phase = Phase::None;
         pFill(CRGB::Black);
     }
 }
 
 void update(uint32_t dtMs) {
+    if (cdOn && !paused) {                  // the countdown runs on the tile's own clock (frozen while paused)
+        cdLeft -= dtMs;
+        if (cdLeft <= 0) cdOn = false;
+    }
     if (piet && !paused) {                  // the light with a fading tail
         pietPos = fmodf(pietPos + dtMs / 1000.0f * pietSpeed, RING_COUNT);
         for (int i = 0; i < RING_COUNT; i++) {
@@ -376,31 +407,36 @@ void update(uint32_t dtMs) {
         }
     }
     if (blinkIcon >= 0 && (int32_t)(millis() - blinkUntil) > 0) {   // (wrap-safe: millis() wraps after 49.7 days)
-        if (phase == "repeat") pIcons[blinkIcon] = REPEAT_ICON;
+        if (phase == Phase::Repeat) pIcons[blinkIcon] = REPEAT_ICON;
         blinkIcon = -1;
     }
     if (flashUntil && (int32_t)(millis() - flashUntil) > 0) {
         flashUntil = 0;
-        if (game == "reaction" && openStep < 0) pFill(CRGB::Black);
-        if (game == "simon" && phase == "repeat") progress();
+        if (game == Game::Reaction && openStep < 0) pFill(CRGB::Black);
+        if (game == Game::Simon && phase == Phase::Repeat) progress();
     }
     if (!running || paused) return;
     clockMs += dtMs;
-    if (game == "clock") return;            // (only the time)
-    if (game == "simon") simonUpdate();
-    else if (game == "cyclone") cycloneUpdate(dtMs);
+    if (game == Game::Clock) return;            // (only the time)
+    if (game == Game::Simon) simonUpdate();
+    else if (game == Game::Cyclone) cycloneUpdate(dtMs);
     else reactionUpdate();
 }
 
 void press(int icon) {
     if (!running) return;
-    if (game == "clock") return;
-    if (game == "simon") simonPress(icon);
-    else if (game == "cyclone") cyclonePress();
+    if (game == Game::Clock) return;
+    if (game == Game::Simon) simonPress(icon);
+    else if (game == Game::Cyclone) cyclonePress();
     else if (openStep >= 0) close(icon);
 }
 
-bool ownsRing() { return piet || shown || (running && game != "clock") || armed || flashUntil; }
+int countdownLed() {
+    if (!cdOn) return -1;
+    return constrain((int)((1.0f - cdLeft / cdLength) * RING_COUNT), 0, RING_COUNT - 1);
+}
+
+bool ownsRing() { return piet || shown || (running && game != Game::Clock) || armed || flashUntil; }
 
 bool clockNow(String &programId, uint32_t &ms) {
     if (!running) return false;

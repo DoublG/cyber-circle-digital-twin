@@ -59,7 +59,10 @@ func apply(f: Dictionary, full: bool) -> void:
 ## What changes every frame (sent LIVE_HZ, unreliable): the round's clocks, the robot's head.
 func fast() -> Dictionary:
 	var current := arena.game.current
-	return {"round": current.replica_live() if current else {}, "robot": arena.robot.replica_pose()}
+	var live: Dictionary = current.replica_live() if current else {}
+	if current:
+		live["countdown"] = current.countdown       # (the tiles' green countdown LED)
+	return {"round": live, "robot": arena.robot.replica_pose()}
 
 
 func apply_fast(d: Dictionary) -> void:

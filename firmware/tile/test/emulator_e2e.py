@@ -74,6 +74,13 @@ def click_icon(name):
         page.dispatch_event("#icon_" + name, "pointerup", {"pointerId": 1}); page.wait_for_timeout(250)
 def pump():
     for t in tiles: t.pump()
+def boot_ring():                             # tile A's ring, per quarter: G = green (a step of the start-up sequence), . = not
+    r = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{WEB}/state", timeout=3).read())["ring"]
+    return "".join("G" if all(c == "#1aff40" for c in r[q * 12:q * 12 + 11]) else "." for q in range(4))
+
+def heart_bits():                            # tile A's hearts: 1 = lit (heart 1 first)
+    h = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{WEB}/state", timeout=3).read())["hearts"]
+    return "".join("1" if c == "#ff0d26" else "0" for c in h)
 
 py = os.path.join(ROOT, "control/.venv/bin/python")
 if not os.path.exists(py):
@@ -94,16 +101,22 @@ try:
     devs = until(lambda: {d["device"] for d in call("GET", "/api/tiles")["devices"] if d["online"]} >= {"02:00:00:00:00:0A", "02:00:00:00:00:0B"})
     check(bool(devs), "both emulated tiles online (device/<mac>/hello)")
     tiles[0].save("emu_unplaced")
+    check(until(lambda: boot_ring() == "GGG.", 5), "tile A's ring: 3/4 green - network, broker, the control server's config (no place yet): %s" % boot_ring())
     call("PUT", "/api/tiles/1", {"device": "02:00:00:00:00:0A"})
     call("PUT", "/api/tiles/2", {"device": "02:00:00:00:00:0B"})
     check(until(lambda: b"place: 1" in tiles[0].out), "tile A got its place (device/<mac>/config)")
+    check(until(lambda: boot_ring() == "....", 5), "... assigned: the green goes away")
+    check(until(lambda: heart_bits() == "10000", 2), "... and the hearts show place 1 in binary: %s" % heart_bits())
     time.sleep(1); pump(); tiles[0].save("emu_setup"); shot("web_setup")
     if page:
         check(page.get_attribute("#heart_0", "fill") != page.get_attribute("#heart_1", "fill")
               and page.get_attribute("#heart_1", "fill") == page.get_attribute("#heart_4", "fill"),
               "web view: place 1 in binary on the hearts")
     print("--- a visitor invited on T01, the 4 icons pressed on the emulated tile")
-    call("POST", "/api/mode", {"mode": "closed"}); time.sleep(0.5); call("POST", "/api/mode", {"mode": "open"})
+    check(heart_bits() == "10000", "all through SETUP the hearts keep showing the place: %s" % heart_bits())
+    call("POST", "/api/mode", {"mode": "closed"}); time.sleep(0.5)
+    check(until(lambda: heart_bits() == "00000", 3), "the setup locked: the number goes (%s)" % heart_bits())
+    call("POST", "/api/mode", {"mode": "open"})
     time.sleep(2)
     call("POST", "/api/cmd", {"tile": 1, "register": "Anna", "color": "#ff44cc", "age": 12})
     until(lambda: any(p["tile"] == 1 for p in live()["state"]["pending"]))
@@ -130,6 +143,14 @@ try:
     pump(); tiles[0].save("emu_reaction"); shot("web_reaction")
     res = [m for m in call("GET", f"/api/mqtt/log?since={seq}&filter=tile/1/event")["messages"] if '"result"' in m["payload"]]
     check(len(res) >= 3, f"results from the tile's program: {len(res)} (e.g. {res[0]['payload'][:90] if res else '-'})")
+    print("--- what the hello says about the board; a tile that drops out (its last will)")
+    perf = [t for t in call("GET", "/api/metrics")["tiles"] if t["device"] == "02:00:00:00:00:0B"]
+    check(bool(perf) and perf[0].get("build") and perf[0].get("reset") == "emulator" and perf[0].get("mqtt_dropped") == 0
+          and perf[0].get("stuck") == 0, "Prestaties: build, reset, mqtt_dropped, stuck: %s" % (perf and {k: perf[0].get(k) for k in ("fw", "build", "reset", "mqtt_dropped", "stuck")}))
+    os.kill(tiles[1].pid, 9); gone = time.time()
+    off = until(lambda: any(d["device"] == "02:00:00:00:00:0B" and not d["online"] for d in call("GET", "/api/tiles")["devices"]), 6)
+    check(bool(off), "tile B killed: offline in the control server %.1f s later (not after the 30 s without a hello)" % (time.time() - gone))
+    check(any(d["device"] == "02:00:00:00:00:0A" and d["online"] for d in call("GET", "/api/tiles")["devices"]), "tile A still online")
     print("DONE: %d failure(s)  (terminal frames in %s)" % (fails, S))
 finally:
     for t in tiles: t.stop()

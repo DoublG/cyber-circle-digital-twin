@@ -49,3 +49,14 @@ loudness (-16 LUFS). Loops (`bpm` + `bars`): exactly that many bars from the
 first beat, the end crossfaded into the start (no click), -18 LUFS. A new event
 folder (e.g. `code_cracked`) still has to be triggered by the game
 (`SoundBoard`).
+
+**Styles in `sounds.csv`.** Three families of candidates, to choose between by
+ear: the 1960s electronic studio (`synth_*`, `ritme_synth_*`), a vintage
+polyphonic synthesizer (`cs80_*`, `ritme_cs80_*`), and an orchestral adventure
+score (`orch_*`, `ritme_orch_*`: a symphony orchestra with urgent string
+ostinatos, heroic horns and trumpets, a wordless choir, timpani – in the spirit
+of Murray Gold's music for Doctor Who; the style only, no existing theme). The
+orchestral rows carry a ninth column, `negative`: what the sound must not be
+(synthesizer, drum machine …). Model 1.0 only – without it an orchestra drifts
+back to synthesizers. An orchestra keeps a strict 120 bpm less often than a drum
+machine: of the Ritme loops about one in five passes the tempo check.

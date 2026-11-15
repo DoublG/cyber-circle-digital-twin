@@ -46,6 +46,9 @@
   <div id="gm-online" class="gm-online"></div>
   <h2>Volgende rondes</h2>
   <div id="plan" class="plan"></div>
+  <h2>Dit event <span class="hint" id="event-games-hint">– welke spellen er gespeeld worden; uit = nooit, ook niet
+    als je het hierboven kiest (de gamemaster-app kan dit ook). Een nieuw event: weer alles aan.</span></h2>
+  <div id="event-games" class="randomizer"></div>
   <h2>Randomizer <span class="hint">– welke spellen het lot kan kiezen; een spel dat uit staat speel je alleen
     als je het hierboven zelf kiest (bv. een nieuw spel voor een gekozen publiek)</span></h2>
   <div id="randomizer" class="randomizer"></div>
@@ -66,7 +69,8 @@
   <div class="row layout">
     <svg id="layout-plan" viewBox="-120 -120 240 240" width="260" height="260"></svg>
     <div><p class="hint">Hoe de cirkel in deze zaal staat, zoals een klok van bovenaf: de <b>ingang op 6 uur</b>.
-      Op welk uur staat <b>T01</b>? (Daarna met de klok mee.) De gamemaster-apps tekenen hun plan zo.</p>
+      Op welk uur staat <b>T01</b>? (Daarna met de klok mee.) De gamemaster-apps tekenen hun plan zo.
+      Alleen in <b>SETUP</b>.</p>
       <label>T01 op <select id="t01-clock"></select> uur</label></div>
   </div>
   <h2>Installatie</h2>
@@ -84,7 +88,12 @@
   <h2>Diagnose <span class="hint">– live, elke seconde</span></h2>
   <p class="hint">Om de opstelling te controleren: zet het spel op <b>SETUP</b>. Elk scherm toont dan zijn nummer, zijn
     tegels (online, firmware, adres, kabel), de verbinding en de prestaties. Druk op <b>elke knop van elke tegel</b>:
-    de knop licht op op het scherm en de rij licht hier op. Zo zie je meteen of de juiste tegel op de juiste plaats ligt.</p>
+    de knop licht op op het scherm en de rij licht hier op. Zo zie je meteen of de juiste tegel op de juiste plaats ligt.
+    De tegel zelf: bij het opstarten wordt zijn ring per kwart groen (1/4 netwerk, 2/4 MQTT, 3/4 verbonden met deze
+    server); blijft hij op 3/4 staan, dan heeft hij nog geen plaats. Met een plaats gaat het groen weg en tonen zijn
+    <b>hartjes zijn nummer, binair</b> (hartje 1 = 1, 2 = 2, 3 = 4, 4 = 8, 5 = 16), zolang het spel op SETUP staat.
+    Is alles getest: <b>🔒 Setup vergrendelen</b> – tegels, schermen en de uitlijning van de robot liggen dan vast,
+    de nummers gaan weg – en dan pas <b>▶ Start spel</b>.</p>
   <div id="diag-summary" class="row"></div>
   <table id="diag-places"><thead><tr><th>Plaats</th><th>Tegel</th><th>Status</th><th>Firmware</th><th>IP</th><th>Kabel</th>
     <th>Gezien</th><th>Laatste knop</th></tr></thead><tbody></tbody></table>
@@ -109,11 +118,13 @@
     <label>Draai naar zijde <input type="number" min="0" max="12" id="robot-go" value="0"></label>
     <button class="small" id="robot-go-btn">Draai</button>
   </div>
+  <p id="robot-lock" class="hint"></p>
 </section>
 
 <section id="tab-nodes" class="tab">
   <p class="hint">Elk Godot-proces meldt zich hier aan. Kies welk proces de <b>master</b> is (spellogica,
-    database, tegels); de schermen verbinden met die master.</p>
+    database, tegels); de schermen verbinden met die master. Alleen in <b>SETUP</b> – is de setup vergrendeld,
+    dan kan een ander proces alleen master worden als de gekozen master offline is.</p>
   <table id="nodes"><thead><tr><th>Proces</th><th>Rol</th><th>Adres</th><th>Schermen</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
   <p id="master" class="hint"></p>
 </section>
@@ -211,7 +222,10 @@
     <span class="hint">Kolommen: vraag; antwoord1-4; juist (1-4); optioneel id, categorie, min_leeftijd, max_leeftijd,
       tijd, extra_tekst, uitleg, video, video_wanneer, afbeelding, actief. Met id: die vraag wordt bijgewerkt.</span></div>
   <div id="csv-result" class="hint"></div>
-  <table id="questions"><thead><tr><th>#</th><th>Categorie</th><th>Leeftijd</th><th>Vraag</th><th>Actief</th><th></th></tr></thead><tbody></tbody></table>
+  <div class="row"><span class="hint" id="event-questions-hint"></span>
+    <button class="small" id="event-questions-reset">Dit event: alles zoals normaal</button></div>
+  <table id="questions"><thead><tr><th>#</th><th>Categorie</th><th>Leeftijd</th><th>Vraag</th><th>Actief</th>
+    <th title="Alleen voor het huidige event (ook in de gamemaster-app); een nieuw event begint weer met 'zoals normaal'">Dit event</th><th></th></tr></thead><tbody></tbody></table>
   <dialog id="question-dialog">
     <form id="question-form" method="dialog">
       <h2>Vraag</h2>

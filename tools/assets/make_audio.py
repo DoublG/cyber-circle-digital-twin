@@ -4,7 +4,7 @@
 use - events, marketing - needs a free registration with Stability AI; see
 tools/assets/audio/README.md). The list is tools/assets/audio/sounds.csv:
 
-  name;kind;model;seconds;bpm;bars;variants;prompt
+  name;kind;model;seconds;bpm;bars;variants;prompt[;negative]
     kind     sfx   a sound effect: the silence before it cut, a short fade out
              loop  a seamless loop of `bars` bars at `bpm` (4/4): cut from the
                    first beat, exactly that long, its end crossfaded into its start;
@@ -14,6 +14,8 @@ tools/assets/audio/README.md). The list is tools/assets/audio/sounds.csv:
              pad   the same without a beat (a drone, an atmosphere): no tempo check
     model    small (stable-audio-open-small, up to 11 s, fast) or 1.0 (up to 47 s)
     seconds  how long the model makes it (a loop: a little longer than the bars)
+    negative (optional, model 1.0 only) what it must not sound like - an orchestral
+             score without it drifts to synthesizers and drum machines
 
 Every variant has its own seed (the same seed: the same sound again), written
 as candidates to listen to - nothing goes into the game by itself:
@@ -69,6 +71,7 @@ def read_list():
             r[k] = float(r[k] or 0)
         for k in ("bars", "variants"):
             r[k] = int(r[k] or 0)
+        r["negative"] = (r.get("negative") or "").strip()
     return rows
 
 
@@ -77,7 +80,7 @@ def read_list():
 _loaded = {}
 
 
-def generate(model_name, prompt, seconds, seed):
+def generate(model_name, prompt, seconds, seed, negative=""):
     """[channels, samples] float32 at the model's rate, and the rate."""
     import torch
     from einops import rearrange
@@ -102,6 +105,8 @@ def generate(model_name, prompt, seconds, seed):
     if model_name == "1.0":
         cond["seconds_start"] = 0
         kw = dict(steps=100, cfg_scale=7, sigma_min=0.3, sigma_max=500, sampler_type="dpmpp-3m-sde")
+        if negative:                       # (the small model runs without guidance: nothing to steer away from)
+            kw["negative_conditioning"] = [{"prompt": negative, "seconds_start": 0, "seconds_total": seconds}]
     else:
         kw = dict(steps=8, cfg_scale=1.0, sampler_type="pingpong")
     with torch.no_grad():
@@ -225,7 +230,7 @@ def make(rows, only):
             if kept >= want:
                 break
             print("%s  seed %d  (%s, %g s): %s" % (r["name"], seed, r["model"], r["seconds"], r["prompt"]), flush=True)
-            audio, rate = generate(r["model"], r["prompt"], r["seconds"], seed)
+            audio, rate = generate(r["model"], r["prompt"], r["seconds"], seed, r["negative"])
             extra = ""
             if r["kind"] in ("loop", "pad"):
                 audio = shape_loop(audio, rate, r["bpm"], r["bars"])
@@ -240,6 +245,8 @@ def make(rows, only):
             audio = normalise(audio, rate, r["kind"])
             path = os.path.join(OUT, r["name"], "%s_s%d.ogg" % (r["name"], seed))
             info = "Stable Audio Open %s, seed %d: %s" % (r["model"], seed, r["prompt"])
+            if r["negative"] and r["model"] == "1.0":
+                info += " (not: %s)" % r["negative"]
             if r["kind"] in ("loop", "pad"):
                 info += " | loop %d bars at %g bpm" % (r["bars"], r["bpm"])
                 extra = "  seam %.2f (<= 1: no click)%s" % (seam(audio, rate), extra)
@@ -288,8 +295,11 @@ def install(candidate, event, rows):
     shutil.copyfile(src, dst)
     print("installed:", os.path.relpath(dst, ROOT))
     note = ("loop, %d bars at %g bpm" % (row["bars"], row["bpm"])) if row and row["kind"] in ("loop", "pad") else "sound effect"
+    prompt = row["prompt"] if row else ""
+    if row and row["negative"] and row["model"] == "1.0":
+        prompt += "\" (not: \"%s" % row["negative"]
     line = "| %s | `%s.ogg` | generated with Stable Audio Open %s (Stability AI), seed %s: \"%s\" | — | Stability AI Community License (outputs: ours) | %s |" % (
-        event, name, row["model"] if row else "?", seed, row["prompt"] if row else "", note)
+        event, name, row["model"] if row else "?", seed, prompt, note)
     with open(CREDITS, encoding="utf-8") as f:
         text = f.read()
     head = "## Generated sounds – Stable Audio Open"

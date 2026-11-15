@@ -11,6 +11,7 @@ Gamemaster app in a browser (iPhone): http://<this pc>:8080/gm/ (the Flutter web
                POST /api/games, POST /api/games/{id}/rounds|results|end
   displays     GET /api/master        (where the master is: the Pis connect to it)
   robot        GET|PUT /api/robot (state; the cable window, speeds, smoke), POST /api/robot/cmd (home, stop, smoke)
+               (settings and aligning: in SETUP only; stop and smoke always)
   performance  GET /api/metrics       (every component: fps, frame times, CPU, memory, links; Prestaties tab)
   app          POST /api/players {name, color, age, card?} -> {id};  POST /api/players/{id}/assign {tile?, mobile?}
   website      GET /api/website (is the registration website up? --website=URL of its health endpoint,
@@ -22,6 +23,8 @@ Gamemaster app in a browser (iPhone): http://<this pc>:8080/gm/ (the Flutter web
                GET|PUT /api/texts (the slogans, how to join, per game its name and rules)
                GET /api/mqtt/log?since=&filter= (the raw MQTT traffic)
   gamemaster   POST /api/session {device, gamemaster} (sign of life: who is logged in, on the dashboard)
+  this event   GET|PUT /api/selection {games_off?, questions?: {id: true|false|null}} (which games are
+               played and which questions asked at the current event; a new event: all as normal)
   gamemaster   GET /api/config (where MQTT, the layout), GET /api/cards/{code} (who has this QR card),
                POST /api/players {..., card}, POST /api/players/{id}/assign, POST /api/tiles/{n}/leave
   interface    everything else, live updates from GET /api/live (server-sent events)
@@ -134,6 +137,11 @@ class LivesIn(BaseModel):
     lives: int
 
 
+class SelectionIn(BaseModel):
+    games_off: list[str] | None = None       # the round types not played at this event (the whole list)
+    questions: dict[str, bool | None] = {}   # question id -> on / off at this event, None = as normal
+
+
 class EventIn(BaseModel):
     name: str                                # e.g. "Maker Faire Gent 2026"
 
@@ -231,6 +239,13 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         except ValueError:
             return {}
 
+    def require_setup():
+        """The technical setup (the tiles' places, the installation, the layout, the
+        master of the screens, the robot's alignment) changes in SETUP only: the
+        operator locks it (closed) before the game can open."""
+        if db.setting("mode", "setup") != "setup":
+            raise HTTPException(409, "only in SETUP: unlock the setup first")
+
     def installed():
         """The places of this installation (default: all of them)."""
         try:
@@ -248,6 +263,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
                 link.publish_robot_config(robot_config())
             link.publish_settings(game_settings())
             link.publish_texts(texts())
+            link.publish_selection(db.selection())
         if "loop" in loop:
             for q in list(listeners):
                 loop["loop"].call_soon_threadsafe(q.put_nowait, kind)
@@ -269,6 +285,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
     # what a write to these changes in the database the game works with: it
     # hears it on <prefix>/db and fetches again (keeps the game in sync)
     DB_WRITES = (("/api/players", "players"), ("/api/cards/", "players"), ("/api/questions", "questions"),
+                 ("/api/selection", "questions"),
                  ("/api/games/", "ranking"))
 
     http = {"requests": 0, "ms": 0.0, "errors": 0}     # (the control server's own metrics: Prestaties)
@@ -301,7 +318,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
     def live_snapshot():
         return {"checkpoint": checkpoint_info(),"mqtt": link.online, "state": link.state, "nodes": link.node_list(), "master": link.master,
                 "events": list(link.events), "sounds": link.sounds, "installed": installed(), "devices": link.device_list(), "mode": db.setting("mode", "setup"),
-                "t01_clock": float(db.setting("t01_clock", "12") or 12), "event": db.event(),
+                "t01_clock": float(db.setting("t01_clock", "12") or 12), "event": db.event(), "selection": db.selection(),
                 "website": {k: v for k, v in site.snapshot().items() if k != "history"},
                 "gamemasters_online": online_ref[0]() if online_ref else []}
 
@@ -327,8 +344,9 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
                    "mqtt_in_kbps": round((link.rx_bytes - last["rxb"]) * 8 / 1000 / span, 1),
                    "mqtt_reconnects": max(link.connects - 1, 0), **machine_stats()}
         last.update(t=now, cpu=cpu, req=http["requests"], ms=http["ms"], rx=link.rx_msgs, rxb=link.rx_bytes)
-        tiles = [{k: d.get(k) for k in ("device", "fw", "net", "ip", "link", "uptime", "heap", "loop_hz",
-                                        "mqtt_reconnects", "online")} | {"age": round(now - d.get("seen", now))}
+        tiles = [{k: d.get(k) for k in ("device", "fw", "build", "net", "ip", "link", "uptime", "heap", "loop_hz",
+                                        "mqtt_reconnects", "mqtt_dropped", "reset", "stuck", "online")}
+                 | {"age": round(now - d.get("seen", now))}
                  for d in link.device_list()]
         w = site.snapshot()
         return {"time": now, "nodes": link.metrics_list(), "announced": link.node_list(), "broker": link.broker_stats(),
@@ -341,18 +359,20 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
     ROBOT_KEYS = {"turn_min": (-5.0, 5.0), "turn_max": (-5.0, 5.0), "speed": (20, 100), "slow": (15, 100),
                   "smoke_max_s": (0.0, 30.0), "smoke_pause_s": (0.0, 600.0), "smoke_exterminate_s": (0.0, 10.0),
                   "brightness": (5, 255)}
+    ROBOT_ALWAYS = {"stop", "smoke"}             # commands that are no setup: also during a game
 
     @app.get("/api/robot")
     def get_robot():
         """The robot's state (robot/state), its hello and the settings sent to it."""
         r = link.robot
         return {"state": r.get("state", {}), "hello": r.get("hello", {}), "config": robot_config(),
-                "online": bool(r.get("seen")) and time.time() - r.get("seen", 0) < 30}
+                "online": bool(r.get("seen")) and not r.get("gone") and time.time() - r.get("seen", 0) < 30}
 
     @app.put("/api/robot")
     def put_robot(values: dict):
-        """{turn_min, turn_max (the cable window, in turns from the start), speed, slow (%),
-        smoke_max_s, smoke_pause_s, smoke_exterminate_s, brightness} - only what is given."""
+        """Setup only: {turn_min, turn_max (the cable window, in turns from the start), speed,
+        slow (%), smoke_max_s, smoke_pause_s, smoke_exterminate_s, brightness} - only what is given."""
+        require_setup()
         cfg = robot_config()
         for k, (lo, hi) in ROBOT_KEYS.items():
             if isinstance(values.get(k), (int, float)):
@@ -365,7 +385,16 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
 
     @app.post("/api/robot/cmd")
     def robot_cmd(cmd: dict):
-        """The real robot directly: {"home": "cw"}, {"stop": true}, {"smoke": 3}, {"go": 5} ..."""
+        """The real robot directly: {"home": "cw"}, {"stop": true}, {"smoke": 3}, {"go": 5} ...
+        Aligning it (home, go, set_position) is setup. With the setup locked only what a
+        running game needs: stop and smoke always, home when the robot lost its position
+        (homing failed, stalled) - the way back without stopping the game."""
+        if db.setting("mode", "setup") != "setup":
+            st = link.robot.get("state", {})
+            lost = st.get("known") is False or bool(st.get("error"))
+            locked = sorted(k for k in cmd if k not in ROBOT_ALWAYS and not (k == "home" and lost))
+            if locked:
+                raise HTTPException(409, f"only in SETUP ({', '.join(locked)}): unlock the setup first")
         link.robot_command(cmd)
         return {"ok": True}
 
@@ -683,6 +712,9 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
             raise HTTPException(404, "unknown node")
         if node.get("role") == "display":
             raise HTTPException(409, "a display node cannot be the master")
+        current = next((n for n in link.node_list() if n.get("id") == link.master.get("node")), None)
+        if current is not None and current.get("online") and current["id"] != node["id"]:
+            require_setup()                      # (locked: another master only when this one is gone)
         link.set_master({"node": node["id"], "host": node.get("host", ""), "port": node.get("port", 0),
                          "since": time.strftime("%H:%M:%S")})
         return link.master
@@ -808,8 +840,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
     def put_installation(i: InstallationIn):
         """Setup only: the places of this installation. The game hides the others
         (tile, ducts, cable), gives them no slot on the screens and never uses them."""
-        if db.setting("mode", "setup") != "setup":
-            raise HTTPException(409, "only in SETUP: unlock the setup first")
+        require_setup()
         ids = sorted({n for n in i.installed if 1 <= n <= PLACES})
         if not ids:
             raise HTTPException(400, "at least one place")
@@ -822,6 +853,7 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
     def put_layout(l: LayoutIn):
         """Setup: how the circle stands in this venue - T01 at this hour, the
         entrance at 6 (then clockwise); the gamemaster apps draw their plan so."""
+        require_setup()
         h = l.t01_clock % 12 or 12.0
         db.set_setting("t01_clock", h)
         changed("layout")
@@ -907,6 +939,42 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         db.delete_question(qid)
         return {"ok": True}
 
+    # ------------------------------------------------------------ this event's selection (games, questions)
+
+    ROUND_TYPES = {"quiz": "Quiz", "cyclone": "Cyclone", "reaction": "Reactie", "rhythm": "Ritme",   # (the game's
+                   "simon": "Simon zegt", "zwarte_piet": "Zwarte Piet", "code": "Code kraken"}       # titles: settings)
+
+    def selection_view():
+        titles = {g.get("group"): g.get("title") for g in link.schema if isinstance(g, dict)}
+        sel = db.selection()
+        return {"event": db.event(),
+                "games": [{"type": t, "title": titles.get(t) or ROUND_TYPES[t],
+                           "off": t in sel["games_off"]} for t in ROUND_TYPES],
+                "questions": [{k: r[k] for k in ("id", "category", "question", "min_age", "max_age", "active",
+                                                 "event", "on")} for r in db.question_rows()]}
+
+    @app.get("/api/selection")
+    def get_selection():
+        """This event: every game (off or not) and every question (on: asked now; active:
+        its normal state; event: this event's choice, null = as normal)."""
+        return selection_view()
+
+    @app.put("/api/selection")
+    def put_selection(s: SelectionIn):
+        """Change this event's selection: games_off (the whole list), questions {id: on / off / null}."""
+        if s.games_off is not None:
+            unknown = [g for g in s.games_off if g not in ROUND_TYPES]
+            if unknown:
+                raise HTTPException(400, f"unknown game: {', '.join(unknown)}")
+        ids = {str(r["id"]) for r in db.question_rows()}
+        unknown = [q for q in s.questions if q not in ids]
+        if unknown:
+            raise HTTPException(404, f"unknown question: {', '.join(unknown)}")
+        db.set_selection(s.games_off, s.questions)
+        link.publish_selection(db.selection())
+        changed("selection")
+        return selection_view()
+
     # ------------------------------------------------------------ games and scores (game master)
 
     # ------------------------------------------------------------ the game state (crash / power cut)
@@ -985,7 +1053,10 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         backup = event_export.save(db.export_event(old), event_dir) if old else None
         db.new_event(name)
         link.db_changed("ranking")                    # the game: the ranking (and records) again
+        link.db_changed("questions")                  # ... and the questions: the new event's selection
+        link.publish_selection(db.selection())        # (empty: every game)
         changed("event")
+        changed("selection")
         return {"event": db.event(), "backup": os.path.basename(backup) if backup else None}
 
     @app.get("/api/events/{eid}/export")

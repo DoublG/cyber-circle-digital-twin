@@ -172,7 +172,7 @@
 <rect x="380" y="640" width="255" height="110" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>
 <text x="392" y="662" font-size="15" text-anchor="start" font-weight="700" fill="#24292f">Tiles  T01–T13 + M1–M5</text>
 <text x="392" y="690.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">ESP32 + Ethernet (WT32-ETH01),</text>
-<text x="392" y="705.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">58 WS2812B LEDs, 4 pressure sensors.</text>
+<text x="392" y="705.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">105 LEDs (2 rings), 4 pressure sensors.</text>
 <text x="392" y="720.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Runs the tile games itself (Reactie,</text>
 <text x="392" y="735.5" font-size="11" text-anchor="start" font-weight="400" fill="#24292f">Simon, Cyclone, Zwarte Piet).</text>
 <rect x="645" y="640" width="145" height="110" rx="8" fill="#ffffff" stroke="#57606a" stroke-width="1.5"/>

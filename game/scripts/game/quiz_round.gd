@@ -74,6 +74,7 @@ func _init() -> void:
 	gives_lives = false            # (only through the streak)
 	can_repeat = true              # the backbone of the game: quiz after quiz
 	ranked = false                 # right: you stay, wrong: -1 life
+	age_settings = false           # (each question has its own min_age / max_age)
 	duration = 999.0               # ends after the last question
 	rules = _rules(10)
 
@@ -111,7 +112,8 @@ func _start() -> void:
 ## are enough others. Per question a category is drawn (game style, as the
 ## round types - QuestionPicker.category_chances): its weight, plus drought
 ## protection for categories not asked for a while; then within it a question
-## that was not asked yet, or the longest ago.
+## that was not asked yet, or the longest ago. The players' ages steer both
+## (QuestionPicker.age_factor): questions for their ages come more often.
 func _pick_questions(all: Array) -> Array:
 	if question != "":
 		var chosen := all.filter(func(q): return _qid(q) == question or str(q.get("question", "")) == question)
@@ -120,16 +122,16 @@ func _pick_questions(all: Array) -> Array:
 			return [chosen[0]]
 		push_warning("quiz: no question %s - one at random" % question)
 	var pool := all.filter(func(q): return categories.is_empty() or q.get("category", "") in categories)
-	var ages := players.map(func(id): return game.arena.players.player_age(id)).filter(func(a): return a > 0)
+	var all_ages := players.map(func(id): return game.arena.players.player_age(id))
+	var ages := all_ages.filter(func(a): return a > 0)
 	if ages.size() == players.size() and not ages.is_empty():
 		var oldest: int = ages.max()
 		var fitting := pool.filter(func(q): return int(q.get("min_age", 0)) <= oldest)
 		if not fitting.is_empty():
 			pool = fitting
-	var memory: Dictionary = game.questions.memory
 	var picked := []
 	for n in 1:
-		var chances := game.questions.category_chances(pool)
+		var chances := game.questions.category_chances(pool, all_ages)
 		if chances.is_empty():
 			break
 		var r := randf()
@@ -140,9 +142,7 @@ func _pick_questions(all: Array) -> Array:
 				cat = c
 				break
 		var in_cat := pool.filter(func(q): return str(q.get("category", "")) == cat)
-		in_cat.shuffle()                                        # (equal ones: at random)
-		in_cat.sort_custom(func(a, b): return int(memory.asked.get(_qid(a), -1)) < int(memory.asked.get(_qid(b), -1)))
-		var q: Dictionary = in_cat[0]
+		var q: Dictionary = game.questions.pick_question(in_cat, all_ages)
 		picked.append(q)
 		pool.erase(q)
 		game.questions.note(cat, _qid(q))
@@ -167,6 +167,10 @@ func is_finished() -> bool:
 
 func shared_countdown() -> float:              # the answer time (the ring on the screens)
 	return _phase_left if _phase == "question" else -1.0
+
+
+func countdown_now() -> Vector2:                # the tiles' green LED: the answer time too
+	return Vector2(_phase_left, _question_time) if _phase == "question" and not _done else Vector2(-1.0, 0.0)
 
 
 func _next_question() -> void:

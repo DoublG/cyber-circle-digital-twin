@@ -5,7 +5,10 @@
 // hold without the network).
 #pragma once
 
-#define FW_VERSION "0.1.0"
+#define FW_VERSION "0.3.0"
+#ifndef FW_BUILD
+#define FW_BUILD   ""                   // the git commit (../common/scripts/build.py fills it in)
+#endif
 
 // ---- network: as the tiles - wired Ethernet (the WT32-ETH01 module: an
 // RMII PHY, LAN8720; RMII takes GPIO 0, 19, 21, 22, 25, 26, 27, 18, 23), or
@@ -60,6 +63,14 @@
 #ifndef MOTOR_PIN_CCW
 #define MOTOR_PIN_CCW   15
 #endif
+// The H-bridge's enable inputs (BTS7960 R_EN + L_EN, L298N ENA) on a pin of
+// their own, with a 10 k pull-down to GND: the bridge is off whenever the
+// ESP32 is not in charge - power-up, a reset, flashing (its pins float then,
+// and IO14 / IO15 carry a burst from the boot ROM at power-up).
+// -1: not wired, the enables on 3.3 V (docs/WIRING.md).
+#ifndef MOTOR_PIN_EN
+#define MOTOR_PIN_EN    -1              // e.g. 2 (free on the WT32-ETH01, low at power-up by itself)
+#endif
 #ifndef MOTOR_INVERT
 #define MOTOR_INVERT    0
 #endif
@@ -75,6 +86,22 @@
 #ifndef MOTOR_RAMP_MS
 #define MOTOR_RAMP_MS   400             // soft start: 0 -> speed (the cable, the gears)
 #endif
+#ifndef MOTOR_REVERSE_MS
+#define MOTOR_REVERSE_MS 300            // the other way: brake, stand still this long, then the soft start
+#endif
+// The motor is a used drill motor: it coasts (slips) a different distance after the brake every
+// time. Arrived and coasted off the target mark: once it stands still, creep back onto it at
+// MOTOR_SLOW - at most SETTLE_TRIES times; a creep that finds no mark in SETTLE_TIMEOUT_MS gives up
+// quietly (the count is still right: the sensors on the fixed frame see the head's magnets, not the motor).
+#ifndef SETTLE_MS
+#define SETTLE_MS       500             // after the brake: this long to stop coasting before it creeps back
+#endif
+#ifndef SETTLE_TRIES
+#define SETTLE_TRIES    2               // 0 = never creep back (stays where it coasted to)
+#endif
+#ifndef SETTLE_TIMEOUT_MS
+#define SETTLE_TIMEOUT_MS 1500
+#endif
 
 // ---- the position sensors (inductive / hall / optical, active LOW; GPIO
 // 35 / 39 are inputs only: a 10k pull-up to 3.3 V on the board)
@@ -87,8 +114,8 @@
 #ifndef SENSOR_ACTIVE
 #define SENSOR_ACTIVE   LOW
 #endif
-#ifndef MARK_DEBOUNCE_US
-#define MARK_DEBOUNCE_US 3000
+#ifndef MARK_DEBOUNCE_MS
+#define MARK_DEBOUNCE_MS 3              // the sensors are read every ms: an edge = this many samples (net) the same
 #endif
 #ifndef SIDES
 #define SIDES           13              // marks per turn = the robot's sides = the floor tiles
@@ -105,6 +132,15 @@
 #endif
 #ifndef TURN_MAX
 #define TURN_MAX        1.5
+#endif
+// The window above can be set from the control server (robot/config, kept in
+// flash). These cannot: what the cable survives, whatever is sent or stored.
+// SET THEM TO THE REAL CABLE - the firmware never turns further.
+#ifndef TURN_HARD_MIN
+#define TURN_HARD_MIN   -3.0
+#endif
+#ifndef TURN_HARD_MAX
+#define TURN_HARD_MAX   3.0
 #endif
 
 // ---- LEDs (WS2812B, one chain): the bulbs of every side (SIDES x
@@ -128,6 +164,11 @@
 #ifndef LED_BRIGHTNESS
 #define LED_BRIGHTNESS  160
 #endif
+#ifndef LED_MAX_MA
+#define LED_MAX_MA      2500            // what the 5 V wiring to the LEDs carries: a frame that would draw more
+#endif                                  // is dimmed (FastLED's estimate). The 40 LEDs at full white: 2.4 A -
+                                        // more LEDs (DOME_LEDS) on the same wire: dimmed until this is raised
+                                        // on purpose (0 = no limit)
 
 // ---- the star light: a 230 V lamp in the dome on a relay (rated for mains),
 // on with the party lamp ({"party": true}, the intro), off during the boot /
@@ -152,6 +193,14 @@
 #ifndef SMOKE_PAUSE_S
 #define SMOKE_PAUSE_S   10.0            // at least this long between two puffs (it needs to heat again)
 #endif
+// The two above can be set from the control server. These cannot: the longest
+// puff and the shortest pause the firmware ever takes, whatever is sent or stored.
+#ifndef SMOKE_HARD_MAX_S
+#define SMOKE_HARD_MAX_S 10.0
+#endif
+#ifndef SMOKE_HARD_PAUSE_S
+#define SMOKE_HARD_PAUSE_S 5.0
+#endif
 #ifndef SMOKE_EXTERMINATE_S
 #define SMOKE_EXTERMINATE_S 1.5         // a puff with every extermination (0 = none)
 #endif
@@ -159,6 +208,15 @@
 #ifndef HELLO_MS
 #define HELLO_MS        10000
 #endif
+#ifndef MQTT_TIMEOUT_S
+#define MQTT_TIMEOUT_S  3               // waiting for the broker's answer (the loop stands still that long)
+#endif
+#ifndef MQTT_KEEPALIVE_S
+#define MQTT_KEEPALIVE_S 10             // the broker calls the robot gone after 1.5 x this (its last will: robot/status)
+#endif
+#ifndef WATCHDOG_S
+#define WATCHDOG_S      15              // a task that hangs this long: restart (longer than the longest
+#endif                                  // network call: a write to a broker that is gone gives up after 10 s)
 
 // ---- flashing over the network (ArduinoOTA: pio run -e ota -t upload --upload-port <IP>)
 #ifndef OTA_PASSWORD

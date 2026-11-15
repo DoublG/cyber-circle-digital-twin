@@ -151,6 +151,18 @@ class MqttLink:
                 else:
                     self.devices.pop(dev, None)
                 kind = "devices" if new else "device"
+            elif topic.startswith("device/") and topic.endswith("/status"):
+                # a tile's last will, from the broker: it is gone (no waiting for NODE_TIMEOUT)
+                dev = topic.split("/")[1]
+                if not (isinstance(data, dict) and data.get("online") is False and dev in self.devices):
+                    return
+                self.devices[dev]["gone"] = True    # (until its next hello: a new entry)
+                kind = "device"
+            elif topic == "robot/status":       # the robot's last will
+                if not (isinstance(data, dict) and data.get("online") is False):
+                    return
+                self.robot["gone"] = True
+                kind = "robot"
             elif topic.startswith("node/"):
                 if data:
                     data["seen"] = time.time()
@@ -173,6 +185,7 @@ class MqttLink:
             elif topic in ("robot/state", "robot/hello"):
                 self.robot[topic.split("/")[1]] = data if isinstance(data, dict) else {}
                 self.robot["seen"] = time.time()
+                self.robot["gone"] = False
                 kind = "robot"
             elif topic == "master":
                 self.master = data or {}
@@ -202,7 +215,7 @@ class MqttLink:
     def device_list(self):
         now = time.time()
         with self.lock:
-            return sorted(({**d, "online": now - d.get("seen", 0) < NODE_TIMEOUT}
+            return sorted(({**d, "online": not d.get("gone") and now - d.get("seen", 0) < NODE_TIMEOUT}
                            for d in self.devices.values()), key=lambda d: d["device"])
 
     def _broker_log(self, line):
@@ -314,6 +327,10 @@ class MqttLink:
 
     def publish_settings(self, values):
         self.client.publish(f"{self.prefix}/settings", json.dumps(values), retain=True)
+
+    def publish_selection(self, sel):
+        """The current event's games that are not played (the questions: the game fetches them, db)."""
+        self.client.publish(f"{self.prefix}/selection", json.dumps({"games_off": sel["games_off"]}), retain=True)
 
     def set_master(self, master):
         self.master = master

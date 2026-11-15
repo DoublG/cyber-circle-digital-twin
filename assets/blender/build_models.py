@@ -308,11 +308,19 @@ GLASS_GAP = 0.018      # space under the glass for button sensors + LEDs
 GLASS_TOP = TILE_TOP + GLASS_GAP + 0.006   # 6 mm glass: the walking surface
 LED_COUNT = 48
 LED_RING_R = 0.304
+INNER_COUNT = 48       # the inner ring, just outside the logo (the same 48 as the outer one, mirrored)
+INNER_RING_R = 0.168
 HEART_COUNT = 5
+HEART_Y0, HEART_STEP = 0.188, 0.0235   # Heart_0 just outside the inner ring, Heart_4 just inside the outer one
+HEART_SIZE = 0.023     # bigger than on the real tile: lives must be readable on the screens
 
 # angle (deg, CCW from +X) -> button.  +Y (90 deg) points to the robot.
 BUTTONS = {"Triangle": 45, "Square": 135, "Cross": 225, "Circle": 315}
-BUTTON_R = 0.215
+# the floor tile: the buttons halfway between the inner ring (channel up to 0.175) and the outer one
+# (from 0.295), each on a dark puck that stays clear of both rings and the hearts
+TILE_BUTTON_R = (INNER_RING_R + 0.007 + LED_RING_R - 0.009) / 2   # 0.235
+PUCK_R = 0.05
+TILE_ICON_K = 0.95     # the icons a little smaller, so they fit on the puck
 
 
 def yin_yang_image(path, res=1024, ss=2):
@@ -413,6 +421,50 @@ def etched_buttons(glass_plate, glass_top, button_r, k, sym):
         set_parent(anchor, glass_plate)
 
 
+def lit_top(k, top, glass_r, white, black, led, led_size, inner_led_size, channel, inner_channel,
+            segs=96):
+    """The lit top of a tile (k = 1) or a drone (k = DRONE_K), under the glass: the outer LED ring
+    (LED_00..47) and the inner one around the logo (LED_IN_00..47), both with LED 0 at +Y (the robot)
+    and clockwise seen from above; the plate they light up (Ring_Glow, Godot's tile_glow shader); the
+    hearts on a dark strip (Heart_0 nearest the logo). The logo is the caller's."""
+    ring_r, inner_r = LED_RING_R * k, INNER_RING_R * k
+    annulus("LED_Channel", ring_r - channel, ring_r + channel, top + 0.0008, segs=segs, mat=black)
+    # the frosted plates the two rings light up (the real tile's lighting effect): Godot colours it
+    # after the ring LEDs behind it (TileRing); it lies under the seams and the channels
+    annulus("Ring_Glow", inner_r + inner_channel, glass_r, top + 0.0004, segs=2 * segs, mat=white)
+    for i in range(LED_COUNT):
+        a = math.pi / 2 - 2 * math.pi * i / LED_COUNT
+        box(f"LED_{i:02d}", (*led_size, 0.003), (ring_r * math.cos(a), ring_r * math.sin(a), top + 0.002),
+            rot=(0, 0, a + math.pi / 2), mat=led)
+    annulus("LED_Inner_Channel", inner_r - inner_channel, inner_r + inner_channel, top + 0.0008,
+            segs=segs, mat=black)
+    for i in range(INNER_COUNT):
+        a = math.pi / 2 - 2 * math.pi * i / INNER_COUNT
+        box(f"LED_IN_{i:02d}", (*inner_led_size, 0.003),
+            (inner_r * math.cos(a), inner_r * math.sin(a), top + 0.002), rot=(0, 0, a + math.pi / 2), mat=led)
+    # health bar: a dark strip behind the hearts (wider than the real tile's wire) - red hearts stay
+    # readable on a plate that glows red - and a light outline: a lost heart still shows its place
+    size, y0, step = HEART_SIZE * k, HEART_Y0 * k, HEART_STEP * k
+    box("Heart_Wire", (size + 0.012 * k, step * (HEART_COUNT - 1) + size + 0.008 * k, 0.001),
+        (0, y0 + step * (HEART_COUNT - 1) / 2, top + 0.0006), mat=black)
+    for i in range(HEART_COUNT):
+        prism(f"Heart_{i}_Frame", heart_outline(size + 0.005 * k), top, top + 0.0025,
+              loc=(0, y0 + i * step, 0), mat=white)
+        prism(f"Heart_{i}", heart_outline(size), top, top + 0.0035, loc=(0, y0 + i * step, 0), mat=led)
+
+
+def buttons_on_pucks(glass_plate, glass_top, k, sym, black):
+    """The 4 icons etched in the glass (etched_buttons), each on a dark puck (the real tile's
+    buttons are dark pucks) - the icon stays readable whatever colour the plate glows. Halfway
+    between the two rings, clear of both and of the hearts."""
+    r = TILE_BUTTON_R * k
+    etched_buttons(glass_plate, glass_top, r, TILE_ICON_K * k, sym)
+    for name, deg in BUTTONS.items():
+        a = math.radians(deg)
+        cylinder(f"Button_{name}_Puck", PUCK_R * k, 0.0002,     # (top below the etched icon)
+                 (r * math.cos(a), r * math.sin(a), glass_top + 0.00005), verts=48, mat=black)
+
+
 def build_tile():
     reset_scene()
     white = material("Tile_White", (0.86, 0.86, 0.84), roughness=0.7)
@@ -430,8 +482,8 @@ def build_tile():
              verts=96, mat=black)
     tube("Tile_Rim", GLASS_R - 0.002, TILE_R, TILE_TOP - 0.006, GLASS_TOP + 0.001, mat=alu)
     cylinder("Tile_Top", TILE_R - 0.004, 0.006, (0, 0, TILE_TOP - 0.003), verts=96, mat=white)
-    annulus("LED_Channel", LED_RING_R - 0.009, LED_RING_R + 0.009, TILE_TOP + 0.0008,
-            mat=black)
+    lit_top(1.0, TILE_TOP, GLASS_R - 0.002, white, black, led, led_size=(0.012, 0.007),
+            inner_led_size=(0.008, 0.006), channel=0.009, inner_channel=0.007)
 
     for i in range(12):  # rim screws
         a = 2 * math.pi * (i + 0.5) / 12
@@ -450,22 +502,6 @@ def build_tile():
     logo = image_material("Logo_YinYang", yin_yang_image(tex_path))
     disc("Logo", 0.16, TILE_TOP + 0.0012, mat=logo)
 
-    # LED ring: LED_00 at the robot side (+Y), counting clockwise seen from above
-    for i in range(LED_COUNT):
-        a = math.pi / 2 - 2 * math.pi * i / LED_COUNT
-        box(f"LED_{i:02d}", (0.012, 0.007, 0.003),
-            (LED_RING_R * math.cos(a), LED_RING_R * math.sin(a), TILE_TOP + 0.002),
-            rot=(0, 0, a + math.pi / 2), mat=led)
-
-    # Health bar: Heart_0 nearest the logo, Heart_4 nearest the rim
-    box("Heart_Wire", (0.003, 0.13, 0.001), (0, 0.235, TILE_TOP + 0.0006), mat=black)
-    for i in range(HEART_COUNT):
-        y = 0.18 + i * 0.024
-        prism(f"Heart_{i}_Frame", heart_outline(0.026), TILE_TOP, TILE_TOP + 0.0025,
-              loc=(0, y, 0), mat=black)
-        prism(f"Heart_{i}", heart_outline(0.019), TILE_TOP, TILE_TOP + 0.0035,
-              loc=(0, y, 0), mat=led)
-
     # Glass plate on spacers; it is the walking surface
     for i in range(8):
         a = 2 * math.pi * (i + 0.5) / 8
@@ -475,12 +511,9 @@ def build_tile():
     glass_plate = cylinder("Glass_Plate", GLASS_R, 0.006, (0, 0, GLASS_TOP - 0.003),
                            verts=96, mat=glass)
 
-    # Buttons = icons etched in the glass, lit by an RGB LED (no physical parts)
-    etched_buttons(glass_plate, GLASS_TOP, BUTTON_R, 1.0, sym)
+    buttons_on_pucks(glass_plate, GLASS_TOP, 1.0, sym, black)
 
-    # Status LED on the cable side and a collision shape for Godot
-    cylinder("Status_LED", 0.004, 0.004, (0.05, TILE_R - 0.012, GLASS_TOP + 0.002),
-             verts=12, mat=led)
+    # (no status LED: the built tiles have none) - a collision shape for Godot
     cylinder("Tile_Collider-convcolonly", TILE_R, GLASS_TOP, (0, 0, GLASS_TOP / 2), verts=24)
 
     save_and_export("tile")
@@ -1425,14 +1458,13 @@ DRONE_TOP = 0.030      # top plate (LEDs, hearts)
 DRONE_GLASS_TOP = 0.044
 DRONE_LED_R = 0.172
 DRONE_K = DRONE_LED_R / LED_RING_R   # the tile's top layout scaled to the drone (~0.57)
-DRONE_BUTTON_R = BUTTON_R * DRONE_K
 DRONE_ARM_R = 0.31     # body centre -> rotor centre
 DRONE_ROTOR_R = 0.10
 
 
 def build_drone():
-    """Mobile player's drone: the tile's API (LED_00..47, Heart_0..4,
-    Button_<name>[_Symbol], Status_LED) on a small round body with 4 ducted
+    """Mobile player's drone: the tile's API (LED_00..47, LED_IN_00..47, Ring_Glow, Heart_0..4,
+    Button_<name>[_Symbol|_Puck], Status_LED) on a small round body with 4 ducted
     rotors (Rotor_0..3 spin in Godot), a glow underneath (Thruster) and a light
     band around the rim (Drone_Band), both in the player's colour. +Y = forward (to the robot), like the tile."""
     reset_scene()
@@ -1455,15 +1487,10 @@ def build_drone():
     band = material("Drone_Band", (0.1, 0.1, 0.1), roughness=0.3, emission=(0, 0, 0))
     tube("Drone_Band", DRONE_R + 0.006, DRONE_R + 0.011, 0.008, 0.026, segs=64, mat=band)   # player's colour
     cylinder("Drone_Top", DRONE_R - 0.01, 0.004, (0, 0, DRONE_TOP - 0.002), verts=64, mat=white)
-    annulus("Drone_LED_Channel", DRONE_LED_R - 0.007, DRONE_LED_R + 0.007, DRONE_TOP + 0.0008,
-            segs=64, mat=black)
-    for i in range(LED_COUNT):     # LED_00 at the front (+Y), clockwise from above
-        a = math.pi / 2 - 2 * math.pi * i / LED_COUNT
-        box(f"LED_{i:02d}", (0.009, 0.006, 0.003),
-            (DRONE_LED_R * math.cos(a), DRONE_LED_R * math.sin(a), DRONE_TOP + 0.002),
-            rot=(0, 0, a + math.pi / 2), mat=led)
-    # the same top as a floor tile, scaled: the logo in the middle, the hearts
-    # between the logo and the LED ring towards the front, screws in the rim
+    # the same lit top as a floor tile, scaled: both rings, the glowing plate, the hearts between
+    # the logo and the LED ring towards the front (LEDs a bit bigger than scaled: readable from afar)
+    lit_top(DRONE_K, DRONE_TOP, DRONE_R - 0.012, white, black, led, led_size=(0.009, 0.006),
+            inner_led_size=(0.006, 0.005), channel=0.007, inner_channel=0.005, segs=64)
     tex_path = os.path.join(GODOT_DIR, "textures", "yin_yang_01.png")
     if os.path.exists(tex_path):
         img = bpy.data.images.load(tex_path)
@@ -1471,13 +1498,6 @@ def build_drone():
     else:
         img = yin_yang_image(tex_path)
     disc("Logo", 0.16 * DRONE_K, DRONE_TOP + 0.0012, mat=image_material("Logo_YinYang", img))
-    box("Heart_Wire", (0.002, 0.13 * DRONE_K, 0.001), (0, 0.235 * DRONE_K, DRONE_TOP + 0.0006), mat=black)
-    for i in range(HEART_COUNT):   # Heart_0 nearest the logo, Heart_4 nearest the rim
-        y = (0.18 + i * 0.024) * DRONE_K
-        prism(f"Heart_{i}_Frame", heart_outline(0.026 * DRONE_K), DRONE_TOP, DRONE_TOP + 0.0025,
-              loc=(0, y, 0), mat=black)
-        prism(f"Heart_{i}", heart_outline(0.019 * DRONE_K), DRONE_TOP, DRONE_TOP + 0.0035,
-              loc=(0, y, 0), mat=led)
     for i in range(12):            # rim screws
         a = 2 * math.pi * (i + 0.5) / 12
         cylinder(f"Screw_{i:02d}", 0.0045, 0.003,
@@ -1485,7 +1505,7 @@ def build_drone():
                  verts=12, mat=alu)
     glass_plate = cylinder("Glass_Plate", DRONE_R - 0.012, 0.004,
                            (0, 0, DRONE_GLASS_TOP - 0.002), verts=64, mat=glass)
-    etched_buttons(glass_plate, DRONE_GLASS_TOP, DRONE_BUTTON_R, DRONE_K, sym)
+    buttons_on_pucks(glass_plate, DRONE_GLASS_TOP, DRONE_K, sym, black)
 
     # 4 arms with ducted rotors (diagonals, clear of the front)
     for k in range(4):

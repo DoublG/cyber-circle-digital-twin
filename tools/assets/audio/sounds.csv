@@ -1,9 +1,10 @@
 # The sounds tools/assets/make_audio.py generates (Stable Audio Open). One per line:
-#   name;kind;model;seconds;bpm;bars;variants;prompt
+#   name;kind;model;seconds;bpm;bars;variants;prompt[;negative]
 # kind: sfx / loop (bpm + bars: a seamless loop, 4/4, its tempo checked) / pad (a loop without a beat: no tempo check)
 # model: small (<= 11 s, fast) / 1.0 (<= 47 s)
 # A loop: seconds a little longer than its bars (8 bars at 120 bpm = 16 s -> 20).
-name;kind;model;seconds;bpm;bars;variants;prompt
+# negative (optional, model 1.0 only): what it must not sound like.
+name;kind;model;seconds;bpm;bars;variants;prompt;negative
 code_key;sfx;small;1.5;0;0;4;single short soft analog synthesizer key tap, warm sine blip, Yamaha CS-80 style, short room reverb
 code_hint;sfx;small;2;0;0;4;three quick rising analog synthesizer tones, warm brass and sine, Yamaha CS-80 style, chorus, short reverb
 code_cracked;sfx;small;3;0;0;4;triumphant warm synth brass chord swell resolving upward, vintage polyphonic analog synthesizer, Yamaha CS-80 style, chorus, hall reverb
@@ -34,3 +35,24 @@ ritme_cs80_march;loop;1.0;36;120;16;6;120 BPM, constant tempo, classical march r
 ritme_cs80_ostinato;loop;1.0;36;120;16;6;120 BPM, constant tempo, steady electronic kick on every beat, repeating classical ostinato of eighth notes on a vintage polyphonic analog synthesizer like the Yamaha CS-80, warm brass swells, string pads, instrumental, no vocals
 ritme_cs80_disco;loop;1.0;36;120;16;6;120 BPM, constant tempo, four on the floor kick and hi-hat, octave bassline on every beat, classical strings and warm synth brass on a vintage polyphonic analog synthesizer like the Yamaha CS-80, cinematic, instrumental, no vocals
 ritme_cs80_waltz_free;loop;1.0;36;120;16;6;120 BPM, constant tempo, steady kick drum on every beat, slow majestic classical chord progression on warm synth brass and strings, vintage polyphonic analog synthesizer like the Yamaha CS-80, arpeggiated synth on eighth notes, instrumental, no vocals
+# orchestral adventure score, in the spirit of Murray Gold's music for Doctor Who - the style only, no existing
+# theme: a full symphony orchestra, urgent string ostinatos, heroic French horns and trumpets, a wordless choir,
+# timpani and big drums (often a drum kit under the orchestra), and tender themes for strings, piano and a solo voice.
+# All on model 1.0 with a negative prompt (without it the model drifts back to synthesizers).
+orch_code_key;sfx;1.0;2;0;0;4;one single soft pizzicato string pluck doubled by a celesta note, orchestral, concert hall, one short note;synthesizer, electronic music, drum machine, EDM, chiptune, distortion, low quality, drums, melody
+orch_code_hint;sfx;1.0;3;0;0;4;three quick rising notes on harp and celesta with glockenspiel, magical orchestral motif, concert hall reverb;synthesizer, electronic music, drum machine, EDM, chiptune, distortion, low quality, drums
+orch_code_cracked;sfx;1.0;5;0;0;4;triumphant full symphony orchestra fanfare, heroic French horns and trumpets, timpani roll, cymbal crash, soaring strings, ending on a bright major chord, adventure film score;synthesizer, electronic music, drum machine, EDM, chiptune, distortion, low quality
+orch_code_wrong;sfx;1.0;3;0;0;4;short ominous orchestral sting, low dissonant trombones and tuba, one timpani hit, cello tremolo, dark film score;synthesizer, electronic music, drum machine, EDM, chiptune, distortion, low quality, melody
+orch_riser;sfx;1.0;5;0;0;4;orchestral riser, string tremolo crescendo with a rising harp glissando and a cymbal swell, building tension, film score;synthesizer, electronic music, drum machine, EDM, chiptune, distortion, low quality
+orch_swell;sfx;1.0;6;0;0;4;full symphony orchestra swell, soaring strings and French horns with a wordless choir, rising to a major chord, timpani roll, large concert hall;synthesizer, electronic music, drum machine, EDM, chiptune, distortion, low quality
+orch_fanfare;sfx;1.0;6;0;0;4;short heroic brass fanfare, trumpets and French horns, snare drum roll and timpani, bold adventure film score opening, concert hall;synthesizer, electronic music, drum machine, EDM, chiptune, distortion, low quality
+orch_choir_sting;sfx;1.0;5;0;0;4;dramatic wordless choir chord with a full orchestra hit, timpani and cymbals, epic and dark, large hall reverb, film score;synthesizer, electronic music, drum machine, EDM, chiptune, distortion, low quality
+orch_code;loop;1.0;20;120;8;4;120 BPM, constant tempo, tense ticking pizzicato strings and a soft timpani on every beat, low staccato cellos, mysterious celesta and harp motif, suspenseful orchestral film score, instrumental, no vocals;synthesizer, electronic music, drum machine, EDM, chiptune, distortion, low quality
+orch_lobby;pad;1.0;36;120;16;4;slow emotional orchestral film score theme, warm string orchestra, gentle piano, a solo wordless soprano voice, French horn, bittersweet and full of wonder, large concert hall reverb, no drums;synthesizer, electronic music, drum machine, EDM, chiptune, distortion, low quality, drums
+orch_lobby_wonder;pad;1.0;36;120;16;4;majestic mysterious orchestral film score, slow rising string chords, celesta and harp, a distant French horn theme, wordless choir, a sense of wonder and vast space, large concert hall, no drums;synthesizer, electronic music, drum machine, EDM, chiptune, distortion, low quality, drums
+# Ritme: 16 bars at 120 bpm, the beat spelled out first (as above)
+ritme_orch_chase;loop;1.0;36;120;16;6;120 BPM, constant tempo, pounding timpani and bass drum on every beat, urgent driving staccato string ostinato in eighth notes, heroic French horn theme, full symphony orchestra, adventure film score, instrumental, no vocals;synthesizer, electronic music, drum machine, EDM, chiptune, distortion, low quality
+ritme_orch_heroic;loop;1.0;36;120;16;6;120 BPM, constant tempo, rock drum kit with a kick drum on every beat and electric bass under a full symphony orchestra, fast string ostinato, bold trumpet and French horn fanfare theme, triumphant adventure film score, instrumental, no vocals;synthesizer, electronic music, drum machine, EDM, chiptune, distortion, low quality
+ritme_orch_choir;loop;1.0;36;120;16;6;120 BPM, constant tempo, big taiko and bass drum hits on every beat, dramatic wordless choir, driving staccato strings, powerful low brass, epic dark orchestral film score;synthesizer, electronic music, drum machine, EDM, chiptune, distortion, low quality
+ritme_orch_march;loop;1.0;36;120;16;6;120 BPM, constant tempo, menacing orchestral march, snare drum and timpani on every beat, sinister low brass, staccato cellos and double basses, villain theme, film score, instrumental, no vocals;synthesizer, electronic music, drum machine, EDM, chiptune, distortion, low quality
+ritme_orch_quirky;loop;1.0;36;120;16;6;120 BPM, constant tempo, playful quirky orchestral adventure, bouncing pizzicato strings and bassoon, glockenspiel, kick drum and tambourine on every beat, comedic chase, film score, instrumental, no vocals;synthesizer, electronic music, drum machine, EDM, chiptune, distortion, low quality

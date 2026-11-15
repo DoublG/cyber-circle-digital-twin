@@ -9,68 +9,165 @@ static const char TILE_TOP_SVG[] = R"SVG(<svg xmlns="http://www.w3.org/2000/svg"
 <text x="0" y="-372" text-anchor="middle" font-size="18" fill="#8c7a66">▲ ROBOT</text>
 <circle r="350" fill="url(#rim)"/>
 <circle r="346" fill="#dcdcd6"/>
+<path id="glow_0" d="M-11.4,-174.6 A175,175 0 0 1 11.4,-174.6 L20.9,-319.3 A320,320 0 0 0 -20.9,-319.3 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_1" d="M11.4,-174.6 A175,175 0 0 1 34.1,-171.6 L62.4,-313.9 A320,320 0 0 0 20.9,-319.3 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_2" d="M34.1,-171.6 A175,175 0 0 1 56.3,-165.7 L102.9,-303.0 A320,320 0 0 0 62.4,-313.9 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_3" d="M56.3,-165.7 A175,175 0 0 1 77.4,-157.0 L141.5,-287.0 A320,320 0 0 0 102.9,-303.0 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_4" d="M77.4,-157.0 A175,175 0 0 1 97.2,-145.5 L177.8,-266.1 A320,320 0 0 0 141.5,-287.0 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_5" d="M97.2,-145.5 A175,175 0 0 1 115.4,-131.6 L211.0,-240.6 A320,320 0 0 0 177.8,-266.1 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_6" d="M115.4,-131.6 A175,175 0 0 1 131.6,-115.4 L240.6,-211.0 A320,320 0 0 0 211.0,-240.6 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_7" d="M131.6,-115.4 A175,175 0 0 1 145.5,-97.2 L266.1,-177.8 A320,320 0 0 0 240.6,-211.0 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_8" d="M145.5,-97.2 A175,175 0 0 1 157.0,-77.4 L287.0,-141.5 A320,320 0 0 0 266.1,-177.8 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_9" d="M157.0,-77.4 A175,175 0 0 1 165.7,-56.3 L303.0,-102.9 A320,320 0 0 0 287.0,-141.5 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_10" d="M165.7,-56.3 A175,175 0 0 1 171.6,-34.1 L313.9,-62.4 A320,320 0 0 0 303.0,-102.9 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_11" d="M171.6,-34.1 A175,175 0 0 1 174.6,-11.4 L319.3,-20.9 A320,320 0 0 0 313.9,-62.4 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_12" d="M174.6,-11.4 A175,175 0 0 1 174.6,11.4 L319.3,20.9 A320,320 0 0 0 319.3,-20.9 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_13" d="M174.6,11.4 A175,175 0 0 1 171.6,34.1 L313.9,62.4 A320,320 0 0 0 319.3,20.9 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_14" d="M171.6,34.1 A175,175 0 0 1 165.7,56.3 L303.0,102.9 A320,320 0 0 0 313.9,62.4 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_15" d="M165.7,56.3 A175,175 0 0 1 157.0,77.4 L287.0,141.5 A320,320 0 0 0 303.0,102.9 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_16" d="M157.0,77.4 A175,175 0 0 1 145.5,97.2 L266.1,177.8 A320,320 0 0 0 287.0,141.5 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_17" d="M145.5,97.2 A175,175 0 0 1 131.6,115.4 L240.6,211.0 A320,320 0 0 0 266.1,177.8 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_18" d="M131.6,115.4 A175,175 0 0 1 115.4,131.6 L211.0,240.6 A320,320 0 0 0 240.6,211.0 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_19" d="M115.4,131.6 A175,175 0 0 1 97.2,145.5 L177.8,266.1 A320,320 0 0 0 211.0,240.6 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_20" d="M97.2,145.5 A175,175 0 0 1 77.4,157.0 L141.5,287.0 A320,320 0 0 0 177.8,266.1 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_21" d="M77.4,157.0 A175,175 0 0 1 56.3,165.7 L102.9,303.0 A320,320 0 0 0 141.5,287.0 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_22" d="M56.3,165.7 A175,175 0 0 1 34.1,171.6 L62.4,313.9 A320,320 0 0 0 102.9,303.0 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_23" d="M34.1,171.6 A175,175 0 0 1 11.4,174.6 L20.9,319.3 A320,320 0 0 0 62.4,313.9 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_24" d="M11.4,174.6 A175,175 0 0 1 -11.4,174.6 L-20.9,319.3 A320,320 0 0 0 20.9,319.3 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_25" d="M-11.4,174.6 A175,175 0 0 1 -34.1,171.6 L-62.4,313.9 A320,320 0 0 0 -20.9,319.3 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_26" d="M-34.1,171.6 A175,175 0 0 1 -56.3,165.7 L-102.9,303.0 A320,320 0 0 0 -62.4,313.9 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_27" d="M-56.3,165.7 A175,175 0 0 1 -77.4,157.0 L-141.5,287.0 A320,320 0 0 0 -102.9,303.0 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_28" d="M-77.4,157.0 A175,175 0 0 1 -97.2,145.5 L-177.8,266.1 A320,320 0 0 0 -141.5,287.0 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_29" d="M-97.2,145.5 A175,175 0 0 1 -115.4,131.6 L-211.0,240.6 A320,320 0 0 0 -177.8,266.1 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_30" d="M-115.4,131.6 A175,175 0 0 1 -131.6,115.4 L-240.6,211.0 A320,320 0 0 0 -211.0,240.6 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_31" d="M-131.6,115.4 A175,175 0 0 1 -145.5,97.2 L-266.1,177.8 A320,320 0 0 0 -240.6,211.0 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_32" d="M-145.5,97.2 A175,175 0 0 1 -157.0,77.4 L-287.0,141.5 A320,320 0 0 0 -266.1,177.8 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_33" d="M-157.0,77.4 A175,175 0 0 1 -165.7,56.3 L-303.0,102.9 A320,320 0 0 0 -287.0,141.5 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_34" d="M-165.7,56.3 A175,175 0 0 1 -171.6,34.1 L-313.9,62.4 A320,320 0 0 0 -303.0,102.9 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_35" d="M-171.6,34.1 A175,175 0 0 1 -174.6,11.4 L-319.3,20.9 A320,320 0 0 0 -313.9,62.4 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_36" d="M-174.6,11.4 A175,175 0 0 1 -174.6,-11.4 L-319.3,-20.9 A320,320 0 0 0 -319.3,20.9 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_37" d="M-174.6,-11.4 A175,175 0 0 1 -171.6,-34.1 L-313.9,-62.4 A320,320 0 0 0 -319.3,-20.9 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_38" d="M-171.6,-34.1 A175,175 0 0 1 -165.7,-56.3 L-303.0,-102.9 A320,320 0 0 0 -313.9,-62.4 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_39" d="M-165.7,-56.3 A175,175 0 0 1 -157.0,-77.4 L-287.0,-141.5 A320,320 0 0 0 -303.0,-102.9 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_40" d="M-157.0,-77.4 A175,175 0 0 1 -145.5,-97.2 L-266.1,-177.8 A320,320 0 0 0 -287.0,-141.5 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_41" d="M-145.5,-97.2 A175,175 0 0 1 -131.6,-115.4 L-240.6,-211.0 A320,320 0 0 0 -266.1,-177.8 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_42" d="M-131.6,-115.4 A175,175 0 0 1 -115.4,-131.6 L-211.0,-240.6 A320,320 0 0 0 -240.6,-211.0 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_43" d="M-115.4,-131.6 A175,175 0 0 1 -97.2,-145.5 L-177.8,-266.1 A320,320 0 0 0 -211.0,-240.6 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_44" d="M-97.2,-145.5 A175,175 0 0 1 -77.4,-157.0 L-141.5,-287.0 A320,320 0 0 0 -177.8,-266.1 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_45" d="M-77.4,-157.0 A175,175 0 0 1 -56.3,-165.7 L-102.9,-303.0 A320,320 0 0 0 -141.5,-287.0 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_46" d="M-56.3,-165.7 A175,175 0 0 1 -34.1,-171.6 L-62.4,-313.9 A320,320 0 0 0 -102.9,-303.0 Z" fill="none" stroke="none" stroke-width="1.2"/>
+<path id="glow_47" d="M-34.1,-171.6 A175,175 0 0 1 -11.4,-174.6 L-20.9,-319.3 A320,320 0 0 0 -62.4,-313.9 Z" fill="none" stroke="none" stroke-width="1.2"/>
 <circle r="304" fill="none" stroke="#111" stroke-width="18"/>
+<circle r="168" fill="none" stroke="#111" stroke-width="14"/>
 <g stroke="#222" stroke-width="4"><line x1="-310" y1="0" x2="-160" y2="0"/><line x1="160" y1="0" x2="310" y2="0"/><line x1="0" y1="160" x2="0" y2="310"/></g>
 <g transform="scale(1)"><circle r="160" fill="#f2f2ee" stroke="#111" stroke-width="3"/><path d="M0,-160 A160,160 0 0 0 0,160 A80,80 0 0 0 0,0 A80,80 0 0 1 0,-160 Z" fill="#111"/><circle cy="-80" r="22" fill="#f2f2ee"/><circle cy="80" r="22" fill="#111"/></g>
-<rect x="-1.5" y="-245" width="3" height="130" fill="#111"/>
-<path d="M0.0,-186.1 L0.0,-186.5 L0.4,-187.6 L1.2,-189.1 L2.6,-190.5 L4.6,-191.5 L6.9,-191.7 L9.2,-191.1 L11.2,-189.6 L12.5,-187.6 L13.0,-185.3 L12.5,-182.8 L11.2,-180.5 L9.2,-178.3 L6.9,-176.2 L4.6,-174.2 L2.6,-172.4 L1.2,-170.7 L0.4,-169.4 L0.0,-168.5 L0.0,-168.2 L-0.0,-168.5 L-0.4,-169.4 L-1.2,-170.7 L-2.6,-172.4 L-4.6,-174.2 L-6.9,-176.2 L-9.2,-178.3 L-11.2,-180.5 L-12.5,-182.8 L-13.0,-185.3 L-12.5,-187.6 L-11.2,-189.6 L-9.2,-191.1 L-6.9,-191.7 L-4.6,-191.5 L-2.6,-190.5 L-1.2,-189.1 L-0.4,-187.6 L-0.0,-186.5 Z" fill="#111"/>
-<path id="heart_0" d="M0.0,-184.5 L0.0,-184.7 L0.3,-185.5 L0.9,-186.6 L1.9,-187.7 L3.4,-188.4 L5.0,-188.5 L6.7,-188.1 L8.2,-187.0 L9.2,-185.6 L9.5,-183.9 L9.2,-182.1 L8.2,-180.4 L6.7,-178.7 L5.0,-177.2 L3.4,-175.8 L1.9,-174.4 L0.9,-173.2 L0.3,-172.3 L0.0,-171.6 L0.0,-171.4 L-0.0,-171.6 L-0.3,-172.3 L-0.9,-173.2 L-1.9,-174.4 L-3.4,-175.8 L-5.0,-177.2 L-6.7,-178.7 L-8.2,-180.4 L-9.2,-182.1 L-9.5,-183.9 L-9.2,-185.6 L-8.2,-187.0 L-6.7,-188.1 L-5.0,-188.5 L-3.4,-188.4 L-1.9,-187.7 L-0.9,-186.6 L-0.3,-185.5 L-0.0,-184.7 Z" fill="#260006"/>
-<path d="M0.0,-210.1 L0.0,-210.5 L0.4,-211.6 L1.2,-213.1 L2.6,-214.5 L4.6,-215.5 L6.9,-215.7 L9.2,-215.1 L11.2,-213.6 L12.5,-211.6 L13.0,-209.3 L12.5,-206.8 L11.2,-204.5 L9.2,-202.3 L6.9,-200.2 L4.6,-198.2 L2.6,-196.4 L1.2,-194.7 L0.4,-193.4 L0.0,-192.5 L0.0,-192.2 L-0.0,-192.5 L-0.4,-193.4 L-1.2,-194.7 L-2.6,-196.4 L-4.6,-198.2 L-6.9,-200.2 L-9.2,-202.3 L-11.2,-204.5 L-12.5,-206.8 L-13.0,-209.3 L-12.5,-211.6 L-11.2,-213.6 L-9.2,-215.1 L-6.9,-215.7 L-4.6,-215.5 L-2.6,-214.5 L-1.2,-213.1 L-0.4,-211.6 L-0.0,-210.5 Z" fill="#111"/>
-<path id="heart_1" d="M0.0,-208.5 L0.0,-208.7 L0.3,-209.5 L0.9,-210.6 L1.9,-211.7 L3.4,-212.4 L5.0,-212.5 L6.7,-212.1 L8.2,-211.0 L9.2,-209.6 L9.5,-207.9 L9.2,-206.1 L8.2,-204.4 L6.7,-202.7 L5.0,-201.2 L3.4,-199.8 L1.9,-198.4 L0.9,-197.2 L0.3,-196.3 L0.0,-195.6 L0.0,-195.4 L-0.0,-195.6 L-0.3,-196.3 L-0.9,-197.2 L-1.9,-198.4 L-3.4,-199.8 L-5.0,-201.2 L-6.7,-202.7 L-8.2,-204.4 L-9.2,-206.1 L-9.5,-207.9 L-9.2,-209.6 L-8.2,-211.0 L-6.7,-212.1 L-5.0,-212.5 L-3.4,-212.4 L-1.9,-211.7 L-0.9,-210.6 L-0.3,-209.5 L-0.0,-208.7 Z" fill="#260006"/>
-<path d="M0.0,-234.1 L0.0,-234.5 L0.4,-235.6 L1.2,-237.1 L2.6,-238.5 L4.6,-239.5 L6.9,-239.7 L9.2,-239.1 L11.2,-237.6 L12.5,-235.6 L13.0,-233.3 L12.5,-230.8 L11.2,-228.5 L9.2,-226.3 L6.9,-224.2 L4.6,-222.2 L2.6,-220.4 L1.2,-218.7 L0.4,-217.4 L0.0,-216.5 L0.0,-216.2 L-0.0,-216.5 L-0.4,-217.4 L-1.2,-218.7 L-2.6,-220.4 L-4.6,-222.2 L-6.9,-224.2 L-9.2,-226.3 L-11.2,-228.5 L-12.5,-230.8 L-13.0,-233.3 L-12.5,-235.6 L-11.2,-237.6 L-9.2,-239.1 L-6.9,-239.7 L-4.6,-239.5 L-2.6,-238.5 L-1.2,-237.1 L-0.4,-235.6 L-0.0,-234.5 Z" fill="#111"/>
-<path id="heart_2" d="M0.0,-232.5 L0.0,-232.7 L0.3,-233.5 L0.9,-234.6 L1.9,-235.7 L3.4,-236.4 L5.0,-236.5 L6.7,-236.1 L8.2,-235.0 L9.2,-233.6 L9.5,-231.9 L9.2,-230.1 L8.2,-228.4 L6.7,-226.7 L5.0,-225.2 L3.4,-223.8 L1.9,-222.4 L0.9,-221.2 L0.3,-220.3 L0.0,-219.6 L0.0,-219.4 L-0.0,-219.6 L-0.3,-220.3 L-0.9,-221.2 L-1.9,-222.4 L-3.4,-223.8 L-5.0,-225.2 L-6.7,-226.7 L-8.2,-228.4 L-9.2,-230.1 L-9.5,-231.9 L-9.2,-233.6 L-8.2,-235.0 L-6.7,-236.1 L-5.0,-236.5 L-3.4,-236.4 L-1.9,-235.7 L-0.9,-234.6 L-0.3,-233.5 L-0.0,-232.7 Z" fill="#260006"/>
-<path d="M0.0,-258.1 L0.0,-258.5 L0.4,-259.6 L1.2,-261.1 L2.6,-262.5 L4.6,-263.5 L6.9,-263.7 L9.2,-263.1 L11.2,-261.6 L12.5,-259.6 L13.0,-257.3 L12.5,-254.8 L11.2,-252.5 L9.2,-250.3 L6.9,-248.2 L4.6,-246.2 L2.6,-244.4 L1.2,-242.7 L0.4,-241.4 L0.0,-240.5 L0.0,-240.2 L-0.0,-240.5 L-0.4,-241.4 L-1.2,-242.7 L-2.6,-244.4 L-4.6,-246.2 L-6.9,-248.2 L-9.2,-250.3 L-11.2,-252.5 L-12.5,-254.8 L-13.0,-257.3 L-12.5,-259.6 L-11.2,-261.6 L-9.2,-263.1 L-6.9,-263.7 L-4.6,-263.5 L-2.6,-262.5 L-1.2,-261.1 L-0.4,-259.6 L-0.0,-258.5 Z" fill="#111"/>
-<path id="heart_3" d="M0.0,-256.5 L0.0,-256.7 L0.3,-257.5 L0.9,-258.6 L1.9,-259.7 L3.4,-260.4 L5.0,-260.5 L6.7,-260.1 L8.2,-259.0 L9.2,-257.6 L9.5,-255.9 L9.2,-254.1 L8.2,-252.4 L6.7,-250.7 L5.0,-249.2 L3.4,-247.8 L1.9,-246.4 L0.9,-245.2 L0.3,-244.3 L0.0,-243.6 L0.0,-243.4 L-0.0,-243.6 L-0.3,-244.3 L-0.9,-245.2 L-1.9,-246.4 L-3.4,-247.8 L-5.0,-249.2 L-6.7,-250.7 L-8.2,-252.4 L-9.2,-254.1 L-9.5,-255.9 L-9.2,-257.6 L-8.2,-259.0 L-6.7,-260.1 L-5.0,-260.5 L-3.4,-260.4 L-1.9,-259.7 L-0.9,-258.6 L-0.3,-257.5 L-0.0,-256.7 Z" fill="#260006"/>
-<path d="M0.0,-282.1 L0.0,-282.5 L0.4,-283.6 L1.2,-285.1 L2.6,-286.5 L4.6,-287.5 L6.9,-287.7 L9.2,-287.1 L11.2,-285.6 L12.5,-283.6 L13.0,-281.3 L12.5,-278.8 L11.2,-276.5 L9.2,-274.3 L6.9,-272.2 L4.6,-270.2 L2.6,-268.4 L1.2,-266.7 L0.4,-265.4 L0.0,-264.5 L0.0,-264.2 L-0.0,-264.5 L-0.4,-265.4 L-1.2,-266.7 L-2.6,-268.4 L-4.6,-270.2 L-6.9,-272.2 L-9.2,-274.3 L-11.2,-276.5 L-12.5,-278.8 L-13.0,-281.3 L-12.5,-283.6 L-11.2,-285.6 L-9.2,-287.1 L-6.9,-287.7 L-4.6,-287.5 L-2.6,-286.5 L-1.2,-285.1 L-0.4,-283.6 L-0.0,-282.5 Z" fill="#111"/>
-<path id="heart_4" d="M0.0,-280.5 L0.0,-280.7 L0.3,-281.5 L0.9,-282.6 L1.9,-283.7 L3.4,-284.4 L5.0,-284.5 L6.7,-284.1 L8.2,-283.0 L9.2,-281.6 L9.5,-279.9 L9.2,-278.1 L8.2,-276.4 L6.7,-274.7 L5.0,-273.2 L3.4,-271.8 L1.9,-270.4 L0.9,-269.2 L0.3,-268.3 L0.0,-267.6 L0.0,-267.4 L-0.0,-267.6 L-0.3,-268.3 L-0.9,-269.2 L-1.9,-270.4 L-3.4,-271.8 L-5.0,-273.2 L-6.7,-274.7 L-8.2,-276.4 L-9.2,-278.1 L-9.5,-279.9 L-9.2,-281.6 L-8.2,-283.0 L-6.7,-284.1 L-5.0,-284.5 L-3.4,-284.4 L-1.9,-283.7 L-0.9,-282.6 L-0.3,-281.5 L-0.0,-280.7 Z" fill="#260006"/>
+<rect x="-17.5" y="-297.5" width="35" height="125.0" fill="#111"/>
+<path d="M0.0,-194.6 L0.1,-195.0 L0.4,-196.2 L1.3,-197.7 L2.8,-199.3 L4.9,-200.3 L7.4,-200.6 L9.9,-199.9 L12.0,-198.4 L13.5,-196.2 L14.0,-193.7 L13.5,-191.1 L12.0,-188.5 L9.9,-186.1 L7.4,-183.9 L4.9,-181.8 L2.8,-179.8 L1.3,-178.0 L0.4,-176.6 L0.1,-175.6 L0.0,-175.3 L-0.1,-175.6 L-0.4,-176.6 L-1.3,-178.0 L-2.8,-179.8 L-4.9,-181.8 L-7.4,-183.9 L-9.9,-186.1 L-12.0,-188.5 L-13.5,-191.1 L-14.0,-193.7 L-13.5,-196.2 L-12.0,-198.4 L-9.9,-199.9 L-7.4,-200.6 L-4.9,-200.3 L-2.8,-199.3 L-1.3,-197.7 L-0.4,-196.2 L-0.1,-195.0 Z" fill="#dcdcd6"/>
+<path id="heart_0" d="M0.0,-193.4 L0.0,-193.7 L0.3,-194.7 L1.1,-196.0 L2.3,-197.3 L4.1,-198.1 L6.1,-198.3 L8.1,-197.8 L9.9,-196.5 L11.1,-194.7 L11.5,-192.7 L11.1,-190.5 L9.9,-188.4 L8.1,-186.5 L6.1,-184.6 L4.1,-182.9 L2.3,-181.3 L1.1,-179.8 L0.3,-178.6 L0.0,-177.8 L0.0,-177.6 L-0.0,-177.8 L-0.3,-178.6 L-1.1,-179.8 L-2.3,-181.3 L-4.1,-182.9 L-6.1,-184.6 L-8.1,-186.5 L-9.9,-188.4 L-11.1,-190.5 L-11.5,-192.7 L-11.1,-194.7 L-9.9,-196.5 L-8.1,-197.8 L-6.1,-198.3 L-4.1,-198.1 L-2.3,-197.3 L-1.1,-196.0 L-0.3,-194.7 L-0.0,-193.7 Z" fill="#260006"/>
+<path d="M0.0,-218.1 L0.1,-218.5 L0.4,-219.7 L1.3,-221.2 L2.8,-222.8 L4.9,-223.8 L7.4,-224.1 L9.9,-223.4 L12.0,-221.9 L13.5,-219.7 L14.0,-217.2 L13.5,-214.6 L12.0,-212.0 L9.9,-209.6 L7.4,-207.4 L4.9,-205.3 L2.8,-203.3 L1.3,-201.5 L0.4,-200.1 L0.1,-199.1 L0.0,-198.8 L-0.1,-199.1 L-0.4,-200.1 L-1.3,-201.5 L-2.8,-203.3 L-4.9,-205.3 L-7.4,-207.4 L-9.9,-209.6 L-12.0,-212.0 L-13.5,-214.6 L-14.0,-217.2 L-13.5,-219.7 L-12.0,-221.9 L-9.9,-223.4 L-7.4,-224.1 L-4.9,-223.8 L-2.8,-222.8 L-1.3,-221.2 L-0.4,-219.7 L-0.1,-218.5 Z" fill="#dcdcd6"/>
+<path id="heart_1" d="M0.0,-216.9 L0.0,-217.2 L0.3,-218.2 L1.1,-219.5 L2.3,-220.8 L4.1,-221.6 L6.1,-221.8 L8.1,-221.3 L9.9,-220.0 L11.1,-218.2 L11.5,-216.2 L11.1,-214.0 L9.9,-211.9 L8.1,-210.0 L6.1,-208.1 L4.1,-206.4 L2.3,-204.8 L1.1,-203.3 L0.3,-202.1 L0.0,-201.3 L0.0,-201.1 L-0.0,-201.3 L-0.3,-202.1 L-1.1,-203.3 L-2.3,-204.8 L-4.1,-206.4 L-6.1,-208.1 L-8.1,-210.0 L-9.9,-211.9 L-11.1,-214.0 L-11.5,-216.2 L-11.1,-218.2 L-9.9,-220.0 L-8.1,-221.3 L-6.1,-221.8 L-4.1,-221.6 L-2.3,-220.8 L-1.1,-219.5 L-0.3,-218.2 L-0.0,-217.2 Z" fill="#260006"/>
+<path d="M0.0,-241.6 L0.1,-242.0 L0.4,-243.2 L1.3,-244.7 L2.8,-246.3 L4.9,-247.3 L7.4,-247.6 L9.9,-246.9 L12.0,-245.4 L13.5,-243.2 L14.0,-240.7 L13.5,-238.1 L12.0,-235.5 L9.9,-233.1 L7.4,-230.9 L4.9,-228.8 L2.8,-226.8 L1.3,-225.0 L0.4,-223.6 L0.1,-222.6 L0.0,-222.3 L-0.1,-222.6 L-0.4,-223.6 L-1.3,-225.0 L-2.8,-226.8 L-4.9,-228.8 L-7.4,-230.9 L-9.9,-233.1 L-12.0,-235.5 L-13.5,-238.1 L-14.0,-240.7 L-13.5,-243.2 L-12.0,-245.4 L-9.9,-246.9 L-7.4,-247.6 L-4.9,-247.3 L-2.8,-246.3 L-1.3,-244.7 L-0.4,-243.2 L-0.1,-242.0 Z" fill="#dcdcd6"/>
+<path id="heart_2" d="M0.0,-240.4 L0.0,-240.7 L0.3,-241.7 L1.1,-243.0 L2.3,-244.3 L4.1,-245.1 L6.1,-245.3 L8.1,-244.8 L9.9,-243.5 L11.1,-241.7 L11.5,-239.7 L11.1,-237.5 L9.9,-235.4 L8.1,-233.5 L6.1,-231.6 L4.1,-229.9 L2.3,-228.3 L1.1,-226.8 L0.3,-225.6 L0.0,-224.8 L0.0,-224.6 L-0.0,-224.8 L-0.3,-225.6 L-1.1,-226.8 L-2.3,-228.3 L-4.1,-229.9 L-6.1,-231.6 L-8.1,-233.5 L-9.9,-235.4 L-11.1,-237.5 L-11.5,-239.7 L-11.1,-241.7 L-9.9,-243.5 L-8.1,-244.8 L-6.1,-245.3 L-4.1,-245.1 L-2.3,-244.3 L-1.1,-243.0 L-0.3,-241.7 L-0.0,-240.7 Z" fill="#260006"/>
+<path d="M0.0,-265.1 L0.1,-265.5 L0.4,-266.7 L1.3,-268.2 L2.8,-269.8 L4.9,-270.8 L7.4,-271.1 L9.9,-270.4 L12.0,-268.9 L13.5,-266.7 L14.0,-264.2 L13.5,-261.6 L12.0,-259.0 L9.9,-256.6 L7.4,-254.4 L4.9,-252.3 L2.8,-250.3 L1.3,-248.5 L0.4,-247.1 L0.1,-246.1 L0.0,-245.8 L-0.1,-246.1 L-0.4,-247.1 L-1.3,-248.5 L-2.8,-250.3 L-4.9,-252.3 L-7.4,-254.4 L-9.9,-256.6 L-12.0,-259.0 L-13.5,-261.6 L-14.0,-264.2 L-13.5,-266.7 L-12.0,-268.9 L-9.9,-270.4 L-7.4,-271.1 L-4.9,-270.8 L-2.8,-269.8 L-1.3,-268.2 L-0.4,-266.7 L-0.1,-265.5 Z" fill="#dcdcd6"/>
+<path id="heart_3" d="M0.0,-263.9 L0.0,-264.2 L0.3,-265.2 L1.1,-266.5 L2.3,-267.8 L4.1,-268.6 L6.1,-268.8 L8.1,-268.3 L9.9,-267.0 L11.1,-265.2 L11.5,-263.2 L11.1,-261.0 L9.9,-258.9 L8.1,-257.0 L6.1,-255.1 L4.1,-253.4 L2.3,-251.8 L1.1,-250.3 L0.3,-249.1 L0.0,-248.3 L0.0,-248.1 L-0.0,-248.3 L-0.3,-249.1 L-1.1,-250.3 L-2.3,-251.8 L-4.1,-253.4 L-6.1,-255.1 L-8.1,-257.0 L-9.9,-258.9 L-11.1,-261.0 L-11.5,-263.2 L-11.1,-265.2 L-9.9,-267.0 L-8.1,-268.3 L-6.1,-268.8 L-4.1,-268.6 L-2.3,-267.8 L-1.1,-266.5 L-0.3,-265.2 L-0.0,-264.2 Z" fill="#260006"/>
+<path d="M0.0,-288.6 L0.1,-289.0 L0.4,-290.2 L1.3,-291.7 L2.8,-293.3 L4.9,-294.3 L7.4,-294.6 L9.9,-293.9 L12.0,-292.4 L13.5,-290.2 L14.0,-287.7 L13.5,-285.1 L12.0,-282.5 L9.9,-280.1 L7.4,-277.9 L4.9,-275.8 L2.8,-273.8 L1.3,-272.0 L0.4,-270.6 L0.1,-269.6 L0.0,-269.3 L-0.1,-269.6 L-0.4,-270.6 L-1.3,-272.0 L-2.8,-273.8 L-4.9,-275.8 L-7.4,-277.9 L-9.9,-280.1 L-12.0,-282.5 L-13.5,-285.1 L-14.0,-287.7 L-13.5,-290.2 L-12.0,-292.4 L-9.9,-293.9 L-7.4,-294.6 L-4.9,-294.3 L-2.8,-293.3 L-1.3,-291.7 L-0.4,-290.2 L-0.1,-289.0 Z" fill="#dcdcd6"/>
+<path id="heart_4" d="M0.0,-287.4 L0.0,-287.7 L0.3,-288.7 L1.1,-290.0 L2.3,-291.3 L4.1,-292.1 L6.1,-292.3 L8.1,-291.8 L9.9,-290.5 L11.1,-288.7 L11.5,-286.7 L11.1,-284.5 L9.9,-282.4 L8.1,-280.5 L6.1,-278.6 L4.1,-276.9 L2.3,-275.3 L1.1,-273.8 L0.3,-272.6 L0.0,-271.8 L0.0,-271.6 L-0.0,-271.8 L-0.3,-272.6 L-1.1,-273.8 L-2.3,-275.3 L-4.1,-276.9 L-6.1,-278.6 L-8.1,-280.5 L-9.9,-282.4 L-11.1,-284.5 L-11.5,-286.7 L-11.1,-288.7 L-9.9,-290.5 L-8.1,-291.8 L-6.1,-292.3 L-4.1,-292.1 L-2.3,-291.3 L-1.1,-290.0 L-0.3,-288.7 L-0.0,-287.7 Z" fill="#260006"/>
 <rect id="led_0" x="-6.0" y="-307.5" width="12" height="7" rx="1.5" transform="rotate(0.0 0.0 -304.0)" fill="#262626"/>
+<rect id="inled_0" x="-4.0" y="-171.0" width="8" height="6" rx="1.2" transform="rotate(0.0 0.0 -168.0)" fill="#262626"/>
 <rect id="led_1" x="33.7" y="-304.9" width="12" height="7" rx="1.5" transform="rotate(7.5 39.7 -301.4)" fill="#262626"/>
+<rect id="inled_1" x="17.9" y="-169.6" width="8" height="6" rx="1.2" transform="rotate(7.5 21.9 -166.6)" fill="#262626"/>
 <rect id="led_2" x="72.7" y="-297.1" width="12" height="7" rx="1.5" transform="rotate(15.0 78.7 -293.6)" fill="#262626"/>
+<rect id="inled_2" x="39.5" y="-165.3" width="8" height="6" rx="1.2" transform="rotate(15.0 43.5 -162.3)" fill="#262626"/>
 <rect id="led_3" x="110.3" y="-284.4" width="12" height="7" rx="1.5" transform="rotate(22.5 116.3 -280.9)" fill="#262626"/>
+<rect id="inled_3" x="60.3" y="-158.2" width="8" height="6" rx="1.2" transform="rotate(22.5 64.3 -155.2)" fill="#262626"/>
 <rect id="led_4" x="146.0" y="-266.8" width="12" height="7" rx="1.5" transform="rotate(30.0 152.0 -263.3)" fill="#262626"/>
+<rect id="inled_4" x="80.0" y="-148.5" width="8" height="6" rx="1.2" transform="rotate(30.0 84.0 -145.5)" fill="#262626"/>
 <rect id="led_5" x="179.1" y="-244.7" width="12" height="7" rx="1.5" transform="rotate(37.5 185.1 -241.2)" fill="#262626"/>
+<rect id="inled_5" x="98.3" y="-136.3" width="8" height="6" rx="1.2" transform="rotate(37.5 102.3 -133.3)" fill="#262626"/>
 <rect id="led_6" x="209.0" y="-218.5" width="12" height="7" rx="1.5" transform="rotate(45.0 215.0 -215.0)" fill="#262626"/>
+<rect id="inled_6" x="114.8" y="-121.8" width="8" height="6" rx="1.2" transform="rotate(45.0 118.8 -118.8)" fill="#262626"/>
 <rect id="led_7" x="235.2" y="-188.6" width="12" height="7" rx="1.5" transform="rotate(52.5 241.2 -185.1)" fill="#262626"/>
+<rect id="inled_7" x="129.3" y="-105.3" width="8" height="6" rx="1.2" transform="rotate(52.5 133.3 -102.3)" fill="#262626"/>
 <rect id="led_8" x="257.3" y="-155.5" width="12" height="7" rx="1.5" transform="rotate(60.0 263.3 -152.0)" fill="#262626"/>
+<rect id="inled_8" x="141.5" y="-87.0" width="8" height="6" rx="1.2" transform="rotate(60.0 145.5 -84.0)" fill="#262626"/>
 <rect id="led_9" x="274.9" y="-119.8" width="12" height="7" rx="1.5" transform="rotate(67.5 280.9 -116.3)" fill="#262626"/>
+<rect id="inled_9" x="151.2" y="-67.3" width="8" height="6" rx="1.2" transform="rotate(67.5 155.2 -64.3)" fill="#262626"/>
 <rect id="led_10" x="287.6" y="-82.2" width="12" height="7" rx="1.5" transform="rotate(75.0 293.6 -78.7)" fill="#262626"/>
+<rect id="inled_10" x="158.3" y="-46.5" width="8" height="6" rx="1.2" transform="rotate(75.0 162.3 -43.5)" fill="#262626"/>
 <rect id="led_11" x="295.4" y="-43.2" width="12" height="7" rx="1.5" transform="rotate(82.5 301.4 -39.7)" fill="#262626"/>
+<rect id="inled_11" x="162.6" y="-24.9" width="8" height="6" rx="1.2" transform="rotate(82.5 166.6 -21.9)" fill="#262626"/>
 <rect id="led_12" x="298.0" y="-3.5" width="12" height="7" rx="1.5" transform="rotate(90.0 304.0 -0.0)" fill="#262626"/>
+<rect id="inled_12" x="164.0" y="-3.0" width="8" height="6" rx="1.2" transform="rotate(90.0 168.0 -0.0)" fill="#262626"/>
 <rect id="led_13" x="295.4" y="36.2" width="12" height="7" rx="1.5" transform="rotate(97.5 301.4 39.7)" fill="#262626"/>
+<rect id="inled_13" x="162.6" y="18.9" width="8" height="6" rx="1.2" transform="rotate(97.5 166.6 21.9)" fill="#262626"/>
 <rect id="led_14" x="287.6" y="75.2" width="12" height="7" rx="1.5" transform="rotate(105.0 293.6 78.7)" fill="#262626"/>
+<rect id="inled_14" x="158.3" y="40.5" width="8" height="6" rx="1.2" transform="rotate(105.0 162.3 43.5)" fill="#262626"/>
 <rect id="led_15" x="274.9" y="112.8" width="12" height="7" rx="1.5" transform="rotate(112.5 280.9 116.3)" fill="#262626"/>
+<rect id="inled_15" x="151.2" y="61.3" width="8" height="6" rx="1.2" transform="rotate(112.5 155.2 64.3)" fill="#262626"/>
 <rect id="led_16" x="257.3" y="148.5" width="12" height="7" rx="1.5" transform="rotate(120.0 263.3 152.0)" fill="#262626"/>
+<rect id="inled_16" x="141.5" y="81.0" width="8" height="6" rx="1.2" transform="rotate(120.0 145.5 84.0)" fill="#262626"/>
 <rect id="led_17" x="235.2" y="181.6" width="12" height="7" rx="1.5" transform="rotate(127.5 241.2 185.1)" fill="#262626"/>
+<rect id="inled_17" x="129.3" y="99.3" width="8" height="6" rx="1.2" transform="rotate(127.5 133.3 102.3)" fill="#262626"/>
 <rect id="led_18" x="209.0" y="211.5" width="12" height="7" rx="1.5" transform="rotate(135.0 215.0 215.0)" fill="#262626"/>
+<rect id="inled_18" x="114.8" y="115.8" width="8" height="6" rx="1.2" transform="rotate(135.0 118.8 118.8)" fill="#262626"/>
 <rect id="led_19" x="179.1" y="237.7" width="12" height="7" rx="1.5" transform="rotate(142.5 185.1 241.2)" fill="#262626"/>
+<rect id="inled_19" x="98.3" y="130.3" width="8" height="6" rx="1.2" transform="rotate(142.5 102.3 133.3)" fill="#262626"/>
 <rect id="led_20" x="146.0" y="259.8" width="12" height="7" rx="1.5" transform="rotate(150.0 152.0 263.3)" fill="#262626"/>
+<rect id="inled_20" x="80.0" y="142.5" width="8" height="6" rx="1.2" transform="rotate(150.0 84.0 145.5)" fill="#262626"/>
 <rect id="led_21" x="110.3" y="277.4" width="12" height="7" rx="1.5" transform="rotate(157.5 116.3 280.9)" fill="#262626"/>
+<rect id="inled_21" x="60.3" y="152.2" width="8" height="6" rx="1.2" transform="rotate(157.5 64.3 155.2)" fill="#262626"/>
 <rect id="led_22" x="72.7" y="290.1" width="12" height="7" rx="1.5" transform="rotate(165.0 78.7 293.6)" fill="#262626"/>
+<rect id="inled_22" x="39.5" y="159.3" width="8" height="6" rx="1.2" transform="rotate(165.0 43.5 162.3)" fill="#262626"/>
 <rect id="led_23" x="33.7" y="297.9" width="12" height="7" rx="1.5" transform="rotate(172.5 39.7 301.4)" fill="#262626"/>
+<rect id="inled_23" x="17.9" y="163.6" width="8" height="6" rx="1.2" transform="rotate(172.5 21.9 166.6)" fill="#262626"/>
 <rect id="led_24" x="-6.0" y="300.5" width="12" height="7" rx="1.5" transform="rotate(180.0 0.0 304.0)" fill="#262626"/>
+<rect id="inled_24" x="-4.0" y="165.0" width="8" height="6" rx="1.2" transform="rotate(180.0 0.0 168.0)" fill="#262626"/>
 <rect id="led_25" x="-45.7" y="297.9" width="12" height="7" rx="1.5" transform="rotate(187.5 -39.7 301.4)" fill="#262626"/>
+<rect id="inled_25" x="-25.9" y="163.6" width="8" height="6" rx="1.2" transform="rotate(187.5 -21.9 166.6)" fill="#262626"/>
 <rect id="led_26" x="-84.7" y="290.1" width="12" height="7" rx="1.5" transform="rotate(195.0 -78.7 293.6)" fill="#262626"/>
+<rect id="inled_26" x="-47.5" y="159.3" width="8" height="6" rx="1.2" transform="rotate(195.0 -43.5 162.3)" fill="#262626"/>
 <rect id="led_27" x="-122.3" y="277.4" width="12" height="7" rx="1.5" transform="rotate(202.5 -116.3 280.9)" fill="#262626"/>
+<rect id="inled_27" x="-68.3" y="152.2" width="8" height="6" rx="1.2" transform="rotate(202.5 -64.3 155.2)" fill="#262626"/>
 <rect id="led_28" x="-158.0" y="259.8" width="12" height="7" rx="1.5" transform="rotate(210.0 -152.0 263.3)" fill="#262626"/>
+<rect id="inled_28" x="-88.0" y="142.5" width="8" height="6" rx="1.2" transform="rotate(210.0 -84.0 145.5)" fill="#262626"/>
 <rect id="led_29" x="-191.1" y="237.7" width="12" height="7" rx="1.5" transform="rotate(217.5 -185.1 241.2)" fill="#262626"/>
+<rect id="inled_29" x="-106.3" y="130.3" width="8" height="6" rx="1.2" transform="rotate(217.5 -102.3 133.3)" fill="#262626"/>
 <rect id="led_30" x="-221.0" y="211.5" width="12" height="7" rx="1.5" transform="rotate(225.0 -215.0 215.0)" fill="#262626"/>
+<rect id="inled_30" x="-122.8" y="115.8" width="8" height="6" rx="1.2" transform="rotate(225.0 -118.8 118.8)" fill="#262626"/>
 <rect id="led_31" x="-247.2" y="181.6" width="12" height="7" rx="1.5" transform="rotate(232.5 -241.2 185.1)" fill="#262626"/>
+<rect id="inled_31" x="-137.3" y="99.3" width="8" height="6" rx="1.2" transform="rotate(232.5 -133.3 102.3)" fill="#262626"/>
 <rect id="led_32" x="-269.3" y="148.5" width="12" height="7" rx="1.5" transform="rotate(240.0 -263.3 152.0)" fill="#262626"/>
+<rect id="inled_32" x="-149.5" y="81.0" width="8" height="6" rx="1.2" transform="rotate(240.0 -145.5 84.0)" fill="#262626"/>
 <rect id="led_33" x="-286.9" y="112.8" width="12" height="7" rx="1.5" transform="rotate(247.5 -280.9 116.3)" fill="#262626"/>
+<rect id="inled_33" x="-159.2" y="61.3" width="8" height="6" rx="1.2" transform="rotate(247.5 -155.2 64.3)" fill="#262626"/>
 <rect id="led_34" x="-299.6" y="75.2" width="12" height="7" rx="1.5" transform="rotate(255.0 -293.6 78.7)" fill="#262626"/>
+<rect id="inled_34" x="-166.3" y="40.5" width="8" height="6" rx="1.2" transform="rotate(255.0 -162.3 43.5)" fill="#262626"/>
 <rect id="led_35" x="-307.4" y="36.2" width="12" height="7" rx="1.5" transform="rotate(262.5 -301.4 39.7)" fill="#262626"/>
+<rect id="inled_35" x="-170.6" y="18.9" width="8" height="6" rx="1.2" transform="rotate(262.5 -166.6 21.9)" fill="#262626"/>
 <rect id="led_36" x="-310.0" y="-3.5" width="12" height="7" rx="1.5" transform="rotate(270.0 -304.0 0.0)" fill="#262626"/>
+<rect id="inled_36" x="-172.0" y="-3.0" width="8" height="6" rx="1.2" transform="rotate(270.0 -168.0 0.0)" fill="#262626"/>
 <rect id="led_37" x="-307.4" y="-43.2" width="12" height="7" rx="1.5" transform="rotate(277.5 -301.4 -39.7)" fill="#262626"/>
+<rect id="inled_37" x="-170.6" y="-24.9" width="8" height="6" rx="1.2" transform="rotate(277.5 -166.6 -21.9)" fill="#262626"/>
 <rect id="led_38" x="-299.6" y="-82.2" width="12" height="7" rx="1.5" transform="rotate(285.0 -293.6 -78.7)" fill="#262626"/>
+<rect id="inled_38" x="-166.3" y="-46.5" width="8" height="6" rx="1.2" transform="rotate(285.0 -162.3 -43.5)" fill="#262626"/>
 <rect id="led_39" x="-286.9" y="-119.8" width="12" height="7" rx="1.5" transform="rotate(292.5 -280.9 -116.3)" fill="#262626"/>
+<rect id="inled_39" x="-159.2" y="-67.3" width="8" height="6" rx="1.2" transform="rotate(292.5 -155.2 -64.3)" fill="#262626"/>
 <rect id="led_40" x="-269.3" y="-155.5" width="12" height="7" rx="1.5" transform="rotate(300.0 -263.3 -152.0)" fill="#262626"/>
+<rect id="inled_40" x="-149.5" y="-87.0" width="8" height="6" rx="1.2" transform="rotate(300.0 -145.5 -84.0)" fill="#262626"/>
 <rect id="led_41" x="-247.2" y="-188.6" width="12" height="7" rx="1.5" transform="rotate(307.5 -241.2 -185.1)" fill="#262626"/>
+<rect id="inled_41" x="-137.3" y="-105.3" width="8" height="6" rx="1.2" transform="rotate(307.5 -133.3 -102.3)" fill="#262626"/>
 <rect id="led_42" x="-221.0" y="-218.5" width="12" height="7" rx="1.5" transform="rotate(315.0 -215.0 -215.0)" fill="#262626"/>
+<rect id="inled_42" x="-122.8" y="-121.8" width="8" height="6" rx="1.2" transform="rotate(315.0 -118.8 -118.8)" fill="#262626"/>
 <rect id="led_43" x="-191.1" y="-244.7" width="12" height="7" rx="1.5" transform="rotate(322.5 -185.1 -241.2)" fill="#262626"/>
+<rect id="inled_43" x="-106.3" y="-136.3" width="8" height="6" rx="1.2" transform="rotate(322.5 -102.3 -133.3)" fill="#262626"/>
 <rect id="led_44" x="-158.0" y="-266.8" width="12" height="7" rx="1.5" transform="rotate(330.0 -152.0 -263.3)" fill="#262626"/>
+<rect id="inled_44" x="-88.0" y="-148.5" width="8" height="6" rx="1.2" transform="rotate(330.0 -84.0 -145.5)" fill="#262626"/>
 <rect id="led_45" x="-122.3" y="-284.4" width="12" height="7" rx="1.5" transform="rotate(337.5 -116.3 -280.9)" fill="#262626"/>
+<rect id="inled_45" x="-68.3" y="-158.2" width="8" height="6" rx="1.2" transform="rotate(337.5 -64.3 -155.2)" fill="#262626"/>
 <rect id="led_46" x="-84.7" y="-297.1" width="12" height="7" rx="1.5" transform="rotate(345.0 -78.7 -293.6)" fill="#262626"/>
+<rect id="inled_46" x="-47.5" y="-165.3" width="8" height="6" rx="1.2" transform="rotate(345.0 -43.5 -162.3)" fill="#262626"/>
 <rect id="led_47" x="-45.7" y="-304.9" width="12" height="7" rx="1.5" transform="rotate(352.5 -39.7 -301.4)" fill="#262626"/>
+<rect id="inled_47" x="-25.9" y="-169.6" width="8" height="6" rx="1.2" transform="rotate(352.5 -21.9 -166.6)" fill="#262626"/>
 <circle cx="249.4" cy="-103.3" r="6" fill="#cfe3e6" opacity=".6"/>
 <circle cx="103.3" cy="-249.4" r="6" fill="#cfe3e6" opacity=".6"/>
 <circle cx="-103.3" cy="-249.4" r="6" fill="#cfe3e6" opacity=".6"/>
@@ -80,10 +177,14 @@ static const char TILE_TOP_SVG[] = R"SVG(<svg xmlns="http://www.w3.org/2000/svg"
 <circle cx="103.3" cy="249.4" r="6" fill="#cfe3e6" opacity=".6"/>
 <circle cx="249.4" cy="103.3" r="6" fill="#cfe3e6" opacity=".6"/>
 <circle r="322" fill="url(#glass)" stroke="#e8f6f8" stroke-opacity=".5" stroke-width="2"/>
-<g id="icon_Triangle" class="icon" data-icon="Triangle" stroke="#8f8f8a" filter="url(#glow)" style="cursor:pointer"><circle cx="152.0" cy="-152.0" r="58" fill="#000" fill-opacity="0" stroke="none"/><polygon points="152.0,-194.0 115.7,-131.0 188.4,-131.0" fill="none" stroke-width="9" stroke-linejoin="round"/></g>
-<g id="icon_Square" class="icon" data-icon="Square" stroke="#8f8f8a" filter="url(#glow)" style="cursor:pointer"><circle cx="-152.0" cy="-152.0" r="58" fill="#000" fill-opacity="0" stroke="none"/><rect x="-183.0" y="-183.0" width="62" height="62" fill="none" stroke-width="9"/></g>
-<g id="icon_Cross" class="icon" data-icon="Cross" stroke="#8f8f8a" filter="url(#glow)" style="cursor:pointer"><circle cx="-152.0" cy="152.0" r="58" fill="#000" fill-opacity="0" stroke="none"/><path d="M-181.0,123.0 L-123.0,181.0 M-123.0,123.0 L-181.0,181.0" fill="none" stroke-width="9" stroke-linecap="round"/></g>
-<g id="icon_Circle" class="icon" data-icon="Circle" stroke="#8f8f8a" filter="url(#glow)" style="cursor:pointer"><circle cx="152.0" cy="152.0" r="58" fill="#000" fill-opacity="0" stroke="none"/><circle cx="152.0" cy="152.0" r="33" fill="none" stroke-width="9"/></g>
+<circle cx="166.2" cy="-166.2" r="50" fill="#151515"/>
+<g id="icon_Triangle" class="icon" data-icon="Triangle" stroke="#8f8f8a" filter="url(#glow)" style="cursor:pointer"><circle cx="166.2" cy="-166.2" r="50" fill="#000" fill-opacity="0" stroke="none"/><polygon points="166.2,-206.1 131.6,-146.2 200.7,-146.2" fill="none" stroke-width="8.5" stroke-linejoin="round"/></g>
+<circle cx="-166.2" cy="-166.2" r="50" fill="#151515"/>
+<g id="icon_Square" class="icon" data-icon="Square" stroke="#8f8f8a" filter="url(#glow)" style="cursor:pointer"><circle cx="-166.2" cy="-166.2" r="50" fill="#000" fill-opacity="0" stroke="none"/><rect x="-195.6" y="-195.6" width="58.9" height="58.9" fill="none" stroke-width="8.5"/></g>
+<circle cx="-166.2" cy="166.2" r="50" fill="#151515"/>
+<g id="icon_Cross" class="icon" data-icon="Cross" stroke="#8f8f8a" filter="url(#glow)" style="cursor:pointer"><circle cx="-166.2" cy="166.2" r="50" fill="#000" fill-opacity="0" stroke="none"/><path d="M-193.7,138.6 L-138.6,193.7 M-138.6,138.6 L-193.7,193.7" fill="none" stroke-width="8.5" stroke-linecap="round"/></g>
+<circle cx="166.2" cy="166.2" r="50" fill="#151515"/>
+<g id="icon_Circle" class="icon" data-icon="Circle" stroke="#8f8f8a" filter="url(#glow)" style="cursor:pointer"><circle cx="166.2" cy="166.2" r="50" fill="#000" fill-opacity="0" stroke="none"/><circle cx="166.2" cy="166.2" r="31.3" fill="none" stroke-width="8.5"/></g>
 <circle cx="323.6" cy="-86.7" r="7" fill="#b7bcc2" stroke="#7a7f85"/>
 <circle cx="236.9" cy="-236.9" r="7" fill="#b7bcc2" stroke="#7a7f85"/>
 <circle cx="86.7" cy="-323.6" r="7" fill="#b7bcc2" stroke="#7a7f85"/>
@@ -96,6 +197,5 @@ static const char TILE_TOP_SVG[] = R"SVG(<svg xmlns="http://www.w3.org/2000/svg"
 <circle cx="86.7" cy="323.6" r="7" fill="#b7bcc2" stroke="#7a7f85"/>
 <circle cx="236.9" cy="236.9" r="7" fill="#b7bcc2" stroke="#7a7f85"/>
 <circle cx="323.6" cy="86.7" r="7" fill="#b7bcc2" stroke="#7a7f85"/>
-<circle id="status" cx="50" cy="-338.0" r="5" fill="#262626" filter="url(#glow)"/>
 </svg>
 )SVG";

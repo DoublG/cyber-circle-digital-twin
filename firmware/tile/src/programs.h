@@ -11,6 +11,12 @@
 //   show      (Code kraken, run by the game) {"show": {"ring": [colours], "icons":
 //             [4 colours]}}: the ring in equal segments, one colour each;
 //             {"show": false} or a stop clears it
+//   countdown the round's time: ONE green LED goes once round the outer ring
+//             (LED 0 at the start, back at LED 0 when the time is up), on top of
+//             whatever the ring shows; not on the inner ring (main.cpp draws it
+//             after the inner ring's copy). {"countdown": {"length": ms, "left": ms}}
+//             starts it (the tile counts down itself, frozen while paused),
+//             {"countdown": false} ends it. All rounds but Cyclone.
 //   clock     (Ritme) nothing on the ring: only the round's clock, so every
 //             press carries its time since the start ({"press": .., "t": ms,
 //             "program": id}) - the game scores it at that moment, not when it
@@ -22,7 +28,8 @@
 namespace programs {
 // tile/<n>/cmd: {"program": {...}}, {"start": id}, {"stop": true},
 // {"pause": true|false}, {"piet": {"on": true, "speed": 20, "color": "#ff2a00"}},
-// {"show": {"ring": ["#00ff00", ...], "icons": ["#ff66cc", ...]}} / {"show": false}
+// {"show": {"ring": ["#00ff00", ...], "icons": ["#ff66cc", ...]}} / {"show": false},
+// {"countdown": {"length": ms, "left": ms}} / {"countdown": false}
 void receive(JsonObjectConst msg);
 void update(uint32_t dtMs);                 // every loop
 void press(int icon);
@@ -30,4 +37,5 @@ bool ownsRing();                            // a program, Zwarte Piet or a shown
 // A program is running: its id and the ms since its start (for a press's time stamp).
 bool clockNow(String &programId, uint32_t &ms);
 void draw();                                // its ring and icons into the LEDs
+int countdownLed();                         // the round's green countdown LED on the outer ring (-1: none)
 }

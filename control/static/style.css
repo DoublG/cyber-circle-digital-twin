@@ -158,3 +158,4 @@ table.kv td:first-child { color: var(--dim); width: 45%; }
 /* Ranglijst › Event */
 #events tr.current td { background: rgba(51, 204, 191, .12); }
 #events a.button-like { text-decoration: none; padding: 2px 8px; }
+tr.dim td { opacity: .5; }

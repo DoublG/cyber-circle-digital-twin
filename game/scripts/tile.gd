@@ -2,7 +2,8 @@ class_name CyberTile
 extends Node3D
 ## One Cyber Circle Challenge floor tile ("tegel") in the game.
 ## Wraps models/tile.glb and exposes the same things the real tile has:
-## 48-LED ring, 5-heart health bar (lives), and a glass plate with 4 etched
+## 48-LED ring with a second 48-LED ring around the logo (it mirrors the
+## outer one), 5-heart health bar (lives), and a glass plate with 4 etched
 ## button icons, each lit by an RGB LED and read by a pressure sensor.
 ## Forward (-Z) points at the robot.
 ## Tile states:
@@ -97,7 +98,8 @@ func _ready() -> void:
 		_button_leds[b] = _led("Button_%s_Symbol" % b, SYMBOL_OFF_COLOR)
 		_button_leds[b].cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_add_click_area(b, anchor)
-	_status_led = _led("Status_LED")
+	if _model.find_child("Status_LED", true, false) != null:   # (the drone; the floor tile has none)
+		_status_led = _led("Status_LED")
 	_build_shield()
 	if not (self is DroneTile):
 		_contact_shadow()
@@ -773,7 +775,8 @@ func display_state() -> Dictionary:
 
 
 func set_status(color: Color) -> void:
-	_paint(_status_led, color)
+	if _status_led != null:
+		_paint(_status_led, color)
 
 
 # ---------------------------------------------------------------- buttons

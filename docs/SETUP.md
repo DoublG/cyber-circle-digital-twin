@@ -87,8 +87,10 @@ the database and the game (one game computer).
 6. **Tiles** – in `firmware/tile/include/config.h`: `MQTT_HOST` (the overview
    PC), `MQTT_USER` / `MQTT_PASSWORD` (the broker login) and the Ethernet
    module's pins (`TILE_ETH_*`); then flash every tile with the same firmware
-   (`pio run -t upload`, §5). Nobody on a tile at power-up (the sensors
-   calibrate).
+   (`pio run -t upload`, §5) – or `deploy/install/flash_tiles.sh`, which takes
+   the broker, the tiles' own login and the update password from the settings
+   file (§13). Nobody on a tile at power-up if it can be helped (the sensors
+   measure their resting value; a foot on an icon then: it finds out).
 7. **Web interface, in SETUP mode** (§10):
    * *Tegels* – put each physical tile (by its MAC address) on its place
      1–13; *laat oplichten* to find one, the hearts show the place number in
@@ -113,7 +115,9 @@ emulator (§5).
 
 | setting | set it in | must be the same in |
 |---|---|---|
-| broker user / password | `mosquitto_passwd` (§2) | control server `--mqtt-user` / `--mqtt-password`; game `--mqtt-user=` / `--mqtt-password=`; tiles `MQTT_USER` / `MQTT_PASSWORD` (`config.h`); the app's *Instellingen* |
+| broker user / password | `mosquitto_passwd` (§2) | control server `--mqtt-user` / `--mqtt-password`; game `--mqtt-user=` / `--mqtt-password=`; the app's *Instellingen* |
+| the boards' broker user (tiles, robot) | `install_server.sh` (`MQTT_DEVICE_USER` / `MQTT_DEVICE_PASSWORD` in the settings file): a login that reaches only the boards' own topics (`mosquitto-cybercircle.acl`) | `flash_tiles.sh` / `flash_robot.sh` build it in (by hand: `MQTT_USER` / `MQTT_PASSWORD` in `config.h`) |
+| update password (flashing over the network) | `OTA_PASSWORD` in the settings file (`install_server.sh` makes a random one) | built into every board by the flash scripts, and used by them for the next update |
 | broker address | the broker's listeners (1883 plain, 9001 WebSocket) | control server `--mqtt ws://…:9001`; game `--mqtt=ws://…:9001`; tiles `MQTT_HOST` + `MQTT_PORT 1883`. The app gets it from `/api/config` (the control server's `--mqtt`, `localhost` replaced by the address the app used; `--public-mqtt` behind NAT / Docker) |
 | database login | MySQL `CREATE USER` (§10) | control server `--db mysql+pymysql://user:pw@host/cybercircle?charset=utf8mb4` |
 | control server address | `--host` (default `0.0.0.0`), `--port` (default 8080) | game `--control=http://…:8080`; the app's *Instellingen* |
@@ -551,8 +555,9 @@ godot-4 --rendering-method gl_compatibility --path . -- --replica --show=1,2 --m
    OP DE VOLGENDE RONDE", their view stays on the robot); the scoreboard is
    where new players come in (row **NIEUW!**) and they play from the next round.
 4. **Lives change only on the scoreboard after a round, by at most 1:**
-   personal rounds – 1st place +1, last place −1; quiz – a wrong or missing
-   answer −1, and every 10 right answers in a row (over rounds) +1. Max 5 lives. During a round the robot's shots are harmless.
+   rounds with places – by default 1st place +1, last place −1; quiz – a wrong or missing
+   answer −1, and every 10 right answers in a row (over rounds) +1. Max 5 lives.
+   Configurable per game (not the quiz; *Instellingen*, see the *Lives* note below). During a round the robot's shots are harmless.
    The scoreboard first shows the lives as they were; after `lives_delay`
    (2.5 s) the rows show the change (+♥ green, −♥ red) and the robot gives /
    takes the lives. At 0 a player is **exterminated** – very visible: a big
@@ -662,14 +667,15 @@ from the master, and the robot runs the physical part itself:
 
 The web interface: *Tegels › Robot* – its state (side, turns, moving, queue,
 errors), the settings (sent retained on `<prefix>/robot/config`, kept in its
-flash), *Zoek de start*, *Stop motor*, a smoke test, turn to a side; *Spel*:
+flash), *Zoek de start*, *Stop motor*, a smoke test, turn to a side (the
+settings and aligning it in SETUP only – §10 *The lock*); *Spel*:
 **💨 Rook**. Topics: `robot/cmd`, `robot/config`, `robot/state`, `robot/event`,
 `robot/hello` (`firmware/robot/src/main.cpp`, `robot.cpp`).
 
 ```bash
 cd firmware/robot
 pio run -t upload                                     # the first time over USB
-pio run -e ota -t upload --upload-port 192.168.1.40   # then over Ethernet (OTA_PASSWORD in config.h)
+pio run -e ota -t upload --upload-port 192.168.1.40   # then over Ethernet (password: CC_OTA_PASSWORD, below)
 pio test -e test                                      # the motion / homing logic on the PC
 pio run -e native && .pio/build/native/program --host 127.0.0.1 --port 1883 --web 8095 --start-turns 0.4
                                                       # the emulator: the same firmware, a simulated head,
@@ -678,6 +684,35 @@ pio run -e native && .pio/build/native/program --host 127.0.0.1 --port 1883 --we
 
 The tiles flash over Ethernet the same way: `cd firmware/tile && pio run -e ota
 -t upload --upload-port <IP of the tile>`.
+
+**The installation's logins.** `deploy/install/flash_robot.sh` and
+`flash_tiles.sh` do the above with what `/etc/cybercircle/cybercircle.env`
+holds: the broker's address, the boards' own broker user (`MQTT_DEVICE_USER`:
+it reaches the boards' topics only) and the update password (`OTA_PASSWORD`):
+
+```bash
+deploy/install/flash_robot.sh                    # over USB
+deploy/install/flash_robot.sh ota 192.168.1.40   # over Ethernet
+deploy/install/flash_tiles.sh ota 192.168.1.51   # a tile (its IP: Verbindingen / Prestaties)
+CC_OTA_AUTH=change-me deploy/install/flash_tiles.sh ota 192.168.1.51
+                                                 # once: a board that still runs a firmware with the old password
+```
+
+By hand, the same password goes in the environment: `CC_OTA_PASSWORD=… pio run
+-e ota -t upload --upload-port <IP>` (built into the firmware and used for the
+upload; not set: the `change-me` of `config.h`, and the board says so on its
+serial port). An update stops the head and the smoke first.
+
+**Limits the web interface cannot move** (`firmware/robot/include/config.h`,
+set them to the real hardware before the first show): `TURN_HARD_MIN` /
+`TURN_HARD_MAX` – what the cable survives; a window sent over MQTT or found in
+flash is cut down to it (`robot/state` shows the window in use);
+`SMOKE_HARD_MAX_S` / `SMOKE_HARD_PAUSE_S` – the longest puff and the shortest
+pause; `LED_MAX_MA` – what the 5 V wiring carries. The firmware restarts
+itself when its loop hangs (`WATCHDOG_S`); the hello then says `"reset":
+"task_wdt"`. During any restart the ESP32 lets go of its pins: the pull-downs
+and the enable pin (`MOTOR_PIN_EN`) of [WIRING.md](WIRING.md) keep the motor
+and the smoke off meanwhile.
 
 ## 5. MQTT topics
 
@@ -702,10 +737,12 @@ Prefix `cybercircle` (setting `topic_prefix` on the *Mqtt* node). Payloads are J
 | `cybercircle/db` | control → game | `{"changed": "players" \| "questions" \| "ranking"}`: the database changed (web interface, website sync, a result) – the game fetches it again at once |
 | `cybercircle/state` | game → all | retained game state for the web interface (players, plan, mode, …) |
 | `cybercircle/event` | game → all | the event feed |
-| `cybercircle/mode` | control → game | retained operating mode: `setup` / `closed` / `open` / `paused` |
+| `cybercircle/mode` | control → game, tiles | retained operating mode: `setup` / `closed` / `open` / `paused` (in `setup` a tile's hearts show its place) |
 | `cybercircle/tiles` | control → game | retained: which tiles are in service, which physical tile is where |
 | `cybercircle/master` | control → all | retained: the chosen master `{node, host, port}` |
-| `cybercircle/device/<dev>/hello` | tile → all | retained: a physical tile announces itself (its own id) |
+| `cybercircle/device/<dev>/hello` | tile → all | retained: a physical tile announces itself (its own id; `fw`, `build` = the git commit, `reset` = why it started, `mqtt_dropped`, `stuck`) |
+| `cybercircle/device/<dev>/status` | broker → all | `{"online": false}`: the tile's last will – it dropped out (the robot: `robot/status`); the control server shows it offline at once |
+| `cybercircle/selection` | control → game | retained: `{"games_off": ["code", …]}` – not played at the current event (the questions: via the API) |
 | `cybercircle/settings` | control → game | retained game settings `{"game": {...}, "quiz": {...}, …}` (only the changed values) |
 | `cybercircle/settings/schema` | master → all | retained: every setting with label, range, unit, default and current value |
 | `cybercircle/device/<dev>/identify` | control → tile | `{"seconds": 6}`: light up so the crew finds this tile (setup, swapping) |
@@ -809,8 +846,38 @@ In SETUP the hearts show its place number in binary and a pressed icon flashes
 (the sensor test); `identify` makes it light up. The status LED: blue =
 network, amber = MQTT but no place yet, green = ready, red = no network (cable,
 switch, DHCP). The tiles are always wired (Ethernet); there is no wifi build.
-Build and flash: `cd firmware/tile && pio run -t upload` (the sensors calibrate at
-power-up: nobody on the tile then).
+**Starting up, the ring shows how far the tile is** – a quarter turns green
+for every step, the quarter it waits for breathes dim white
+(`firmware/tile/src/boot.h`):
+
+| ring | the tile has | stuck here: look at |
+|---|---|---|
+| nothing green | – | the cable, the switch, DHCP |
+| 1/4 | a link and an address | the broker (`MQTT_HOST`, the boards' login) |
+| 2/4 | the MQTT broker | the control server: it answers a tile's hello with `device/<mac>/config` (retained: the broker hands it out again while the control server is down) |
+| 3/4 | the control server's config | no place yet: give it one in *Tegels* – it stays at 3/4 until then (the icons flash when pressed) |
+| the green gone, the hearts light up | its place | – the hearts show the place number in binary (heart 1 = 1, heart 2 = 2, heart 3 = 4 …), the ring is the game's again |
+
+**The number stays on the hearts all through the technical setup**: connect,
+test and place everything in SETUP – every tile shows which place it has.
+Lock the setup (*closed*) and the numbers go: from then on the hearts are the
+game's (the lives). The tile reads the mode itself (`cybercircle/mode`, retained
+by the control server), so this also works while the game is not running yet
+or still shows yesterday's state. A tile out of service stays dark. A tile
+given another place after the setup (a swap) shows its new number for 5 s
+(`PLACE_SHOW_MS`); a tile that restarts during a game goes straight back to
+its lives.
+The sequence comes back when a step is lost for more than 5 s (`BOOT_LOST_MS`:
+the broker gone, the cable out) – a tile that cannot reach the game does not
+look as if it plays; a shorter hiccup shows nothing.
+Build and flash: `cd firmware/tile && pio run -t upload` (or
+`deploy/install/flash_tiles.sh`, §13). **The sensors** measure their resting
+value at power-up and keep following it (`SENSOR_DRIFT_S`: an FSR drifts with
+temperature and age, and the tiles stay on for days). Somebody on an icon at
+power-up: it works again a moment after they step off. An icon held longer
+than `SENSOR_STUCK_S` (60 s: a bag on the tile, a sensor gone bad) is let go
+of, the other three keep working, and the hello counts it (`stuck`;
+*Prestaties* shows *sensor vast*). The logic's tests: `pio test -e test`.
 **Tile emulator on this PC** (no hardware, no account): the same firmware
 built for Linux with stand-ins for Arduino, FastLED and the network
 (`firmware/tile/emulator/`, `firmware/common/emulator/`), the tile drawn in the terminal – the ring seen
@@ -857,8 +924,22 @@ standalone `--db=FILE` and `tools/ops/cybercircle_db.py` (schema
 
 * **Questions**: edit them in the web interface (*Vragen*, also CSV), or in any
   MySQL client; set `active = 0` to hide one. Answer 1–4 = Square, Triangle, Cross, Circle.
-  `min_age`: younger players get a shield (no life lost). Changes are used
-  from the next quiz round. `python3 tools/ops/cybercircle_db.py init` re-imports
+  `min_age`: younger players get a shield (no life lost); `min_age` – `max_age`
+  also steers the draw: questions (and categories) for the players' ages come
+  more often (*Instellingen › Vragen › Sturing door leeftijd*, 0 = off). Changes are used
+  from the next quiz round.
+* **This event** (a special event with its own questions): the gamemasters
+  turn games off and questions on or off for the *current* event, in their app
+  (*Event* tab) or the web interface (*Spel › Dit event*, *Vragen › Dit event*).
+  A game that is off is never played, not even when planned; a question's
+  choice overrides its `active`. A new event (*Ranglijst*) starts with
+  everything as normal. Kept in `settings` (`selection_<event id>`).
+* **Ages in the other games**: every personal game has *Beschermd onder
+  leeftijd* (`min_age`: younger players get a shield – the last place costs
+  them no life, they can still win one) and *Geschikt tot leeftijd*
+  (`max_age`) in *Instellingen*; the randomizer draws a game less often when
+  the players are outside that range (*Randomizer › Sturing door leeftijd*,
+  0 = off). Default 0 – 99: for everyone. `python3 tools/ops/cybercircle_db.py init` re-imports
   `questions.json` (updates rows with the same `slug`).
 * **Videos**: put them in `game/data/videos/` and set `video` to the file
   name. Convert with `tools/assets/convert_video.sh input.mp4` (Theora .ogv, ≤ 1280
@@ -889,6 +970,9 @@ godot-4 --headless --path . --fixed-fps 60 res://tests/test_db.tscn     # databa
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_piet.tscn   # Zwarte Piet
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_exterminated.tscn  # everyone exterminated: no new round, the lobby
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_pause.tscn  # the paused mode: the game's waits stand still
+godot-4 --headless --path . --fixed-fps 60 res://tests/test_countdown.tscn  # the round's green countdown LED (outer ring, not in Cyclone)
+godot-4 --headless --path . --fixed-fps 60 res://tests/test_ages.tscn       # ages: the shield in personal rounds, rounds and questions weighted by age
+godot-4 --headless --path . --fixed-fps 60 res://tests/test_lives.tscn      # life settings: best / last places or %, ties, rules text
 godot-4 --path . --disable-vsync res://tests/test_rhythm_shot.tscn      # Ritme (chart, judging, screenshot)
 godot-4 --path . --disable-vsync res://tests/test_code.tscn             # Code kraken (hints, codes, a round, screenshots)
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_settings.tscn  # settings, tempo, sounds
@@ -1069,10 +1153,23 @@ the log: `journalctl -u cybercircle-control -f`.
 
 | mode | | next |
 |---|---|---|
-| **SETUP** | physical setup: assign tiles and screens; the game is closed; empty screen slots show their tile number big | 🔒 lock the setup |
-| **GESLOTEN** | setup locked, game closed | 🔓 unlock · ▶ **Start spel** |
+| **SETUP** | the technical setup: connect, assign and test the tiles and screens, align the robot; the game is closed; empty screen slots show their tile number big, every tile its number on its hearts | 🔒 lock the setup |
+| **GESLOTEN** | setup locked (below), game closed | 🔓 unlock · ▶ **Start spel** |
 | **OPEN** | players can join; nobody playing = the game idles; rounds start by themselves | ⏸ pause · ■ **Stop spel** |
 | **PAUZE** | everything frozen (round timers, tile games) | ▶ resume · ■ stop |
+
+**The lock.** The game opens from GESLOTEN only: first lock the setup, then
+**Start spel** (SETUP → OPEN is refused). Locked – GESLOTEN, OPEN and PAUZE –
+the technical setup cannot change, in the web interface (greyed out) nor
+through the API (`409 only in SETUP: unlock the setup first`):
+
+| | locked | still possible |
+|---|---|---|
+| tiles | a place's physical tile, the *Installatie*, the *Opstelling* (T01's hour) | swap the tile of a place that is *buiten gebruik*; in / out of service |
+| screens | the master (*Processen › Maak master*); the test patterns are gone | another master when the chosen one is offline |
+| robot | its settings (cable window, speed, smoke times), *Zoek de start*, *Draai naar zijde*, `set_position` | *■ Stop motor* and the smoke, always; *Zoek de start* when it lost its position (`positie onbekend`, or an error: stalled, home not found) |
+
+To change something else: stop the game, 🔓 unlock, change, lock again.
 
 **Test screens (SETUP).** In SETUP every screen and the overview show a test
 pattern (`scripts/ui/test_pattern.gd`) over the tile numbers:
@@ -1145,7 +1242,7 @@ or a new master continues in the same mode.
   in service. A place out of service is skipped by the game (a player on it
   leaves).
 * **Processen** – every Godot process (name, role, address, screens, fps);
-  choose the master here.
+  choose the master here (in SETUP; locked: only when the master is offline).
 * **Herstel** – the saved game state (*Crash / power cut*, §4): when it was
   last saved and what a restart of the game would do now (lobby, a round
   played again, the lives about to change), the players who would come back
@@ -1208,7 +1305,16 @@ or a new master continues in the same mode.
   Simon: start length, show time, speed-up, points; Zwarte Piet: hidden time,
   light speed, penalty; Ritme: fall time and spacing at the start / end, when
 hold notes start (chance, how long), when two at once start, band and line size, points, tile delay; Code kraken:
-  points per code, the bonus per try fewer, extra per harder code, how long the hints stay on the tile), *Randomizer* and *Vragen* (weights per round type and
+  points per code, the bonus per try fewer, extra per harder code, how long the hints stay on the tile;
+  **Lives** in every round type with places: *+1 leven: beste plaatsen* (default 1 = the 1st place;
+  0 = nobody), *+1 leven: beste % spelers* (> 0 is used instead of the places), *−1 leven:
+  laatste plaatsen* and *−1 leven: slechtste % spelers* – e.g. top 3 places +1 and the worst
+  25 % (half of the bottom half) −1. Players with equal progress get the same: a cut-off
+  between equals takes them all; a % is at least 1 player; +1 and −1 at once cancel; the
+  shield (*Beschermd onder leeftijd*) still blocks a −1. The intro's rules text says the
+  settings when they are not the default, and a round type that can give nobody a life
+  counts as a no-life round for the randomizer's director. The quiz keeps its own rule
+  (wrong / late −1, the streak +1)), *Randomizer* and *Vragen* (weights per round type and
   per question category, see below) and *Geluid* (volume, random
   sound interval) and *Licht* (the brightness of the virtual lights in the
   room, flashes on / off – also sent to the real lights).
@@ -1261,7 +1367,7 @@ when there are enough others.
 
 `PUT /api/cards/<code> {name, age, email?}` (the registration website's sync: who has this QR card) ·
 `GET /api/cards/<code>` · `GET /api/config` (for the gamemaster app: MQTT, places, layout) ·
-`PUT /api/layout {t01_clock}` · `GET|POST /api/gamemasters`, `PUT|DELETE /api/gamemasters/<id> {name, color}` ·
+`PUT /api/layout {t01_clock}` (SETUP only) · `GET|POST /api/gamemasters`, `PUT|DELETE /api/gamemasters/<id> {name, color}` ·
 `POST /api/session {device, gamemaster}` (the app's sign of life) · `POST /api/players {name, age}` → `{id}` ·
 `POST /api/players/<id>/assign {tile, gamemaster}` (tile 0 = a free floor tile, 14–18 = M1–M5) ·
 `GET /api/questions` · `POST /api/questions/import` (CSV) · `GET /api/questions.csv` · `GET /api/ranking` · `POST /api/games` · `POST /api/games/<id>/rounds|results|end` ·
@@ -1398,7 +1504,7 @@ they pick the right builds themselves. One settings file for all of it:
 | `sudo install_server.sh [SERVER_IP]` | overview PC / server Pi | settings file (random passwords), Mosquitto (plain + WebSocket, a password), MariaDB (database + user), the control server (virtualenv, **systemd: `cybercircle-control`**), nightly backup (**`cybercircle-backup.timer`**), https certificate (`CONTROL_HTTPS=1`), firewall ports (ufw) – then checks the broker and the web interface |
 | `sudo install_game.sh [--display 1,2]` | the server box (the **master**), each Pi (`--display` + its screens: a **display node**) | the role in this machine's settings (`GAME_ROLE`, `GAME_SHOW`, `GAME_NODE`), the kiosk user logging in automatically (GDM, LightDM or `raspi-config` on a Pi), Godot for this CPU (official x86_64 / arm64 build, unless exported), screen never blanks / locks / sleeps, the game as a **user service `cybercircle-game`** started with the desktop session (also via `/etc/xdg/autostart` for desktops without `graphical-session.target`, e.g. Raspberry Pi OS); ARM: the Compatibility renderer (OpenGL ES 3, `GAME_ENGINE_ARGS`); master: the display port (7350) in the firewall; a Pi with 2 screens: the desktop on X11 |
 | `sudo update.sh [release.tar.gz]` | each machine | a new version in place (settings, database, certificates kept), dependencies, restart |
-| `flash_tiles.sh` | any PC / Pi with PlatformIO | the tile firmware with this installation's broker and login (no editing of `config.h`) |
+| `flash_tiles.sh [ota <IP>]`, `flash_robot.sh [ota <IP>]` | any PC / Pi with PlatformIO | the tile / robot firmware with this installation's broker, the boards' own login and the update password (no editing of `config.h`); over USB, or `ota <IP>` over the network |
 | `backup.sh` | (the timer) | `mysqldump` → `/var/backups/cybercircle/cybercircle-<date>.sql.gz`, kept 30 days |
 | (the control server) | *Ranglijst › Nieuw event starten* | the closed event as a zip (CSV: players, results, games, rounds) → `EVENT_BACKUP_DIR` (`/srv/cybercircle/events`), kept for good |
 
@@ -1412,8 +1518,9 @@ sudo deploy/install/install_game.sh --display 1,2 && sudo reboot     # Pi 1 (in 
 sudo deploy/install/install_game.sh --display 3,4 && sudo reboot     # Pi 2 (in the robot)
 sudo deploy/install/install_game.sh --display 5 && sudo reboot       # Pi 3 (in the robot)
 sudo deploy/install/install_game.sh --display 6,7 && sudo reboot     # Pi 4 (the mobile station)
-# every tile (USB), one after the other
+# every tile (USB), one after the other; the robot's board
 deploy/install/flash_tiles.sh
+deploy/install/flash_robot.sh
 ```
 
 Logs: `journalctl -u cybercircle-control -f` (server), `journalctl --user-unit

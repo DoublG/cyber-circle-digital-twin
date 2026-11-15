@@ -13,6 +13,11 @@ const MODE_ACTIONS = {          // [target mode, label, confirm?]
   open: [["paused", "⏸ Pauze"], ["closed", "■ Stop spel", "Het spel stoppen? Alle spelers gaan eruit."]],
   paused: [["open", "▶ Hervat"], ["closed", "■ Stop spel", "Het spel stoppen? Alle spelers gaan eruit."]],
 };
+const MODE_TITLES = {           // "from>to": what the button does
+  "setup>closed": "De technische setup is klaar: de tegels (plaatsen, installatie, opstelling), de schermen (master) en de uitlijning van de robot liggen vast. De tegels tonen hun nummer niet meer, de schermen hun testbeeld niet meer. Daarna kan het spel starten.",
+  "closed>setup": "Terug naar de technische setup: tegels toewijzen, schermen testen, de robot uitlijnen. De tegels tonen weer hun nummer.",
+  "closed>open": "Het spel gaat open: de robot komt tot leven, spelers kunnen meedoen.",
+};
 
 async function api(method, path, body) {
   const r = await fetch(path, { method, headers: { "Content-Type": "application/json" },
@@ -55,9 +60,10 @@ function renderLive() {
   $("#mode").textContent = MODE_NAMES[live.mode] || live.mode;
   $("#mode").className = `mode ${live.mode}`;
   $("#mode-buttons").innerHTML = (MODE_ACTIONS[live.mode] || []).map(([m, label, ask]) =>
-    `<button data-mode="${m}" ${ask ? `data-ask="${esc(ask)}"` : ""} class="${m === "closed" && live.mode !== "setup" ? "danger" : ""}">${label}</button>`).join("");
+    `<button data-mode="${m}" ${ask ? `data-ask="${esc(ask)}"` : ""} title="${esc(MODE_TITLES[`${live.mode}>${m}`] || "")}" class="${m === "closed" && live.mode !== "setup" ? "danger" : ""}">${label}</button>`).join("");
   renderPlan(s);
   renderRandomizer(s);
+  renderEventGames(s);
   renderTiles(s);
   renderOnline();
   $("#events").innerHTML = (live.events || []).map(e =>
@@ -139,7 +145,7 @@ function renderPlan(s) {
   el.innerHTML = (s.plan || []).map((p, i) => `<div class="slot ${p.forced ? "forced" : ""}">
       <div class="n">${i === 0 ? "VOLGENDE" : `+${i}`} · ${p.forced ? "gekozen" : "willekeurig"}</div>
       <select data-slot="${i}"><option value="">willekeurig</option>
-        ${types.map(t => `<option value="${t.type}" ${p.forced && p.type === t.type ? "selected" : ""}>${esc(t.title)}${t.random === false ? " (uit de randomizer)" : ""}</option>`).join("")}
+        ${types.map(t => `<option value="${t.type}" ${p.forced && p.type === t.type ? "selected" : ""} ${t.event_off ? "disabled" : ""}>${esc(t.title)}${t.event_off ? " (uit dit event)" : t.random === false ? " (uit de randomizer)" : ""}</option>`).join("")}
       </select> ${p.forced ? "" : `<b>${esc(p.title)}</b> <span class="chance" title="kans bij het loten">${Math.round((p.chance ?? 1) * 100)}%</span>`}
       ${p.type === "quiz" && p.forced ? `<input data-slot="${i}" placeholder="categorieën (komma's)" value="${esc((p.options?.categories || []).join(", "))}">` : ""}
     </div>`).join("") + `<button class="small" id="plan-random">alles willekeurig</button>`;
@@ -148,12 +154,31 @@ function renderPlan(s) {
 function renderRandomizer(s) {
   const el = $("#randomizer");
   const types = s.round_types || [];
-  el.innerHTML = types.map(t => `<label class="${t.random === false ? "off" : "on"}" title="gewicht ${t.weight ?? 1} (Instellingen › Randomizer)">
+  el.innerHTML = types.map(t => `<label class="${t.random === false || t.event_off ? "off" : "on"}" title="gewicht ${t.weight ?? 1} (Instellingen › Randomizer)">
       <input type="checkbox" data-random="${esc(t.type)}" ${t.random === false ? "" : "checked"}>
-      <b>${esc(t.title)}</b> <span class="chance">${t.random === false ? "uit"
+      <b>${esc(t.title)}</b> <span class="chance">${t.event_off ? "uit dit event" : t.random === false ? "uit"
         : t.allowed === false ? `nu niet (vanaf ${t.min_players} spelers)` : Math.round((t.chance ?? 0) * 100) + "%"}</span></label>`).join("")
     || `<span class="hint">Nog geen spel verbonden.</span>`;
 }
+// this event: which games are played at all (the gamemasters' choice, also in their app)
+const GAME_TITLES = { quiz: "Quiz", cyclone: "Cyclone", reaction: "Reactie", rhythm: "Ritme", simon: "Simon zegt",
+  zwarte_piet: "Zwarte Piet", code: "Code kraken" };
+function renderEventGames(s) {
+  const off = new Set(live.selection?.games_off || []);
+  const types = (s.round_types || []).length ? s.round_types : Object.entries(GAME_TITLES).map(([type, title]) => ({ type, title }));
+  $("#event-games").innerHTML = types.map(t => `<label class="${off.has(t.type) ? "off" : "on"}">
+      <input type="checkbox" data-event-game="${esc(t.type)}" ${off.has(t.type) ? "" : "checked"}>
+      <b>${esc(t.title)}</b> <span class="chance">${off.has(t.type) ? "uit" : "aan"}</span></label>`).join("");
+  $("#event-games-hint").firstChild.textContent = `– ${live.event ? `${live.event.name}: ` : ""}welke spellen er gespeeld worden; uit = nooit, ook niet
+    als je het hierboven kiest (de gamemaster-app kan dit ook). Een nieuw event: weer alles aan.`;
+}
+$("#event-games").onchange = e => {
+  const box = e.target.closest("input[data-event-game]");
+  if (!box) return;
+  const off = new Set(live.selection?.games_off || []);
+  box.checked ? off.delete(box.dataset.eventGame) : off.add(box.dataset.eventGame);
+  api("PUT", "/api/selection", { games_off: [...off] });
+};
 $("#randomizer").onchange = async e => {
   const box = e.target.closest("input[data-random]");
   if (!box) return;
@@ -175,6 +200,8 @@ $("#plan").onclick = e => { if (e.target.id === "plan-random") api("POST", "/api
 // ---------------------------------------------------------------- processes
 function renderNodes() {
   const tbody = $("#nodes tbody");
+  // locked (not SETUP): another master only when the chosen one is gone
+  const canSwitch = live.mode === "setup" || !(live.nodes || []).find(n => n.id === live.master?.node)?.online;
   tbody.innerHTML = (live.nodes || []).map(n => {
     const isMaster = live.master?.node === n.id;
     const display = n.role === "display";
@@ -185,7 +212,8 @@ function renderNodes() {
     return `<tr class="${isMaster ? "master" : ""}"><td>${esc(n.id)}</td><td>${esc(isMaster ? "MASTER" : display ? "DISPLAY" : n.role)}</td>
       <td>${esc(n.host)}${n.port ? ":" + n.port : ""}</td><td>${screens}</td>
       <td><span class="dot ${n.online ? "on" : ""}"></span> ${n.online ? "online" : "offline"}${n.fps ? ` · ${n.fps} fps` : ""}${link}${n.db_pending ? ` · <b class="bad">database: ${n.db_pending} writes waiting</b>` : ""}</td>
-      <td>${isMaster || !n.online || display ? "" : `<button class="small" data-master="${esc(n.id)}">Maak master</button>`}</td></tr>`;
+      <td>${isMaster || !n.online || display ? "" : canSwitch ? `<button class="small" data-master="${esc(n.id)}">Maak master</button>`
+        : `<span class="hint">alleen in SETUP</span>`}</td></tr>`;
   }).join("") || `<tr><td colspan="6" class="hint">Nog geen processen gezien.</td></tr>`;
   $("#master").textContent = live.master?.node
     ? `Master: ${live.master.node} (${live.master.host}:${live.master.port}) sinds ${live.master.since || "?"}`
@@ -308,6 +336,8 @@ function renderLayout() {
     sel.innerHTML = Array.from({ length: 24 }, (_, i) => (i + 1) / 2)
       .map(v => `<option value="${v}">${Number.isInteger(v) ? v : Math.floor(v) + "½"}</option>`).join("");
   if (document.activeElement !== sel) sel.value = String(h);
+  sel.disabled = live.mode !== "setup";
+  sel.title = sel.disabled ? "alleen in SETUP" : "";
   const pt = (a, r) => [Math.cos(a) * r, Math.sin(a) * r];
   let svg = `<circle r="110" fill="none" stroke="var(--dim)"/><line x1="-22" y1="110" x2="22" y2="110" stroke="var(--orange)" stroke-width="6"/>
     <text y="104" text-anchor="middle" fill="var(--orange)" font-size="11">INGANG</text>
@@ -507,11 +537,12 @@ function renderPerf(m) {
   ].join("");
 
   $("#perf-tiles tbody").innerHTML = (m.tiles || []).map(t => `<tr><td><span class="dot ${t.online ? "on" : ""}"></span> ${esc(t.device)}</td>
-    <td>${esc(t.fw || "–")}</td><td>${esc(t.net || "–")} <span class="hint">${esc(t.ip || "")}</span></td>
+    <td>${esc(t.fw || "–")} <span class="hint">${esc(t.build || "")}</span></td><td>${esc(t.net || "–")} <span class="hint">${esc(t.ip || "")}</span></td>
     <td>${t.link != null ? esc(String(t.link)) : "–"}</td>
     <td>${t.loop_hz != null ? span(lvl(t.loop_hz, 500, 100, true), `${t.loop_hz} Hz`) : "–"}</td>
     <td>${t.heap != null ? span(lvl(t.heap / 1024, 40, 20, true), `${num(t.heap / 1024)} KB`) : "–"}</td>
-    <td>${t.mqtt_reconnects != null ? `${t.mqtt_reconnects}×` : "–"}</td><td>${dur(t.uptime)}</td><td>${dur(t.age)} geleden</td></tr>`).join("")
+    <td>${t.mqtt_reconnects != null ? `${t.mqtt_reconnects}×` : "–"}${t.mqtt_dropped ? " " + span("warn", `${t.mqtt_dropped} niet verzonden`) : ""}</td>
+    <td>${dur(t.uptime)}${t.reset && !["poweron", "sw", "ext", "emulator"].includes(t.reset) ? " " + span("bad", `herstart: ${esc(t.reset)}`) : ""}${t.stuck ? " " + span("warn", `sensor vast ${t.stuck}×`) : ""}</td><td>${dur(t.age)} geleden</td></tr>`).join("")
     || `<tr><td colspan="9" class="hint">Geen fysieke tegels gezien.</td></tr>`;
   const streams = Object.entries(m.streams || {}).filter(([, s]) => s.on);
   $("#perf-streams").innerHTML = streams.length ? streams.map(([tile, s]) => `${label(Number(tile))}: ${esc(s.encoder || "")}${s.error ? span("bad", " " + esc(s.error)) : ""}`).join(" · ")
@@ -536,7 +567,23 @@ async function loadRobot() {
     set("#robot-smoke-ext", c.smoke_exterminate_s ?? st.smoke_exterminate_s, 1.5);
     set("#robot-smoke-max", c.smoke_max_s, 5);
     set("#robot-smoke-pause", c.smoke_pause_s, 10);
+    robotLost = r.online && (st.known === false || !!st.error);
   } catch (e) { /* later */ }
+  renderRobotLock();
+}
+// Outside SETUP the robot's settings and its alignment are locked: only stop, smoke - and
+// "Zoek de start" when it lost its position (the server checks the same).
+let robotLost = false;
+function renderRobotLock() {
+  const locked = live.mode !== "setup";
+  document.querySelectorAll(".robot-form input, #robot-save, #robot-go, #robot-go-btn").forEach(e => e.disabled = locked);
+  document.querySelectorAll("[data-robot]").forEach(b => {
+    const cmd = JSON.parse(b.dataset.robot);
+    b.disabled = locked && !("stop" in cmd || "smoke" in cmd || ("home" in cmd && robotLost));
+    b.title = b.disabled ? "alleen in SETUP (of als de robot zijn positie kwijt is)" : "";
+  });
+  $("#robot-lock").textContent = locked ? "Setup vergrendeld: instellingen en uitlijnen alleen in SETUP. Stop en rook werken altijd; "
+    + "\"Zoek de start\" ook als de robot zijn positie kwijt is." : "";
 }
 $("#robot-save").onclick = () => api("PUT", "/api/robot", {
   turn_min: Number($("#robot-turn-min").value), turn_max: Number($("#robot-turn-max").value),
@@ -825,10 +872,30 @@ $("#add-player").onsubmit = async e => {
 let questions = [];
 async function loadQuestions() {
   questions = await api("GET", "/api/questions/all");
-  $("#questions tbody").innerHTML = questions.map(q => `<tr><td>${q.id}</td><td>${esc(q.category)}</td>
+  const changed = questions.filter(q => q.event !== null && q.event !== undefined).length;
+  $("#event-questions-hint").textContent = `Dit event${live.event ? ` (${live.event.name})` : ""}: ${questions.filter(q => q.on).length} van ${questions.length} vragen worden gesteld`
+    + (changed ? `, ${changed} anders dan normaal.` : ".");
+  $("#questions tbody").innerHTML = questions.map(q => `<tr class="${q.on ? "" : "dim"}"><td>${q.id}</td><td>${esc(q.category)}</td>
     <td>${q.min_age}–${q.max_age}</td><td>${esc(q.question)}${q.video ? " 🎬" : ""}${q.image ? " 🖼" : ""}</td>
-    <td>${q.active ? "ja" : "nee"}</td><td><button class="small" data-qid="${q.id}">Bewerk</button></td></tr>`).join("");
+    <td>${q.active ? "ja" : "nee"}</td>
+    <td><select data-event-q="${q.id}">
+      <option value="" ${q.event == null ? "selected" : ""}>zoals normaal (${q.active ? "aan" : "uit"})</option>
+      <option value="1" ${q.event === 1 ? "selected" : ""}>aan</option>
+      <option value="0" ${q.event === 0 ? "selected" : ""}>uit</option></select></td>
+    <td><button class="small" data-qid="${q.id}">Bewerk</button></td></tr>`).join("");
 }
+$("#questions").onchange = async e => {
+  const sel = e.target.closest("select[data-event-q]");
+  if (!sel) return;
+  await api("PUT", "/api/selection", { questions: { [sel.dataset.eventQ]: sel.value === "" ? null : sel.value === "1" } });
+  loadQuestions();
+};
+$("#event-questions-reset").onclick = async () => {
+  const qs = Object.fromEntries(questions.filter(q => q.event != null).map(q => [q.id, null]));
+  if (!Object.keys(qs).length) return;
+  await api("PUT", "/api/selection", { questions: qs });
+  loadQuestions();
+};
 function openQuestion(q) {
   const f = $("#question-form");
   for (const el of f.elements) if (el.name) el.value = q[el.name] ?? el.defaultValue ?? "";
@@ -897,7 +964,7 @@ $("#event-new").onclick = async () => {
 connectLive();
 
 // ---------------------------------------------------------------- settings
-const UNITS = { s: "s", ms: "ms", x: "×" };
+const UNITS = { s: "s", ms: "ms", x: "×", "%": "%" };
 
 async function loadSettings() {
   const { schema, values } = await api("GET", "/api/settings");

@@ -76,11 +76,26 @@ SSD (or an A2 microSD), wired Ethernet, and 2 micro-HDMI → HDMI cables.
 
 ![One tile](diagrams/tile_wiring.svg)
 
+**The built tile** (photo: [photos/tile_top.jpg](photos/tile_top.jpg)):
+
+![The built tile](photos/tile_top.jpg)
+
+| part | count | where |
+|---|---|---|
+| outer LED ring | 48 | under the glass, along the rim |
+| inner LED ring | 48 | around the logo in the middle (the yin-yang disc) |
+| hearts | 5 | in a row from the rim towards the logo |
+| buttons (icons) | 4 | Square, Triangle, Cross, Circle: one in each quarter, a pressure sensor under each |
+
+The inner ring shows what the outer ring shows (the firmware copies it every
+frame), LED for LED at the same place around the tile. The game itself
+(its 3D tile and the tile simulator) still draws only the outer ring.
+
 **Pin table** (WT32-ETH01, firmware defaults):
 
 | what | pin | note |
 |---|---|---|
-| LED data (WS2812B chain) | **IO5** | through a 74AHCT125 (3.3 → 5 V) and 330 Ω into DIN of ring LED #0 |
+| LED data (one LED chain) | **IO5** | through a 74AHCT125 (3.3 → 5 V) and 330 Ω into DIN of ring LED #0 |
 | Square sensor | **IO32** | FSR from 3V3, 10 kΩ to GND, node to the pin |
 | Triangle sensor | **IO33** | same |
 | Cross sensor | **IO39** | same (input only, ADC1) |
@@ -89,33 +104,49 @@ SSD (or an A2 microSD), wired Ethernet, and 2 micro-HDMI → HDMI cables.
 | Flashing | TXD0/IO1, RXD0/IO3, IO0, EN | 3.3 V USB-serial adapter; IO0 to GND during reset = boot mode |
 | 5 V, GND | 5V, GND | from the tile's 5 V rail |
 
-**The LED chain** (one data line, 58 LEDs, in this order): ring 48
+**The LED chain** (one data line, 105 LEDs, in this order): outer ring 48
 (#0–47, #0 = LED_00 facing the robot, then clockwise seen from above) →
-hearts 5 (#48–52, heart 1 nearest the logo) → icon LEDs 4 (#53–56: Square,
-Triangle, Cross, Circle) → status LED (#57). Wired in another order? Change
-`RING_FIRST`, `HEART_FIRST`, `ICON_FIRST` and `STATUS_LED` in `config.h`.
+inner ring 48 (#48–95) → hearts 5 (#96–100, heart 1 nearest the logo) →
+button LEDs 4 (#101–104: Square, Triangle, Cross, Circle). No status LED
+(`STATUS_LED -1`). Wired in another order? Change `RING_FIRST`,
+`INNER_FIRST`, `HEART_FIRST`, `ICON_FIRST` and `LED_TOTAL` in `config.h`.
+The inner ring's LED facing the robot is `INNER_OFFSET` (default 0, the first
+inner LED) and `INNER_REVERSE 1` makes it run counter-clockwise: check both on
+the real tile (the start-up quarters show it).
 
-**Power per tile**: LEDs ≤ 2.2 A at `BRIGHTNESS 160` (3.5 A at full white),
-plus about 250 mA for the ESP32 and the PHY. That calls for a 5 V / 5 A buck
-converter at the tile, fed with 12 V from the **ATX supply in the robot** (its
-12 V rail, 2 × 1.5 mm², 2 A fuse per tile: about 1.1 A per tile, 15 A for
-all 13 on 12 V; 5 V straight over the ducts would lose too much). Feed 5 V
-into the ring at both ends (#0 and #47), and put 1000 µF across the LED input.
-All grounds are joined at the tile's terminal block.
+**Power per tile – the built tiles use 12 V LEDs.** There are **two power
+supplies**: a **12 V supply for the tiles** and the ATX supply in the robot
+for the robot (§3b). Each tile gets 12 V (2 × 1.5 mm²), and every conversion
+happens in the tile. The rings and hearts are 12 V addressable LEDs, so there
+is no 5 V LED rail. Only the ESP32 needs a small converter in the tile
+(12 V → 5 V, ≥ 1 A, about 250 mA used).
+The data line still needs the 74AHCT125 (3.3 → 5 V logic, VCC from that 5 V).
+
+Rough numbers, assuming WS2815 (about 20 mA per LED at full white on 12 V;
+check the datasheet of the LEDs actually used): 106 LEDs ≈ 2.1 A at full
+white, ≈ 1.3 A at `BRIGHTNESS 160`, plus ~0.1 A for the ESP32 → **fuse
+3 A per tile**. All 13 tiles: ≈ 18 A on 12 V at `BRIGHTNESS 160`, ≈ 29 A at
+full white. Size the tiles' 12 V supply for that (e.g. 12 V / 30 A, 360 W),
+or keep the brightness capped. Feed 12 V into the ring at both ends and put a capacitor
+(e.g. 1000 µF / 25 V) across the LED input. All grounds are joined at the
+tile's terminal block.
+
+The firmware's power limiter counts with `LED_VOLTS 12` and `LED_MAX_MA 2500`
+(`config.h`).
 
 **Parts list per tile**:
 
 | part | quantity |
 |---|---|
 | WT32-ETH01 (or Olimex ESP32-POE, then set `TILE_ETH_*` in config.h) | 1 |
-| WS2812B LEDs: a 48-LED ring, 5 heart LEDs, 4 icon LEDs, 1 status LED (or strip pieces) | 58 |
+| 12 V addressable LEDs (e.g. WS2815): outer ring 48, inner ring 48, 5 hearts (+ icon / status LEDs if fitted) | 101+ |
 | FSR pressure sensor (e.g. FSR 406 / 402 under each icon) | 4 |
 | resistor 10 kΩ (divider) / 330 Ω (LED data) | 4 / 1 |
 | 100 nF ceramic (optional, sensor pin → GND) | 4 |
 | 74AHCT125 (or 74HCT245 / SN74AHCT1G125) | 1 |
-| electrolytic capacitor 1000 µF / 10 V | 1 |
-| DC-DC buck 12 V → 5 V, 5 A | 1 |
-| fuse holder + 2 A fuse, terminal block, RJ45 keystone / pass-through | 1 each |
+| electrolytic capacitor 1000 µF / 25 V | 1 |
+| DC-DC buck 12 V → 5 V, ≥ 1 A (ESP32 and the 74AHCT125 only) | 1 |
+| fuse holder + 3 A fuse, terminal block, RJ45 keystone / pass-through | 1 each |
 
 **Sensor pins (changed).** The Cross sensor used to be on GPIO34. The
 WT32-ETH01 does not break out GPIO34, and on the Olimex ESP32-POE it is the
@@ -137,29 +168,83 @@ own 230 V plug; the relay closes its remote input). Use mains-rated relays,
 fused and earthed, wired by someone qualified, and keep the 230 V away from
 the 5 V and signal wiring.
 
-**Power**: everything comes from the **ATX supply** in the robot, which also
-feeds the tiles. The 12 V rail (yellow, fused) feeds the H-bridge and the
-motor, and the 13 tiles (~15 A): pick ≥ 450 W with ≥ 25 A on 12 V. An ATX
+**The built turntable** (photo of one sensor: [photos/robot_hall_sensor.jpg](photos/robot_hall_sensor.jpg)):
+the head turns on castor wheels running in a ring. The motor (red, a used
+drill motor) drives it through a gear train: a small pinion and two white
+compound gears. The **fixed part** under the head (a three-armed MDF frame)
+carries the motor bracket and the **two position sensors**: hall-effect
+modules (an A3144 "3144" on an HW-477 board, 3 pins: signal, +, −) in printed
+holders. The **magnets are on the turning head** and pass over the sensors. The cable labelled **"step"** is the **mark sensor** (a magnet
+at every side, 13 per turn), and the other one is the **home sensor** (one
+magnet at side 0, facing T01).
+
+![A position sensor (hall module)](photos/robot_hall_sensor.jpg)
+
+* The A3144 is unipolar: it switches on a **south pole** facing its printed
+  side, with the magnet a few mm away. A magnet the wrong way round never triggers it.
+* Its output is open-collector and **active LOW** (`SENSOR_ACTIVE LOW`),
+  and the module's LED lights while a magnet is over it, which helps when
+  lining up the magnets.
+* **Check the voltage on the signal pin.** The A3144 needs at least 4.5 V,
+  so the module is on 5 V. If the HW-477 board has a pull-up resistor from
+  signal to its + pin, it pulls the signal to 5 V, and the ESP32's IO35 / IO39
+  are not 5 V tolerant. Measure the signal pin with no magnet present: at
+  5 V, remove that resistor (the 10 kΩ pull-up to 3.3 V below takes over)
+  or add a divider (e.g. 10 kΩ / 20 kΩ).
+
+**Slip (the drill motor).** A used drill motor doesn't stop the same way
+twice: after the brake the head coasts on a different distance each time, and
+under load it can slip. The firmware takes that into account:
+
+* **The count can't slip.** The hall sensors on the fixed frame see the
+  magnets on the head go by, so they measure how far the head itself turned,
+  not the motor. Slipping gears or a slipping clutch never change the count. If
+  the count is ever off anyway, the home sensor corrects it at side 0.
+* **Creeping back onto the mark.** If the head coasts off the target mark
+  after the brake, it waits `SETTLE_MS` (500 ms) until it stands still, then
+  creeps back onto the mark at `MOTOR_SLOW`. It tries this at most
+  `SETTLE_TRIES` (2) times, so it never hunts back and forth. A creep that
+  finds no mark within `SETTLE_TIMEOUT_MS` (1.5 s) gives up quietly. It never
+  creeps after a stop by the operator or after an error.
+* **Slow onto the last mark.** The head drives the last side at `MOTOR_SLOW`
+  (35 %) so it coasts as little as possible. Lower it if it still overruns a
+  lot, but not so low that the motor can't start against the gears. If it
+  can't, no mark arrives within `MARK_TIMEOUT_MS` (4 s) and it stops with
+  "stalled".
+* **The drill's clutch.** If the drill gearbox with its torque clutch is
+  still in the drive, set the clutch to drill mode (no slipping). A clutch
+  that slips shows up as "stalled" or as a slow creep.
+
+**Power**: the robot has the **ATX supply** in the robot to itself; the tiles
+have their own 12 V supply (§3). The 12 V rail (yellow, fused) feeds the
+H-bridge and the motor. An ATX
 supply has no 24 V: a 24 V motor needs a step-up converter (or use a 12 V
 motor). The 5 V rail (red) feeds the ESP32 and the LEDs (about 1.5 A at
 `LED_BRIGHTNESS 160`, 2.4 A full white). All grounds (black) are joined. The
 supply starts when PS_ON (green) is tied to GND (a switch, or a wire link to
 always on). A cable runs into the head: the firmware never turns it further than
-the window set in the control UI (default −1.5 … +1.5 turns from the start).
+the window set in the control UI (default −1.5 … +1.5 turns from the start),
+and that window never wider than `TURN_HARD_MIN` … `TURN_HARD_MAX` in
+`config.h` (±3 turns as shipped: **set them to what the cable really
+survives**). The firmware counts marks; it cannot see the cable. A window
+set wrong, a slipped count or a stuck H-bridge is only stopped by hardware:
+limit switches in series with the bridge's enable, and an emergency stop in
+the motor's 12 V.
 
 **Pin table** (`firmware/robot/include/config.h`, every pin can be changed):
 
 | what | pin | note |
 |---|---|---|
-| Motor clockwise (BTS7960 RPWM / L298N IN1) | **IO14** | 20 kHz PWM; clockwise seen from above = side 0 → 1 → 2 … (else `MOTOR_INVERT 1`) |
-| Motor counter-clockwise (LPWM / IN2) | **IO15** | both high = brake; R_EN / L_EN (BTS7960) to 3.3 V |
-| Mark sensor | **IO35** | inductive / hall / optical, active LOW, 10 kΩ pull-up to 3.3 V (input only) |
-| Home sensor | **IO39** | active LOW at the start position, together with mark 0 |
+| Motor clockwise (BTS7960 RPWM / L298N IN1) | **IO14** | 20 kHz PWM; clockwise seen from above = side 0 → 1 → 2 … (else `MOTOR_INVERT 1`); 10 kΩ pull-down to GND |
+| Motor counter-clockwise (LPWM / IN2) | **IO15** | both high = brake; 10 kΩ pull-down to GND |
+| H-bridge enable (BTS7960 R_EN + L_EN / L298N ENA) | **IO2** (`MOTOR_PIN_EN 2`) | 10 kΩ pull-down to GND: the bridge is off until the firmware runs. Not wired (`MOTOR_PIN_EN -1`, the default): the enables on 3.3 V – then the bridge follows whatever IO14 / IO15 do during power-up, a reset and flashing |
+| Mark sensor | **IO35** | the hall module labelled "step" (A3144, active LOW), 10 kΩ pull-up to 3.3 V (input only) |
+| Home sensor | **IO39** | the second hall module: active LOW at the start position, together with mark 0 |
 | LED data (WS2812B chain) | **IO4** | through a 74AHCT125 (3.3 → 5 V) and 330 Ω |
-| Smoke machine relay | **IO32** | relay module / MOSFET on its remote input (active HIGH, `SMOKE_ACTIVE`) |
+| Smoke machine relay | **IO32** | relay module / MOSFET on its remote input (active HIGH, `SMOKE_ACTIVE`); 10 kΩ pull-down to GND (off while the ESP32 restarts) |
 | Star light relay | **IO33** | mains-rated relay, switches the 230 V lamp's live (active HIGH, `STAR_ACTIVE`) |
 | Ethernet (LAN8720) | 0, 16, 18, 19, 21–23, 25–27 | taken by the module |
-| Flashing | USB-serial the first time, then over Ethernet (OTA) | `pio run -e ota -t upload --upload-port <IP>` |
+| Flashing | USB-serial the first time, then over Ethernet (OTA) | `deploy/install/flash_robot.sh`, then `flash_robot.sh ota <IP>` (the installation's logins and update password; [SETUP.md](SETUP.md) §4) |
 
 **The LED chain** (one data line, in this order): the bulbs of side 0 (3,
 bottom row first), side 1, … side 12 (39) → the eye (1): 40 LEDs. The dome
@@ -187,7 +272,7 @@ at the start before powering on) – it trusts the position it saved.
   and the 2 mobile screens (`GAME_MOBILE_SCREENS`). Fewer screens means
   fewer Pis: 3 tiles per screen is the most the layout allows.
 * **Pi 1–3 are mounted inside the robot**, with the floor switch and the
-  ATX supply (the tiles and the robot): one mains feed and one Cat6 uplink go into the robot. Give the
+  ATX supply (the robot); the tiles have their own 12 V supply: one mains feed and one Cat6 uplink go into the robot. Give the
   robot ventilation: three Pi 5s at full load are about 30 W, and the
   switch and the ATX supply add more. HDMI to screens 1–5 runs from the robot.
   Passive micro-HDMI → HDMI is fine up to about 3–5 m; further to a wall

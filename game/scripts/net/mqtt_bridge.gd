@@ -24,7 +24,9 @@ extends MqttClient
 ##   <prefix>/event            game -> all    {text, color}: the event feed
 ##   <prefix>/tiles            control -> game  retained {"enabled": {"3": false, ...}}: tiles out of service
 ##   <prefix>/db               control -> game  {"changed": "players" | "questions" | "ranking"}: fetch again
+##   <prefix>/selection        control -> game  {"games_off": ["code", ...]}: not played at this event (retained)
 ##   <prefix>/mode             control -> game  retained {"mode": "setup" | "closed" | "open" | "paused"}
+##                                            (the tiles read it too: in setup their hearts show their place)
 ##   <prefix>/light/event      game -> all    a game moment for the lights: {"event": "hit", "tile": 3,
 ##                                            "angle": 27.7, ...} (Arena.cue; docs/SETUP.md §5)
 ##   <prefix>/light/scene      game -> all    retained: the base look {"scene": "playing", "round": "quiz",
@@ -37,6 +39,8 @@ extends MqttClient
 ##   <prefix>/device/<dev>/hello   tile -> all   retained: a physical tile announces itself {fw, net, ip, link, ...}
 ##   <prefix>/device/<dev>/config  control -> tile  retained {"tile": n}: its place
 ##                                            (the master reads both: the SETUP test screens show each place's tile)
+##   <prefix>/device/<dev>/status  broker -> all  {"online": false}: the tile's last will - it dropped out
+##                                            (also <prefix>/robot/status; the control server shows it at once)
 ##   <prefix>/sounds           game -> all    retained {"events": {"attack": ["laser1.ogg", ...], ...}}:
 ##                                            the sounds {"sound": "<event>"} on <prefix>/cmd can play
 ## Leave url empty to run without MQTT.
@@ -118,6 +122,7 @@ func setup(arena_node: Arena) -> void:
 	subscribe(topic_prefix + "/settings")
 	subscribe(topic_prefix + "/texts")
 	subscribe(topic_prefix + "/db")
+	subscribe(topic_prefix + "/selection")
 	subscribe(topic_prefix + "/device/+/hello")
 	subscribe(topic_prefix + "/device/+/config")
 	arena.game.settings_changed.connect(_publish_settings)
@@ -187,6 +192,8 @@ func _on_operator(kind: String, data: Dictionary) -> void:
 				arena.game.db.refresh()
 		"settings":                          # the operator's settings
 			arena.game.settings.apply(data)
+		"selection":                         # the games not played at this event
+			arena.game.picker.set_event_off(data.get("games_off", []))
 		"texts":                             # the operator's texts (Texts)
 			Texts.apply(data)
 			arena.screen_wall.refresh_all()  # (free tiles: their line)

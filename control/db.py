@@ -284,11 +284,45 @@ class Database:
         return q
 
     def questions(self):
-        return [self.question_json(r) for r in
-                self._all(select(questions).where(questions.c.active == 1).order_by(questions.c.id))]
+        """The questions the game asks now: active, or switched on / off for the current event."""
+        sel = self.selection()["questions"]
+        return [self.question_json(r) for r in self._all(select(questions).order_by(questions.c.id))
+                if sel.get(str(r["id"]), r["active"])]
 
     def question_rows(self):
-        return self._all(select(questions).order_by(questions.c.id))
+        """Every question; "on": asked at the current event (its own `active`, or
+        the event's choice: "event" 1 / 0, None = as normal)."""
+        sel = self.selection()["questions"]
+        return [{**r, "event": sel.get(str(r["id"])), "on": int(sel.get(str(r["id"]), r["active"]))}
+                for r in self._all(select(questions).order_by(questions.c.id))]
+
+    # ------------------------------------------------------------ the event's selection
+    # Per event the gamemasters choose which games are played and which questions
+    # asked (a special event: its own questions on, others off). A new event
+    # starts with everything as normal: all games, the questions' own `active`.
+
+    def selection(self, event_id=None):
+        """{"games_off": [round type, ...], "questions": {question id: 1 / 0}} of an event (default: the current one)."""
+        try:
+            sel = json.loads(self.setting(f"selection_{event_id or self.current_event_id()}", "{}"))
+        except ValueError:
+            sel = {}
+        return {"games_off": [g for g in sel.get("games_off", []) if isinstance(g, str)],
+                "questions": {str(k): int(bool(v)) for k, v in sel.get("questions", {}).items()}}
+
+    def set_selection(self, games_off=None, question_on=None):
+        """Change the current event's selection: games_off = the new list; question_on =
+        {question id: True / False / None (as normal)}."""
+        sel = self.selection()
+        if games_off is not None:
+            sel["games_off"] = sorted(set(games_off))
+        for qid, on in (question_on or {}).items():
+            if on is None:
+                sel["questions"].pop(str(qid), None)
+            else:
+                sel["questions"][str(qid)] = int(bool(on))
+        self.set_setting(f"selection_{self.current_event_id()}", json.dumps(sel))
+        return sel
 
     def save_question(self, q, qid=None):
         values = {f: q.get(f) for f in QUESTION_FIELDS}

@@ -45,6 +45,7 @@ void begin() {
     starOn = false;
     FastLED.addLeds<WS2812B, LED_PIN, GRB>(px, LED_TOTAL);
     FastLED.setBrightness(LED_BRIGHTNESS);
+    if (LED_MAX_MA > 0) FastLED.setMaxPowerInVoltsAndMilliamps(5, LED_MAX_MA);   // (dims a frame that would draw more)
     FastLED.clear(true);
 }
 

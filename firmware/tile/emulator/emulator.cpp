@@ -177,8 +177,9 @@ static std::string dot(const CRGB &c, const char *on, const char *off = "·") {
     return buf;
 }
 
-void CFastLED::show() {
-    static uint32_t last = 0;
+// The keyboard and the web view, every loop (as the real sensors: read every
+// millisecond, not once per frame - a press's time is not rounded to a frame).
+static void input() {
     char ch;
     while (term && read(STDIN_FILENO, &ch, 1) == 1) {   // keys: 1-4 press the icons, q quits (the terminal only:
                                                         //  stdin is non-blocking there, not with --no-term)
@@ -186,6 +187,10 @@ void CFastLED::show() {
         if (ch == 'q' || ch == 'Q') running = false;
     }
     webPoll(ledBuf, ledCount, emu_mac, logLines, webHeld);
+}
+
+void CFastLED::show() {
+    static uint32_t last = 0;
     if (!term || millis() - last < 50 || !ledBuf) return;
     last = millis();
     const int W = 49, H = 21, cx = 24, cy = 10;
@@ -197,12 +202,18 @@ void CFastLED::show() {
         int x = cx + (int)lroundf(cosf(a) * 22), y = cy + (int)lroundf(sinf(a) * 9.5f);
         grid[y][x] = dot(ledBuf[RING_FIRST + i], "●");
     }
+    for (int i = 0; i < INNER_COUNT; i += 2) {    // the inner ring (every 2nd LED: the terminal is coarse)
+        float a = -M_PI / 2 + 2 * M_PI * i / INNER_COUNT;
+        int x = cx + (int)lroundf(cosf(a) * 14), y = cy + (int)lroundf(sinf(a) * 5.5f);
+        int k = (((INNER_REVERSE ? -i : i) + INNER_OFFSET) % INNER_COUNT + INNER_COUNT) % INNER_COUNT;   // (= inner(i) in tile.h)
+        grid[y][x] = dot(ledBuf[INNER_FIRST + k], "•");
+    }
     std::string hearts, icons;
     for (int i = 0; i < HEART_COUNT; i++) hearts += dot(ledBuf[HEART_FIRST + i], "♥", "♡") + " ";
     const char *sym[4] = {"▢", "△", "✕", "○"};
     for (int i = 0; i < 4; i++) icons += dot(ledBuf[ICON_FIRST + i], sym[i], sym[i]) + "   ";
     std::string out = "\x1b[H\x1b[0m\x1b[1mCYBER CIRCLE CHALLENGE TILE (emulator)\x1b[0m  " + emu_mac + "  broker " + emu_host + ":" +
-                      std::to_string(emu_port) + "  status " + dot(ledBuf[STATUS_LED], "●") + "\x1b[0m\x1b[K\n\n";
+                      std::to_string(emu_port) + (STATUS_LED >= 0 ? "  status " + dot(ledBuf[STATUS_LED < 0 ? 0 : STATUS_LED], "●") : std::string()) + "\x1b[0m\x1b[K\n\n";
     for (int y = 0; y < H; y++) {
         std::string line;
         for (int x = 0; x < W; x++) {
@@ -256,6 +267,7 @@ int main(int argc, char **argv) {
         setup();
         while (running) {
             loop();
+            input();
             usleep(1000);
         }
         return 0;
@@ -276,6 +288,7 @@ int main(int argc, char **argv) {
     setup();
     while (running) {
         loop();
+        input();
         usleep(1000);
     }
     return 0;

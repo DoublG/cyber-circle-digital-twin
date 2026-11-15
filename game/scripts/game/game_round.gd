@@ -18,6 +18,31 @@ var game: GameManager
 var players: Array[int] = []      # tile ids taking part in this round
 var points := {}                  # tile_id -> points scored this round
 var time_left := 0.0
+## The round's countdown on the tiles: one green LED once round the outer ring
+## (GameManager shows it on the 3D tiles and sends it to the real ones). Off:
+## Cyclone (its own green light runs round the ring).
+var tile_countdown := true
+var countdown := Vector2(-1.0, 0.0)  # (s left, s in all) now; x <= 0: none (to the display nodes too)
+## Ages (like a question's min_age / max_age; operator settings per round type):
+## a player younger than min_age is protected - a shield on the tile, and the
+## last place costs them no life (they can still win one); the randomizer
+## picks the round less often when the players are outside min_age .. max_age
+## (AgeFit). 0 / 99: for everyone. The quiz has none (each question has its own).
+var min_age := 0
+var max_age := 99
+var age_settings := true          # min_age / max_age are operator settings (not in the quiz)
+## Lives at the end of the round (operator settings per round type, the rounds
+## with places; life_changes):
+##   win_places   the best N places +1 life (1: the 1st place(s); 0: nobody)
+##   win_percent  instead (> 0): the best N % of the players +1
+##   lose_places  the last N places -1 life (1: the last place(s); 0: nobody)
+##   lose_percent instead (> 0): the worst N % of the players -1
+## Equal progress, equal outcome: a cut-off between equal players takes them
+## all. Both +1 and -1 (overlapping settings): 0. A % is at least 1 player.
+var win_places := 1
+var win_percent := 0
+var lose_places := 1
+var lose_percent := 0
 var tile_clock := TileClock.new()  # the tiles stamp their presses (Ritme, Zwarte Piet)
 ## Display nodes (RoundMirror): the fields this round type's views read, sent
 ## on change ...
@@ -34,6 +59,42 @@ func tunables() -> Array:
 	return [setting("duration", "Speeltijd", 10, 300, 5, "s")]
 
 
+## The life settings (GameSettings adds them to tunables(); rounds with places).
+func life_tunables() -> Array:
+	if not ranked:
+		return []
+	return [setting("win_places", "+1 leven: beste plaatsen (0 = niemand)", 0, 13, 1),
+		setting("win_percent", "+1 leven: beste % spelers (0 = per plaats)", 0, 100, 5, "%"),
+		setting("lose_places", "-1 leven: laatste plaatsen (0 = niemand)", 0, 13, 1),
+		setting("lose_percent", "-1 leven: slechtste % spelers (0 = per plaats)", 0, 100, 5, "%")]
+
+
+## The rounds' rules end with "Na de ronde: ... +1 leven, ... -1 leven." for
+## the default (1st +1, last -1): other life settings, that line says them.
+func adapt_rules() -> void:
+	if not ranked or (win_places == 1 and lose_places == 1 and win_percent <= 0 and lose_percent <= 0):
+		return
+	var lines := Array(rules.split("\n")).filter(func(l): return not l.begins_with("Na de ronde:"))
+	var parts := []
+	for side in [[win_places, win_percent, "beste", "+1"], [lose_places, lose_percent, "laatste", "-1"]]:
+		if side[1] > 0:
+			parts.append("de %s %d%% van de spelers %s leven" % [side[2], side[1], side[3]])
+		elif side[0] == 1:
+			parts.append("%s plaats %s leven" % ["1e" if side[3] == "+1" else "laatste", side[3]])
+		elif side[0] > 1:
+			parts.append("de %s %d plaatsen %s leven" % [side[2], side[0], side[3]])
+	lines.append("Na de ronde: " + (", ".join(parts) if not parts.is_empty() else "geen levens erbij of eraf") + ".")
+	rules = "\n".join(lines)
+
+
+## The age settings (GameSettings adds them to tunables()): min_age, max_age.
+func age_tunables() -> Array:
+	if not age_settings:
+		return []
+	return [setting("min_age", "Beschermd onder leeftijd (0 = niemand)", 0, 18, 1),
+		setting("max_age", "Geschikt tot leeftijd (minder kans daarboven)", 6, 99, 1)]
+
+
 static func setting(key: String, label: String, lo: float, hi: float, step: float, unit := "") -> Dictionary:
 	return {"key": key, "label": label, "min": lo, "max": hi, "step": step, "unit": unit}
 
@@ -44,12 +105,29 @@ func begin(game_manager: GameManager, tile_ids: Array[int]) -> void:
 	for id in players:
 		points[id] = 0
 	time_left = duration
+	for id in players:
+		if is_protected(id):
+			_tile(id).shielded = true      # (GameManager takes it off at the end of the round)
 	_start()
+
+
+## This player is younger than the round's min_age: the last place costs no life.
+## (The quiz: per question.)
+func is_protected(id: int) -> bool:
+	var age: int = game.arena.players.player_age(id)
+	return age > 0 and age < min_age
 
 
 func update(delta: float) -> void:
 	time_left -= delta
 	_update(delta)
+	countdown = countdown_now() if tile_countdown else Vector2(-1.0, 0.0)
+
+
+## The countdown the tiles show: (s left, s in all); x <= 0: none. Default: the
+## round's time; a round with its own timer (the quiz's answer time) says so.
+func countdown_now() -> Vector2:
+	return Vector2(time_left, duration)
 
 
 func is_finished() -> bool:
@@ -139,19 +217,43 @@ func progress(tile_id: int) -> int:
 
 ## How the lives change at the end of this round: {tile_id: +1 / -1}. Lives
 ## only ever change here, by at most 1 (GameManager applies it). Default (the
-## personal rounds): the 1st places +1, the last places -1 (see _rank_result).
+## rounds with places): the best +1, the worst -1 as the life settings say
+## (win_places / win_percent, lose_places / lose_percent; see _rank_result),
+## except the protected ones (younger than min_age): their shield blocks the -1.
 func life_changes() -> Dictionary:
 	var places := _rank_result()
 	var last: int = places.values().max() if not places.is_empty() else 0
 	var out := {}
 	if last < 2:
 		return out                         # everyone equally far
+	var up := _cut(places, win_places, win_percent, true)
+	var down := _cut(places, lose_places, lose_percent, false)
 	for id in places:
-		if places[id] == 1:
-			out[id] = 1
-		elif places[id] == last:
-			out[id] = -1
+		var d := (1 if id in up else 0) - (1 if id in down else 0)
+		if d < 0 and is_protected(id):
+			var who := game.arena.players.player_name(id).to_upper()
+			game.log_event("%s: SCHILD - GEEN LEVEN KWIJT" % who, Retro.SHIELD)
+			game.arena.narrator.say_to(id, "shielded_last", "Bijna laatst, maar je schild beschermt je."
+				if places[id] < last else "Laatste, maar je schild beschermt je.")
+		elif d != 0:
+			out[id] = d
 	return out
+
+
+## The players at the top (best) or bottom of the places: the n best / last
+## places, or (percent > 0) that share of the players - with everyone equal to
+## the one at the cut-off.
+static func _cut(places: Dictionary, n: int, percent: int, best: bool) -> Array:
+	var ids := places.keys()
+	if percent > 0:
+		ids.sort_custom(func(a, b): return places[a] < places[b] if best else places[a] > places[b])
+		var count := clampi(roundi(ids.size() * percent / 100.0), 1, ids.size())
+		var edge: int = places[ids[count - 1]]
+		return ids.filter(func(id): return places[id] <= edge if best else places[id] >= edge)
+	if n <= 0:
+		return []
+	var last: int = places.values().max()
+	return ids.filter(func(id): return places[id] <= n if best else places[id] > last - n)
 
 
 ## Places by progress (players still alive), shared when equal: there can be

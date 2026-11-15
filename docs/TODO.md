@@ -131,7 +131,7 @@ Every moment listed before has a sound event now (the table above). Still open:
       the window in *Tegels › Robot* (default −1.5 … +1.5 turns).
 - [ ] Before the first power-up: the head at the start (facing T01), the cable relaxed.
 - [ ] Tune `MOTOR_SPEED` / `MOTOR_SLOW` (stops on the mark without overshooting
-      it), `MARK_DEBOUNCE_US`, `MARK_TIMEOUT_MS` on the hardware.
+      it), `MARK_DEBOUNCE_MS`, `MOTOR_REVERSE_MS`, `MARK_TIMEOUT_MS` on the hardware.
 - [ ] The smoke machine's relay: its trigger input, and *Rook max* / pause for that machine.
 - [ ] The LED chain's order and counts (`BULBS_PER_SIDE`, `DOME_LEDS`, `EYE_LEDS`).
 - [ ] The boot / shutdown shows on the real robot: the scan speed, the twitches

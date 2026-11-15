@@ -12,7 +12,11 @@ void applyState(JsonObjectConst st);
 // {"fx": attack|hit|block|life|doomed|death, "color": "#rrggbb"}
 void effect(const char *name, CRGB color);
 void identify(uint32_t ms);                // device/<mac>/identify: light up so the crew finds it
+bool identifying();                        // ... and it does so now
 void unplaced(int number);                 // no place yet (0) / the place from the config
+void setupPhase(bool on);                  // the installation is in SETUP (<prefix>/mode): the hearts show the place
+                                           // number in binary until it is locked - whatever the game sent last
+void showNumber(uint32_t ms);              // ... and for this long now: another place, given while the game runs
 void pressed(int icon);                    // local feedback on a press
 bool sendsPresses();                       // out of service: the tile stays quiet
 // Every frame, before FastLED.show(): ring and icons (unless a program owns

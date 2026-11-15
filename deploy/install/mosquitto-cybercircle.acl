@@ -1,7 +1,7 @@
 # Who may do what on the Cyber Circle broker (install_server.sh: /etc/mosquitto/cybercircle.acl).
 # @PREFIX@ is the topic prefix (MQTT_PREFIX, default cybercircle).
 
-# the installation (the game master, the control server, the tiles, the gamemaster app): everything,
+# the installation (the game master, the control server, the gamemaster app): everything,
 # and the broker's own counters (the web interface's Prestaties tab)
 user @MQTT_USER@
 topic readwrite #
@@ -12,3 +12,23 @@ topic read $SYS/#
 user @MQTT_DISPLAY_USER@
 topic read @PREFIX@/tile/+/cmd
 topic read @PREFIX@/tile/+/event
+
+# the tiles and the robot (the firmware: flash_tiles.sh, flash_robot.sh): only what a board
+# needs. Its password sits in every board's flash and crosses the wire unencrypted, so
+# it must not be the installation's: with it nobody can drive the game, the robot or the
+# other screens - only pretend to be a tile.
+user @MQTT_DEVICE_USER@
+topic write @PREFIX@/device/+/hello
+topic write @PREFIX@/device/+/status
+topic read @PREFIX@/device/+/config
+topic read @PREFIX@/device/+/identify
+topic read @PREFIX@/mode
+topic read @PREFIX@/tile/+/state
+topic read @PREFIX@/tile/+/cmd
+topic write @PREFIX@/tile/+/event
+topic read @PREFIX@/robot/cmd
+topic read @PREFIX@/robot/config
+topic write @PREFIX@/robot/state
+topic write @PREFIX@/robot/event
+topic write @PREFIX@/robot/hello
+topic write @PREFIX@/robot/status

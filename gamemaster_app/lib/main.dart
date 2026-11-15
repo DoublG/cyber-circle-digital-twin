@@ -6,6 +6,7 @@
 import 'package:flutter/material.dart';
 
 import 'src/app_state.dart';
+import 'src/event_page.dart';
 import 'src/login_page.dart';
 import 'src/tiles_page.dart';
 import 'src/scan_page.dart';
@@ -40,6 +41,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
+  static const _settings = 3;
   int _tab = 0;
 
   @override
@@ -48,9 +50,9 @@ class _HomePageState extends State<HomePage> {
     return ListenableBuilder(
       listenable: Listenable.merge([app, app.live]),
       builder: (context, _) {
-        final tab = app.configured ? _tab : 2;        // first time: the settings
+        final tab = app.configured ? _tab : _settings;        // first time: the settings
         final s = app.live.state;
-        final login = app.configured && app.gamemaster == null && tab != 2;   // who uses the app now?
+        final login = app.configured && app.gamemaster == null && tab != _settings;   // who uses the app now?
         return Scaffold(
           appBar: AppBar(
             title: Row(children: [
@@ -98,10 +100,11 @@ class _HomePageState extends State<HomePage> {
               ),
             Expanded(
               child: login
-                  ? LoginPage(app: app, onSettings: () => setState(() => _tab = 2))
+                  ? LoginPage(app: app, onSettings: () => setState(() => _tab = _settings))
                   : IndexedStack(index: tab, children: [
                       tab == 0 && app.api != null ? ScanPage(app: app) : const SizedBox(),   // (the camera only while visible)
                       TilesPage(app: app),
+                      app.api != null ? EventPage(app: app, visible: tab == 2) : const SizedBox(),
                       SettingsPage(app: app),
                     ]),
             ),
@@ -112,6 +115,7 @@ class _HomePageState extends State<HomePage> {
             destinations: const [
               NavigationDestination(icon: Icon(Icons.qr_code_scanner), label: 'Scannen'),
               NavigationDestination(icon: Icon(Icons.grid_view), label: 'Tegels'),
+              NavigationDestination(icon: Icon(Icons.event), label: 'Event'),
               NavigationDestination(icon: Icon(Icons.settings), label: 'Instellingen'),
             ],
           ),

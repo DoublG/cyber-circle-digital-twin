@@ -99,9 +99,41 @@ try:
     time.sleep(1.5)
     check(not state()["pending"], "closed: no registrations")
     check(status("POST", "/api/mode", {"mode": "open"}) == 409, "setup -> open not allowed (lock first)")
+    check(call("GET", "/api/config")["t01_clock"] == 12, "default: T01 at 12 o'clock (across from the entrance)")
+    call("PUT", "/api/layout", {"t01_clock": 3})
+    check(status("PUT", "/api/robot", {"turn_min": -1.0, "turn_max": 1.0}) == 200
+          and status("POST", "/api/robot/cmd", {"go": 3}) == 200
+          and status("POST", "/api/robot/cmd", {"home": "auto"}) == 200
+          and status("POST", "/api/master", {"node": "test-master"}) == 200,
+          "setup: the robot's window, aligning it, the master of the screens")
     call("POST", "/api/mode", {"mode": "closed"})
     check(until(lambda: state().get("mode") == "closed"), "setup locked")
     check(status("PUT", "/api/tiles/5", {"device": "tile-x"}) == 409, "locked: no device swap on a tile in service")
+    check(status("PUT", "/api/layout", {"t01_clock": 9}) == 409 and call("GET", "/api/config")["t01_clock"] == 3,
+          "locked: the layout stays")
+    check(status("PUT", "/api/installation", {"installed": [1, 2, 3]}) == 409, "locked: the installation stays")
+    check(status("PUT", "/api/robot", {"turn_min": -3.0}) == 409
+          and call("GET", "/api/robot")["config"]["turn_min"] == -1.0, "locked: the robot's settings stay")
+    check(status("POST", "/api/robot/cmd", {"go": 3}) == 409
+          and status("POST", "/api/robot/cmd", {"set_position": 0}) == 409
+          and status("POST", "/api/robot/cmd", {"home": "auto"}) == 409
+          and status("POST", "/api/robot/cmd", {"stop": True, "go": 3}) == 409, "locked: no aligning the robot")
+    check(status("POST", "/api/robot/cmd", {"stop": True}) == 200
+          and status("POST", "/api/robot/cmd", {"smoke": 2}) == 200, "locked: stop and smoke still work")
+    check(status("POST", "/api/master", {"node": "test-master"}) == 200, "locked: the master it is already - fine")
+    import paho.mqtt.client as paho                  # the robot reports that it lost its position
+    rob = paho.Client(paho.CallbackAPIVersion.VERSION2, transport="websockets")
+    rob.connect("127.0.0.1", MQTT_PORT)
+    rob.loop_start()
+    rob.publish("cybercircle/robot/state", json.dumps({"known": True, "error": "stalled"})).wait_for_publish(5)
+    check(until(lambda: status("POST", "/api/robot/cmd", {"home": "auto"}) == 200, 10),
+          "locked, the robot stalled: finding the start again is allowed")
+    check(status("POST", "/api/robot/cmd", {"go": 3}) == 409, "... nothing else")
+    rob.publish("cybercircle/robot/state", json.dumps({"known": True, "error": ""})).wait_for_publish(5)
+    check(until(lambda: status("POST", "/api/robot/cmd", {"home": "auto"}) == 409, 10),
+          "the robot fine again: locked again")
+    rob.loop_stop()
+    rob.disconnect()
     call("POST", "/api/mode", {"mode": "open"})
     check(until(lambda: state().get("mode") == "open"), "game open")
 
@@ -144,9 +176,7 @@ try:
     cfg = call("GET", "/api/config")
     check(cfg["mqtt"] == f"ws://127.0.0.1:{MQTT_PORT}" and cfg["prefix"] == "cybercircle" and cfg["places"] == 18,
           f"config: where MQTT is ({cfg})")
-    check(cfg["t01_clock"] == 12, "default: T01 at 12 o'clock (across from the entrance)")
-    call("PUT", "/api/layout", {"t01_clock": 3})
-    check(call("GET", "/api/config")["t01_clock"] == 3 and live()["t01_clock"] == 3, "setup: T01 at 3 o'clock, for the apps")
+    check(cfg["t01_clock"] == 3 and live()["t01_clock"] == 3, "setup: T01 at 3 o'clock, for the apps")
     check(status("GET", "/api/cards/CC-0042") == 404, "an unknown card: 404 (the app shows the form)")
     gm = call("POST", "/api/gamemasters", {"name": "Erik", "color": "#00ffcc"})["id"]
     check(any(g["name"] == "Erik" for g in call("GET", "/api/gamemasters")), "gamemaster Erik added")
@@ -210,6 +240,41 @@ try:
     new = next(q for q in qs if q["question"] == "Hoeveel is 2+2?")
     check(new["correct"] == 1 and new["category"] == "Rekenen" and new["min_age"] == 6, "the new question: 4 is right (juist 2)")
     check(next(q for q in qs if q["id"] == first["id"])["question"].endswith("(nieuw)"), "the existing one updated")
+
+    print("--- this event: the gamemasters turn games off and questions on / off")
+    sel = call("GET", "/api/selection")
+    check(len(sel["games"]) == 7 and not any(g["off"] for g in sel["games"]) and sel["event"]["current"],
+          "a new event: every game on")
+    check(all(q["on"] == q["active"] and q["event"] is None for q in sel["questions"]), "... every question as normal")
+    check(status("PUT", "/api/selection", {"games_off": ["tetris"]}) == 400, "an unknown game: refused")
+    check(status("PUT", "/api/selection", {"questions": {"99999": False}}) == 404, "an unknown question: refused")
+    sel = call("PUT", "/api/selection", {"games_off": ["code", "simon"]})
+    check([g["type"] for g in sel["games"] if g["off"]] == ["simon", "code"], "Code kraken and Simon zegt off")
+    types = until(lambda: (lambda t: t if t and next(r for r in t if r["type"] == "code").get("event_off") else None)(
+        state().get("round_types")))
+    check(types and next(r for r in types if r["type"] == "simon")["event_off"]
+          and not next(r for r in types if r["type"] == "quiz")["event_off"], "the game heard it (<prefix>/selection)")
+    check(not any(p["type"] in ("code", "simon") for p in state()["plan"]), "... and plans neither of them")
+    check(types and all(r["chance"] == 0 for r in types if r["type"] in ("code", "simon")), "... their chance: 0")
+    q1, q2 = sel["questions"][0], sel["questions"][1]
+    row = next(q for q in call("GET", "/api/questions/all") if q["id"] == q2["id"])
+    call("PUT", f"/api/questions/{q2['id']}", {**{k: v for k, v in row.items() if k not in ("id", "event", "on")}, "active": 0})
+    asked = {q["question"] for q in call("GET", "/api/questions")}
+    check(q2["question"] not in asked, "a question not active: not asked")
+    call("PUT", "/api/selection", {"questions": {str(q1["id"]): False, str(q2["id"]): True}})
+    asked = {q["question"] for q in call("GET", "/api/questions")}
+    check(q1["question"] not in asked and q2["question"] in asked,
+          "this event: an active question off, an inactive one on (the game's list)")
+    rows = {q["id"]: q for q in call("GET", "/api/questions/all")}
+    check(rows[q1["id"]]["on"] == 0 and rows[q1["id"]]["event"] == 0 and rows[q2["id"]]["on"] == 1
+          and rows[q2["id"]]["active"] == 0, "the web interface sees normal and this event")
+    call("PUT", "/api/selection", {"questions": {str(q1["id"]): None}})
+    check(call("GET", "/api/questions/all")[0]["event"] is None and q1["question"] in
+          {q["question"] for q in call("GET", "/api/questions")}, "back to normal")
+    check(live()["selection"]["games_off"] == ["code", "simon"], "the live feed has the selection (web interface)")
+    call("PUT", "/api/selection", {"games_off": ["code"]})
+    check(until(lambda: not next(r for r in state()["round_types"] if r["type"] == "simon")["event_off"]),
+          "Simon zegt on again (only Code kraken off)")
 
     print("--- texts: the game's defaults; changed ones reach the game")
     t = until(lambda: call("GET", "/api/texts")["defaults"].get("title.quiz") and call("GET", "/api/texts"))
@@ -310,6 +375,12 @@ try:
           "new event: empty ranking, the old one closed and kept (%d in its ranking)" % len(before))
     check(bool(ne["backup"]) and os.path.isfile(os.path.join(EVENTS, ne["backup"])),
           "the old event saved as a zip: %s" % ne["backup"])
+    sel = call("GET", "/api/selection")
+    check(not any(g["off"] for g in sel["games"]) and all(q["event"] is None for q in sel["questions"])
+          and q2["question"] not in {q["question"] for q in call("GET", "/api/questions")},
+          "new event: every game on, every question as normal again")
+    check(until(lambda: not any(r.get("event_off") for r in state().get("round_types", [{"event_off": 1}]))),
+          "... the game heard it")
     gid = call("POST", "/api/games")["id"]
     check(any(e["current"] and e["games"] == 1 for e in call("GET", "/api/events")), "a new game counts for the new event")
 finally:

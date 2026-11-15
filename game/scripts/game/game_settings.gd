@@ -52,6 +52,12 @@ func of_round(type_name: String) -> Dictionary:
 	return values.get(type_name, {})
 
 
+## One setting of a round type: the operator's value, else the type's own
+## (the randomizer reads the ages this way: AgeFit).
+func round_value(type: Script, key: String) -> Variant:
+	return of_round(RoundPicker.type_name(type)).get(key, type.new().get(key))
+
+
 ## A new round's settings: the operator's for its type, then this round's in
 ## the round plan (web interface), e.g. {"categories": ["Computers"],
 ## "duration": 60, "question_count": 5}: every key that is a property of the
@@ -77,7 +83,7 @@ func schema() -> Array:
 	for type in RoundPicker.ROUND_TYPES:
 		var r: GameRound = type.new()
 		var own := of_round(RoundPicker.type_name(type))
-		groups.append({"group": RoundPicker.type_name(type), "title": r.title, "items": r.tunables().map(func(t):
+		groups.append({"group": RoundPicker.type_name(type), "title": r.title, "items": (r.tunables() + r.life_tunables() + r.age_tunables()).map(func(t):
 			return t.merged({"default": r.get(t.key), "value": own.get(t.key, r.get(t.key))}))})
 	for name in ["randomizer", "questions", "sound", "light", "voice"]:
 		groups.append(live[name])

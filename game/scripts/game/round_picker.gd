@@ -24,10 +24,12 @@ var random_rounds := true                  # false: play round_types in order (t
 var personal_min_players := 4              # fewer players: no personal rounds (they always have a loser)
 var queue_length := 3                      # rounds planned ahead
 var randomizer_off := {}                   # type name -> true: never drawn (the operator can still plan it)
+var event_off := {}                        # type name -> true: not played at this event at all (the gamemasters)
 var round_weights := {"code": 1.0, "cyclone": 1.0, "quiz": 5.0, "reaction": 1.0, "rhythm": 1.0, "simon": 1.0,
 	"zwarte_piet": 1.0}
 var drought := 0.5
 var mercy := 1.0
+var age_steer := 1.0                       # how strongly the players' ages steer it (AgeFit; 0 = off)
 var history: Array[Script] = []            # the round types played, last at the end
 var upcoming: Array = []                   # [{type: Script, forced: bool, options: {}}]: the next rounds
 var planned := 0                           # rounds planned so far (fixed order: the index)
@@ -103,6 +105,8 @@ func _pick(after: Script, n: int) -> Dictionary:
 
 ## The chance of each round type for the round after `after` - a weighted
 ## random, steered the way games steer their dice:
+##   this event the gamemasters' choice (app, web interface): a type that is off
+##              is never played - not drawn, not planned (set_event_off)
 ##   in / out   per type (settings "Randomizer", the web interface's Spel tab):
 ##              out = never drawn - planning it (set_planned) still plays it:
 ##              a new game for a chosen audience
@@ -116,29 +120,45 @@ func _pick(after: Script, n: int) -> Dictionary:
 ##              win a life (the personal ones) come more often and the quiz
 ##              (it only takes lives) less; everyone healthy: more quiz
 ##              (more pressure). `mercy` = how strongly (0 = off)
+##   ages       the round type's age range (its min_age / max_age settings)
+##              against the players' ages: what suits them comes more often
+##              (AgeFit, weight x fit ^ age_steer; 0 = off)
 ## Personal rounds only with enough players. Returns {Script: chance}.
 func round_chances(after: Script) -> Dictionary:
-	var options := round_types.filter(func(t): return allowed(t) and not randomizer_off.has(type_name(t)))
+	var on := round_types.filter(func(t): return not event_off.has(type_name(t)))
+	if on.is_empty():
+		on = round_types.duplicate()             # (every game off: the event's choice can't be kept)
+	var options := on.filter(func(t): return allowed(t) and not randomizer_off.has(type_name(t)))
 	if options.is_empty():                       # (everything out, or not allowed: then any allowed type)
-		options = round_types.filter(func(t): return allowed(t))
+		options = on.filter(func(t): return allowed(t))
 	if options.is_empty():
-		options = round_types.duplicate()
+		options = on.duplicate()
 	if options.size() > 1:
 		options = options.filter(func(t): return t != after or t.new().can_repeat)
 	var seq: Array = Array(history) + upcoming.map(func(e): return e.type)
 	var lives_factor := _director()
+	var ages := player_ages()
 	var w := {}
 	for t in options:
 		var since := seq.size() - 1 - seq.rfind(t) if t in seq else mini(seq.size() + 1, 10)
 		var weight: float = round_weights.get(type_name(t), 1.0)
 		weight *= 1.0 + drought * maxi(since - 1, 0)
-		if not t.new().gives_lives:
+		if not gives_lives(t):
 			weight *= lives_factor
+		weight *= age_factor(t, ages)
 		w[t] = weight
 	var total: float = w.values().reduce(func(a, b): return a + b, 0.0)
 	for t in w:
 		w[t] = w[t] / total if total > 0.0 else 1.0 / w.size()
 	return w
+
+
+## The round type can win a life: by nature (not the quiz) and its life
+## settings (win_places / win_percent not both 0).
+func gives_lives(t: Script) -> bool:
+	if not t.new().gives_lives:
+		return false
+	return game.settings.round_value(t, "win_places") > 0 or game.settings.round_value(t, "win_percent") > 0
 
 
 ## The director: x weight of the rounds that cannot win a life, from the
@@ -152,6 +172,19 @@ func _director() -> float:
 	var tension := clampf((0.7 - f) / 0.45, 0.0, 1.0)    # lives running out (full effect at 1/4)
 	var ease := clampf((f - 0.8) / 0.2, 0.0, 1.0)        # (almost) all hearts full
 	return maxf(0.1, 1.0 - mercy * tension) * (1.0 + mercy * ease)
+
+
+## The ages of the players still alive (0 = unknown).
+func player_ages() -> Array:
+	return _alive_tiles().map(func(t): return game.arena.players.player_age(t.tile_id))
+
+
+## x weight from how well the type's age range suits these ages (1: for everyone).
+func age_factor(t: Script, ages: Array) -> float:
+	if not t.new().age_settings:
+		return 1.0                          # (the quiz: its questions are picked by age)
+	return AgeFit.factor(ages, int(game.settings.round_value(t, "min_age")),
+		int(game.settings.round_value(t, "max_age")), age_steer)
 
 
 ## The tiles of the players who are still alive.
@@ -180,6 +213,8 @@ func plan() -> void:
 	var keep := []
 	var personal_ok := _personal_allowed()
 	for e in upcoming:
+		if event_off.has(type_name(e.type)) and random_rounds:
+			continue                                              # off at this event: even when chosen
 		if not random_rounds or e.forced:                         # (fixed order: every type)
 			keep.append(e)
 		elif allowed(e.type) and (e.get("personal_ok", true) or not personal_ok) \
@@ -208,7 +243,20 @@ func set_planned(slot: int, name: String, options := {}) -> void:
 		if t == null:
 			push_warning("unknown round type %s" % name)
 			return
+		if event_off.has(name):
+			push_warning("%s is off at this event" % name)
+			return
 		upcoming[slot] = {"type": t, "forced": true, "options": options}
+	plan()
+	_checkpoint()
+
+
+## The gamemasters: these round types are not played at this event (the rest are).
+func set_event_off(names: Array) -> void:
+	event_off.clear()
+	for n in names:
+		if type_named(str(n)):
+			event_off[str(n)] = true
 	plan()
 	_checkpoint()
 
@@ -238,6 +286,7 @@ func types_status() -> Array:
 	var chances := round_chances(_last_planned()) if random_rounds else {}
 	return ROUND_TYPES.map(func(t): return {"type": type_name(t), "title": t.new().title,
 		"random": not randomizer_off.has(type_name(t)), "weight": round_weights.get(type_name(t), 1.0),
+		"event_off": event_off.has(type_name(t)),
 		"allowed": allowed(t), "min_players": personal_min_players if t.new().mode == "personal" else 0,
 		"chance": snappedf(chances.get(t, 0.0), 0.001)})
 
@@ -251,6 +300,7 @@ func tunables() -> Array:
 		"weight_" + type_name(t), "Gewicht " + t.new().title, 0, 10, 0.5)))
 	items.append(GameRound.setting("drought", "Extra kans per ronde niet gespeeld (x gewicht)", 0, 3, 0.1))
 	items.append(GameRound.setting("mercy", "Sturing door levens (0 = uit)", 0, 2, 0.1))
+	items.append(GameRound.setting("age_steer", "Sturing door leeftijd (0 = uit)", 0, 3, 0.1))
 	return items
 
 

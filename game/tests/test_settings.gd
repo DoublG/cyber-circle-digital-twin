@@ -113,8 +113,8 @@ func _ready() -> void:
 	var qg: Dictionary = game.settings.schema().filter(func(g): return g.group == "questions")[0]
 	var keys: Array = qg.items.map(func(t): return t.key)
 	print("    ", keys)
-	check(keys == ["category_drought", "cat:Computers", "cat:Online veiligheid", "cat:Programmeren"],
-		"a weight per category")
+	check(keys == ["category_drought", "age_steer", "cat:Computers", "cat:Online veiligheid", "cat:Programmeren"],
+		"a weight per category (and the age steering)")
 	game.questions.memory = {"count": 0, "since": {}, "asked": {}}   # (the quiz played above)
 	var qr := QuizRound.new()
 	qr.game = game
