@@ -1,0 +1,1 @@
+{% if days %}<p class="days">{% for d in days %}<span class="day{% if d.today %} today{% endif %}">{{ d.label }} <b>{{ d.hours }}</b>{% if d.today %} · vandaag{% endif %}</span>{% endfor %}</p>{% endif %}

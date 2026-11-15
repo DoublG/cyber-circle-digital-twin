@@ -10,7 +10,7 @@ import http.cookiejar, json, os, re, shutil, subprocess, sys, tempfile, time, ur
 HERE = os.path.dirname(os.path.abspath(__file__))
 SITE_DIR = os.path.join(HERE, "..", "website")
 SITE_PY = os.path.join(SITE_DIR, ".venv", "bin", "python")
-SITE_PORT, CTRL_PORT, TOKEN = 8098, 8099, "sync-test-token"
+SITE_PORT, CTRL_PORT, MQTT_PORT, TOKEN = 8098, 8099, 8097, "sync-test-token"
 SITE, CTRL = f"http://127.0.0.1:{SITE_PORT}", f"http://127.0.0.1:{CTRL_PORT}"
 failures = 0
 
@@ -71,8 +71,11 @@ def start_site():
 
 
 site = start_site()
+broker = subprocess.Popen([sys.executable, os.path.join(HERE, "..", "game", "tests", "mqtt_test_broker.py"), str(MQTT_PORT)],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)   # (the game's texts: retained)
+time.sleep(1)
 ctrl = subprocess.Popen([sys.executable, os.path.join(HERE, "server.py"), "--db", CTRL_DB, "--port", str(CTRL_PORT),
-                         "--host", "127.0.0.1", "--mqtt", "ws://127.0.0.1:1", "--website-api", SITE, "--website-token", TOKEN,
+                         "--host", "127.0.0.1", "--mqtt", f"ws://127.0.0.1:{MQTT_PORT}", "--website-api", SITE, "--website-token", TOKEN,
                          "--website-sync-interval", "1", "--website-interval", "1"],
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 try:
@@ -105,6 +108,32 @@ try:
     check(board and board["event"]["current"], f"... the current event: {board and board['event']['name']}")
     mine = web.open(SITE + "/scoreboard/?id=synccard01").read().decode()
     check("Jij staat op plaats <b>1</b>" in mine, "with the card: 'your place'")
+    check('style="width: 100%"' in mine and "Hoe ver kwam iedereen?" not in mine,
+          "the bar (the best: full); one player: no chart")
+    eid = next(e for e in call("GET", f"{CTRL}/api/events") if e["current"])["id"]
+    days = [{"date": "2026-11-21", "start": "10:00", "end": "18:00"}, {"date": "2026-11-22", "start": "10:00", "end": "17:00"}]
+    call("PUT", f"{CTRL}/api/events/{eid}", {"days": days})
+    got = until(lambda: (lambda j: j["event"]["days"] or None)(call("GET", SITE + "/scoreboard.json")), 20)
+    check(got == days, "the event's days reach the website (with the scoreboard)")
+    check("za 21/11 <b>10:00–18:00</b>" in web.open(SITE + "/events/").read().decode(), "... on its Events page")
+
+    print("--- the games as the installation explains them (its texts, this event's games)")
+    page = web.open(SITE + "/games/").read().decode()
+    check("Kraak de geheime code" in page and "niet op dit event" not in page, "before: the game's own texts (built in)")
+    import paho.mqtt.client as paho
+    mq = paho.Client(paho.CallbackAPIVersion.VERSION2, transport="websockets")
+    mq.connect("127.0.0.1", MQTT_PORT)
+    mq.loop_start()
+    mq.publish("cybercircle/texts/defaults", json.dumps({          # (as the game publishes them: Texts.defaults)
+        "title.quiz": "Quiz", "rules.quiz": "Druk op je antwoord.", "title.cyclone": "Cyclone",
+        "rules.cyclone": "Een lampje draait rond."}), retain=True).wait_for_publish(5)
+    mq.loop_stop()
+    time.sleep(1)
+    call("PUT", f"{CTRL}/api/texts", {"title.quiz": "De Grote Quiz"})
+    call("PUT", f"{CTRL}/api/selection", {"games_off": ["cyclone"]})
+    page = until(lambda: (lambda p: p if "De Grote Quiz" in p else None)(web.open(SITE + "/games/").read().decode()), 20)
+    check(bool(page) and "Druk op je antwoord." in page, "the operator's name for the quiz reaches the Spellen page")
+    check(bool(page) and 'id="cyclone"' in page and "niet op dit event" in page, "... Cyclone: not at this event")
 
     print("--- the website down for a while, then back")
     site.terminate()
@@ -128,7 +157,7 @@ try:
     except urllib.error.HTTPError as e:
         check(e.code == 401, "a wrong token: refused (401)")
 finally:
-    for proc in (site, ctrl):
+    for proc in (site, ctrl, broker):
         proc.terminate()
     shutil.rmtree(tmp, ignore_errors=True)
 print(f"\nDONE: {failures} failure(s)")

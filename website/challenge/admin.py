@@ -3,7 +3,7 @@ import csv
 from django.contrib import admin, messages
 from django.http import HttpResponse
 
-from .models import Event, Registration, Score
+from .models import GameInfo, Event, Registration, Score
 from .privacy import purge
 
 
@@ -71,3 +71,10 @@ class RegistrationAdmin(admin.ModelAdmin):
             w.writerow([r.card, r.name, r.age, r.country, r.postcode, r.place, r.email, r.event or "",
                         r.created.strftime("%Y-%m-%d %H:%M")])
         return resp
+
+
+@admin.register(GameInfo)
+class GameInfoAdmin(admin.ModelAdmin):
+    """The games as the installation explains them (sent with the scoreboard: change them there, Teksten)."""
+    list_display = ("title", "type", "off", "updated")
+    readonly_fields = ("updated",)

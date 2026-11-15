@@ -5,11 +5,29 @@
 {% if event %}
 <section class="panel">
   <h1>Scorebord <span class="dim">{{ event.name }}</span></h1>
-  <p class="dim small">{{ event.starts_on|date:"l j F Y" }}{% if live %} · <span class="live">● LIVE</span> - ververst elke 30 s{% endif %}{% if event.scores_updated %} · bijgewerkt {{ event.scores_updated|date:"H:i" }}{% endif %}</p>
+  {% include "challenge/_days.html" %}
+  <p class="dim small">{% if not days %}{{ event.starts_on|date:"l j F Y" }} · {% endif %}{% if live %}<span class="live">● LIVE</span> - ververst elke 30 s · {% endif %}{% if event.scores_updated %}bijgewerkt {{ event.scores_updated|date:"H:i" }}{% endif %}</p>
   {% if mine %}<p class="you">Jij staat op plaats <b>{{ mine.rank }}</b> met <b>{{ mine.best }}</b> rondes overleefd. <a href="#mine">Toon</a></p>{% endif %}
+  {% if rows %}<p class="numbers"><b>{{ numbers.players }}</b> spelers · <b>{{ numbers.plays }}</b> keer gespeeld · beste: <b>{{ numbers.best }}</b> rondes</p>{% endif %}
   {% include "challenge/_board.html" %}
-  <p class="dim small">Per speler telt de beste keer: de meeste rondes overleefd, dan de meeste levens over, dan de meeste punten.</p>
+  <p class="dim small">Per speler telt de beste keer: de meeste rondes overleefd, dan de meeste levens over, dan de meeste punten.
+    De balk: je rondes naast die van de beste.</p>
 </section>
+{% if histogram|length > 1 and rows|length > 1 %}
+<section class="panel">
+  <h2>Hoe ver kwam iedereen?</h2>
+  <p class="dim small">Hoeveel spelers als beste keer zoveel rondes overleefden{% if mine %} - <span class="me">jouw balk</span>{% endif %}.</p>
+  <div class="chart" role="img" aria-label="{% for h in histogram %}{{ h.range }} rondes: {{ h.count }} spelers. {% endfor %}">
+    {% for h in histogram %}
+    <div class="col{% if h.mine %} me{% endif %}" title="{{ h.range }} rondes: {{ h.count }} spelers">
+      <span class="bw"><span class="b" style="height: {{ h.height }}%"><span class="n">{% if h.count %}{{ h.count }}{% endif %}</span></span></span>
+      <span class="l">{{ h.label }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  <p class="dim small center">rondes overleefd{% if histogram.0.size > 1 %} (per {{ histogram.0.size }}: 0–{{ histogram.0.size|add:"-1" }}, {{ histogram.0.size }}–…){% endif %} →</p>
+</section>
+{% endif %}
 {% else %}
 <section class="panel"><h1>Scorebord</h1><p class="dim">Nog geen event.</p></section>
 {% endif %}

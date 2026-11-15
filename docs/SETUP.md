@@ -1289,7 +1289,11 @@ or a new master continues in the same mode.
   `website/README.md`): `/register/?id=<card>` (the QR card's link: name,
   age, country, email, postcode and place, the privacy statement and an
   agreement – younger than 13: ask a parent), `/scoreboard/` (the current
-  event, live; earlier events in the menu; `?id=<card>`: your place), the
+  event, live; earlier events in the menu; `?id=<card>`: your place; a bar per
+  player and a chart of how far everyone got), `/events/` (every event with its
+  days and numbers; the days come from the installation with the scoreboard),
+  `/games/` (how it works and every game: the names and rules as *Teksten* has them,
+  the games off at this event marked – sent with the scoreboard), the
   admin (events, registrations, the winners with their email as CSV, erasing
   personal data; `manage.py purge_personal_data --older-than 30` from cron).
   Its database: PostgreSQL (`DATABASE_URL`; `website/docker-compose.yml`: the

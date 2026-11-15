@@ -16,11 +16,13 @@
     <li>Geef je kaart aan de gamemaster: je krijgt een <b>tegel</b> rond de robot.</li>
     <li>Druk op de 4 iconen op je tegel en <b>speel</b>! Hoe meer rondes je overleeft, hoe hoger op het scorebord.</li>
   </ol>
+  <p><a class="button" href="{% url 'games' %}">Bekijk de spellen</a></p>
 </section>
 
 {% if event %}
 <section class="panel">
   <h2>{{ event.name }} <span class="dim">- top 10</span></h2>
+  {% include "challenge/_days.html" %}
   {% include "challenge/_board.html" with rows=top %}
   <p><a class="button" href="{% url 'scoreboard' %}">Volledig scorebord</a></p>
 </section>

@@ -74,3 +74,36 @@ nav > a.on { border-bottom: 2px solid var(--amber); }
 
 footer { border-top: 1px solid var(--line); padding: 14px 16px; text-align: center; color: var(--dim); font-size: .85rem; }
 footer a { color: var(--dim); }
+
+/* the bars: a player's rounds next to the best's; how far everyone got */
+.board .bar { display: block; height: 6px; margin-top: 4px; background: var(--line); }
+.board .bar i { display: block; height: 100%; background: var(--teal); }
+.board tr.top1 .bar { background: rgba(10,8,7,.25); } .board tr.top1 .bar i { background: var(--bg); }
+.board tr.top2 .bar i, .board tr.top3 .bar i { background: var(--orange); }
+.numbers { margin: 4px 0 10px; } .numbers b { color: var(--amber); }
+.days { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+.day { border: 2px solid var(--line); padding: 2px 8px; font-size: .85rem; }
+.day b { color: var(--cream); font-weight: normal; } .day.today { border-color: var(--teal); color: var(--teal); }
+.chart { display: flex; gap: 3px; margin: 8px 0 4px; }
+.chart .col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: stretch; }
+.chart .bw { height: 180px; padding-top: 1.3em; display: flex; flex-direction: column; justify-content: flex-end;
+  border-bottom: 2px solid var(--line); }
+.chart .b { display: block; position: relative; width: 100%; background: var(--orange); }
+.chart .n { position: absolute; bottom: 100%; left: 0; right: 0; text-align: center; font-size: .7rem; color: var(--dim);
+  line-height: 1.3; }
+.chart .l { font-size: .7rem; color: var(--dim); text-align: center; white-space: nowrap; overflow: hidden; margin-top: 2px; }
+.chart .col.me .b { background: var(--teal); } .chart .col.me .l, .chart .col.me .n, .me { color: var(--teal); }
+.event.current { border-color: var(--teal); }
+@media (max-width: 560px) { .chart { gap: 1px; } .chart .bw { height: 140px; } .chart .l, .chart .n { font-size: .6rem; } }
+
+/* De spellen */
+.split { display: grid; grid-template-columns: 1fr minmax(0, 42%); gap: 16px; align-items: start; }
+.split figure { margin: 0; } .split img { display: block; width: 100%; height: auto; border: 2px solid var(--line); }
+.split figcaption { color: var(--dim); font-size: .8rem; margin-top: 4px; }
+.how ol { padding-left: 1.4em; margin: 0; } .how li { margin-bottom: 6px; }
+.rules p { margin: 0 0 8px; } .rules p:last-child { color: var(--amber); }
+.section { margin: 24px 0 12px; }
+.ic { white-space: nowrap; } .ic.sq { color: #e050c8; } .ic.tr { color: #4dff73; } .ic.cr { color: #4f8bff; } .ic.ci { color: #ff4033; }
+.game.off { opacity: .6; } .tag-off { font-size: .75rem; border: 2px solid var(--dim); color: var(--dim); padding: 0 6px; vertical-align: middle; }
+@media (max-width: 640px) { .split { grid-template-columns: 1fr; } }
+.split figure.tall { max-width: 300px; justify-self: center; width: 100%; }

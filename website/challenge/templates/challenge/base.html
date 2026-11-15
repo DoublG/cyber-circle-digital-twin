@@ -14,6 +14,8 @@
   <nav>
     <a href="{% url 'home' %}"{% if request.resolver_match.url_name == 'home' %} class="on"{% endif %}>Home</a>
     <a href="{% url 'scoreboard' %}"{% if request.resolver_match.url_name == 'scoreboard' %} class="on"{% endif %}>Scorebord</a>
+    <a href="{% url 'games' %}"{% if request.resolver_match.url_name == 'games' %} class="on"{% endif %}>Spellen</a>
+    <a href="{% url 'events' %}"{% if request.resolver_match.url_name == 'events' %} class="on"{% endif %}>Events</a>
     <a href="{% url 'how_it_works' %}"{% if request.resolver_match.url_name == 'how_it_works' %} class="on"{% endif %}>Technisch</a>
     {% if past_events %}
     <details class="menu">

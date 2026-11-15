@@ -106,6 +106,18 @@ class SyncTests(TestCase):
         self.assertNotIn("card", j["rows"][0])                    # (public: no card codes)
         self.assertEqual(self.client.put("/api/sync/scoreboard", "nope", content_type="application/json", **AUTH).status_code, 400)
 
+    def test_the_event_days_from_the_installation(self):
+        days = [{"date": "2026-11-22", "start": "10:00", "end": "17:00"}, {"date": "2026-11-21", "start": "10:00", "end": "18:00"},
+                {"date": "nope", "start": "x", "end": "y"}]
+        body = {"event": {"key": "8-x", "name": "Maker Faire", "date": "2026-11-21", "current": True, "days": days}, "rows": []}
+        self.client.put("/api/sync/scoreboard", json.dumps(body), content_type="application/json", **AUTH)
+        ev = Event.objects.get(control_key="8-x")
+        self.assertEqual([d["date"] for d in ev.days], ["2026-11-21", "2026-11-22"])      # sorted, the bad one out
+        page = self.client.get("/scoreboard/")
+        self.assertContains(page, "za 21/11 <b>10:00–18:00</b>")
+        self.assertContains(page, "zo 22/11 <b>10:00–17:00</b>")
+        self.assertEqual(self.client.get("/scoreboard.json").json()["event"]["days"], ev.days)
+
     def test_one_current_event(self):
         a = Event.objects.create(name="A", current=True)
         Event.objects.create(name="B", current=True)
@@ -125,6 +137,61 @@ class PagesTests(TestCase):
         self.assertContains(self.client.get(f"/scoreboard/{old.pk}/"), "Nog niemand")
         for url in ("/how-it-works/", "/privacy/", "/scoreboard/"):
             self.assertEqual(self.client.get(url).status_code, 200)
+
+    def test_the_bars_and_how_far_everyone_got(self):
+        ev = Event.objects.create(name="Dag van de Wetenschap", current=True)
+        for i, (name, best) in enumerate([("Anna", 12), ("Bram", 6), ("Cas", 6), ("Dina", 0)]):
+            Score.objects.create(event=ev, rank=i + 1, name=name, card=f"card000{i}", best=best)
+        page = self.client.get("/scoreboard/?id=card0001")
+        self.assertContains(page, 'style="width: 100%"')                 # Anna: the best
+        self.assertContains(page, 'style="width: 50%"', count=2)         # Bram, Cas: half of it
+        self.assertContains(page, 'style="width: 0%"')                   # Dina: nothing yet
+        self.assertContains(page, "Hoe ver kwam iedereen?")
+        self.assertContains(page, "6 rondes: 2 spelers")                 # the chart
+        self.assertContains(page, '<div class="col me" title="6 rondes: 2 spelers">')   # Bram's column
+        self.assertContains(page, "<b>4</b> spelers")
+        from .board import histogram, with_bars
+        rows = [type("R", (), {"best": b})() for b in range(0, 60)]
+        h = histogram(rows)
+        self.assertLessEqual(len(h), 24)
+        self.assertEqual((h[0]["label"], h[0]["range"], h[0]["size"]), ("0", "0–2", 3))   # (far: in groups)
+        self.assertEqual(sum(c["count"] for c in h), 60)
+        top = with_bars(ev.scores.all()[1:2], ev)                          # (a part: against the event's best)
+        self.assertEqual(top[0].bar, 50)
+
+    def test_events_page(self):
+        old = Event.objects.create(name="Nerdland Festival", starts_on=timezone.localdate() - timedelta(days=200),
+                                   days=[{"date": "2026-05-30", "start": "10:00", "end": "22:00"}])
+        now = Event.objects.create(name="Dag van de Wetenschap", current=True)
+        Score.objects.create(event=old, rank=1, name="Anna", best=9, plays=3)
+        page = self.client.get("/events/")
+        self.assertContains(page, "Nerdland Festival")
+        self.assertContains(page, "za 30/5 <b>10:00–22:00</b>")
+        self.assertContains(page, "<b>1</b> spelers · <b>3</b> keer gespeeld · beste: <b>9</b> rondes")
+        self.assertContains(page, f"/scoreboard/{now.pk}/")
+        self.assertContains(page, "● NU")
+
+    def test_games_page_the_games_own_texts_until_the_installation_sends_its_own(self):
+        page = self.client.get("/games/")
+        self.assertContains(page, "Code kraken")                       # (the game's own texts, built in)
+        self.assertContains(page, "Kraak de geheime code")
+        self.assertContains(page, "challenge/games/cyclone.jpg")
+        self.assertContains(page, "Haal een QR-codekaart.")
+        self.assertNotContains(page, "niet op dit event")
+
+    @override_settings(SYNC_TOKEN=TOKEN)
+    def test_games_from_the_installation(self):
+        body = {"event": {"key": "9-x", "name": "E", "current": True}, "rows": [],
+                "games": [{"type": "quiz", "title": "De Grote Quiz", "rules": "Regel 1\r\nRegel 2"},
+                          {"type": "code", "title": "Code kraken", "rules": "Kraak het.", "off": True},
+                          {"type": "../evil", "title": "x", "rules": "y"}]}
+        self.client.put("/api/sync/scoreboard", json.dumps(body), content_type="application/json", **AUTH)
+        page = self.client.get("/games/")
+        self.assertContains(page, "De Grote Quiz")
+        self.assertContains(page, "<p>Regel 1</p><p>Regel 2</p>")
+        self.assertContains(page, "niet op dit event", count=1)
+        self.assertNotContains(page, "Cyclone")                        # (the installation's list, as a whole)
+        self.assertNotContains(page, "evil")
 
     def test_purge_after_the_event(self):
         r = Registration.objects.create(card="card0001", name="Anna", age=12, email="a@example.org", postcode="1000", place="X")

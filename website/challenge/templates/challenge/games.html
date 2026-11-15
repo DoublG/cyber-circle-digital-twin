@@ -1,0 +1,70 @@
+{% extends "challenge/base.html" %}
+{% load static %}
+{% block title %}De spellen{% endblock %}
+{% block content %}
+<section class="hero">
+  <h1>De spellen</h1>
+  <p>De robot wil de galaxy veroveren. Jij en tot 17 andere spelers houden hem tegen - met snelle vingers, een goed
+    geheugen en wat je weet over computers en online veiligheid. Ronde na ronde, tot er niemand meer overblijft.</p>
+</section>
+
+<section class="panel how">
+  <h2>Zo doe je mee</h2>
+  <div class="split">
+    <ol>{% for s in steps %}<li>{{ s }}</li>{% endfor %}</ol>
+    <figure class="tall"><img src="{% static 'challenge/games/tile.jpg' %}" alt="Het scherm van een tegel die op een speler wacht: druk op de 4 iconen" loading="lazy" width="480" height="810">
+      <figcaption>Je tegel licht op in jouw kleur: druk op de 4 iconen.</figcaption></figure>
+  </div>
+</section>
+
+<section class="panel how">
+  <h2>Een ronde</h2>
+  <div class="split">
+    <div>
+      <p>Elke ronde is een ander spel. Eerst staat op de schermen <b>hoe je het speelt</b>, dan speel je op <b>je tegel</b>:
+        vier iconen - <span class="ic sq">■ vierkant</span>, <span class="ic tr">▲ driehoek</span>,
+        <span class="ic cr">✖ kruis</span> en <span class="ic ci">● cirkel</span>.</p>
+      <p>Na de ronde zie je de <b>uitslag</b>: wie het best deed wint meestal een leven, wie het slechtst deed verliest er
+        een. Daarna het <b>scorebord</b> - en dan meteen de volgende ronde.</p>
+    </div>
+    <figure><img src="{% static 'challenge/games/intro.jpg' %}" alt="Het overzichtsscherm legt het volgende spel uit" loading="lazy" width="800" height="450">
+      <figcaption>Het overzicht legt elk spel uit voor het begint.</figcaption></figure>
+  </div>
+</section>
+
+<section class="panel how">
+  <h2>Levens en de robot</h2>
+  <div class="split">
+    <div>
+      <p>Je begint met <b>3 tot 5 levens</b>: de hartjes op je tegel. Hoe jonger, hoe meer levens. Je levens veranderen alleen
+        na een ronde, met hoogstens één erbij of eraf.</p>
+      <p>Geen levens meer? Dan draait de robot naar jou en <b>schiet</b> - je bent <b>geëxtermineerd</b> en je tegel komt
+        vrij voor de volgende speler.</p>
+      <p>Ben je jonger dan een spel bedoeld is? Dan krijg je een <b>schild</b>: als laatste verlies je dan geen leven.</p>
+    </div>
+    <figure><img src="{% static 'challenge/games/extermination.jpg' %}" alt="De robot schiet: een speler is geëxtermineerd" loading="lazy" width="800" height="450">
+      <figcaption>Geëxtermineerd: je tegel komt vrij.</figcaption></figure>
+  </div>
+</section>
+
+<section class="panel how">
+  <h2>Het scorebord</h2>
+  <p>Je score is het aantal <b>rondes dat je overleefd hebt</b>. Je mag vaker spelen: je <b>beste keer</b> telt. Bij gelijke
+    rondes wint wie meer levens over had, dan wie meer punten had. Met je QR-kaart zie je op het
+    <a href="{% url 'scoreboard' %}">scorebord</a> waar je staat.</p>
+  <p class="dim small">Wachten er veel spelers? Dan wordt het spel moeilijker voor wie al lang speelt, zodat iedereen aan de
+    beurt komt - nieuwe spelers en spelers met een lage score blijven beschermd. Op het einde van de dag stopt het spel na
+    de ronde; vlak voor sluitingstijd kan er niemand meer bij.</p>
+</section>
+
+<h2 class="section">Alle spellen</h2>
+{% for g in games %}
+<section class="panel game{% if g.off %} off{% endif %}" id="{{ g.type }}">
+  <h2>{{ g.title }}{% if g.off %} <span class="tag-off">niet op dit event</span>{% endif %}</h2>
+  <div class="split">
+    <div class="rules">{% for l in g.lines %}<p>{{ l }}</p>{% endfor %}</div>
+    {% if g.image %}<figure{% if g.tall %} class="tall"{% endif %}><img src="{% static g.image %}" alt="{{ g.title }} op de schermen" loading="lazy"></figure>{% endif %}
+  </div>
+</section>
+{% endfor %}
+{% endblock %}

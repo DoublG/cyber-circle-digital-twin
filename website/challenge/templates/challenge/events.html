@@ -1,0 +1,24 @@
+{% extends "challenge/base.html" %}
+{% block title %}Events{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Events</h1>
+  <p class="dim small">Waar de Cyber Circle Challenge stond, met het scorebord van elk event.</p>
+</section>
+{% for e in events %}
+<section class="panel event{% if e.event.current %} current{% endif %}">
+  <h2><a href="{% url 'scoreboard_event' e.event.pk %}">{{ e.event.name }}</a>{% if e.event.current %} <span class="live">● NU</span>{% endif %}</h2>
+  {% with days=e.days %}{% include "challenge/_days.html" %}{% endwith %}
+  {% if not e.days %}<p class="dim small">{{ e.event.starts_on|date:"l j F Y" }}</p>{% endif %}
+  {% if e.top %}
+  <p class="numbers"><b>{{ e.numbers.players }}</b> spelers · <b>{{ e.numbers.plays }}</b> keer gespeeld · beste: <b>{{ e.numbers.best }}</b> rondes</p>
+  {% include "challenge/_board.html" with rows=e.top mine=None %}
+  <p><a class="button" href="{% url 'scoreboard_event' e.event.pk %}">Volledig scorebord</a></p>
+  {% else %}
+  <p class="dim">Nog niemand op het scorebord.</p>
+  {% endif %}
+</section>
+{% empty %}
+<section class="panel"><p class="dim">Nog geen events.</p></section>
+{% endfor %}
+{% endblock %}

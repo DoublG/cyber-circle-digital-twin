@@ -14,6 +14,7 @@ PUT  /api/sync/scoreboard              an event's whole scoreboard as the instal
 import datetime
 import hmac
 import json
+import re
 
 from django.conf import settings
 from django.db import transaction
@@ -23,7 +24,7 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_http_methods
 
-from .models import Event, Registration, Score
+from .models import Event, GameInfo, Registration, Score
 from .names import clean_name
 
 BATCH = 500
@@ -61,6 +62,33 @@ def registrations(request):
                          "last": last})
 
 
+def _days(days):
+    """[{date, start, end}] made safe: a real date, HH:MM, sorted, each date once."""
+    out = {}
+    for d in days[:31]:
+        try:
+            date = datetime.date.fromisoformat(str(d["date"])[:10]).isoformat()
+            start, end = (datetime.time.fromisoformat(str(d[k])[:5]).strftime("%H:%M") for k in ("start", "end"))
+        except (KeyError, TypeError, ValueError):
+            continue
+        out[date] = {"date": date, "start": start, "end": end}
+    return [out[k] for k in sorted(out)]
+
+
+def _games(games):
+    """The installation's games (their names, rules, off at this event): replaced as a whole."""
+    rows = []
+    for i, g in enumerate(games[:20]):
+        if not isinstance(g, dict) or not re.fullmatch(r"[a-z_]{1,32}", str(g.get("type", ""))):
+            continue
+        rows.append(GameInfo(type=g["type"], title=clean_name(g.get("title")) or g["type"],
+                             rules=str(g.get("rules") or "")[:2000].replace("\r\n", "\n").strip(),
+                             position=i, off=bool(g.get("off"))))
+    if rows:
+        GameInfo.objects.all().delete()
+        GameInfo.objects.bulk_create(rows)
+
+
 def _int(v, lo=0):
     try:
         return max(lo, int(v))
@@ -89,9 +117,13 @@ def scoreboard(request):
             pass
         if "current" in ev:
             event.current = bool(ev["current"])
+        if isinstance(ev.get("days"), list):         # its days and hours (the installation's event)
+            event.days = _days(ev["days"])
         event.scores_updated = timezone.now()
         event.save()
         event.scores.all().delete()
+        if isinstance(body.get("games"), list):       # the games as the installation explains them
+            _games(body["games"])
         Score.objects.bulk_create([
             Score(event=event, rank=_int(r.get("rank"), 1), name=clean_name(r.get("name")) or "?",
                   card=str(r.get("card") or "")[:64], best=_int(r.get("best")), lives=_int(r.get("lives")),

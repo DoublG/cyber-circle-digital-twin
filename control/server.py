@@ -1107,9 +1107,19 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
             return None
         started = str(ev["started_at"])                  # ("2026-11-15 15:17:19", or a datetime)
         return {"event": {"key": f"{ev['id']}-" + "".join(c for c in started[:19] if c.isdigit()), "name": ev["name"],
-                          "date": started[:10], "current": ev["ended_at"] is None},
+                          "date": (ev.get("days") or [{"date": started[:10]}])[0]["date"],
+                      "current": ev["ended_at"] is None, "days": ev.get("days") or []},
                 "rows": [{k: r[k] for k in ("rank", "name", "card", "best", "lives", "points", "plays")}
-                         for r in db.leaderboard(5000)]}
+                         for r in db.leaderboard(5000)],
+                **({"games": website_games()} if link.text_defaults else {})}
+
+    def website_games():
+        """The games as the installation explains them (the operator's texts, else the game's), the
+        quiz first; off: not played at this event - for the website's Spellen page."""
+        d, own, off = link.text_defaults, texts(), set(db.selection()["games_off"])
+        text = lambda k: own.get(k) or d.get(k) or ""
+        return [{"type": t, "title": text(f"title.{t}") or ROUND_TYPES[t], "rules": text(f"rules.{t}"), "off": t in off}
+                for t in ROUND_TYPES if text(f"rules.{t}")]
 
     @app.get("/api/website")
     def website():

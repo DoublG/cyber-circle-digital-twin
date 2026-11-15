@@ -22,6 +22,8 @@ class Event(models.Model):
     control_key = models.CharField("sleutel van de installatie", max_length=64, unique=True, null=True, blank=True,
                                    help_text="Het event in de control server (gezet door de sync).")
     scores_updated = models.DateTimeField("scorebord bijgewerkt", null=True, blank=True)
+    days = models.JSONField("dagen", default=list, blank=True,
+                            help_text='De dagen en uren (van de installatie): [{"date": "2026-11-21", "start": "10:00", "end": "18:00"}]')
 
     class Meta:
         ordering = ["-starts_on", "-id"]
@@ -93,3 +95,22 @@ class Score(models.Model):
 
     def __str__(self):
         return f"{self.rank}. {self.name}"
+
+
+class GameInfo(models.Model):
+    """A game of the installation, as it explains it (its name and rules: the operator's
+    texts there) - sent with the scoreboard; "off": not played at the current event."""
+    type = models.CharField("spel", max_length=32, unique=True)
+    title = models.CharField("naam", max_length=80)
+    rules = models.TextField("uitleg")
+    position = models.PositiveSmallIntegerField("volgorde", default=0)
+    off = models.BooleanField("niet op dit event", default=False)
+    updated = models.DateTimeField("bijgewerkt", auto_now=True)
+
+    class Meta:
+        ordering = ["position", "title"]
+        verbose_name = "spel"
+        verbose_name_plural = "spellen"
+
+    def __str__(self):
+        return self.title

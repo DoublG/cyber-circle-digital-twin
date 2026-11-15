@@ -9,7 +9,9 @@ Email, postcode and place stay here and are erased after the event.
 |---|---|
 | `/` | welcome, how to join, the current event's top 10 |
 | `/register/?id=<card>` | the QR card's link: register (or: already registered as ...) |
-| `/scoreboard/`, `/scoreboard/<id>/` | the current / an earlier event (`?id=<card>`: your place); `.json` too |
+| `/scoreboard/`, `/scoreboard/<id>/` | the current / an earlier event (`?id=<card>`: your place): its days and hours, a bar per player (their rounds next to the best's), *Hoe ver kwam iedereen?* (how many players reached each number of rounds; in groups when the best got far; yours in teal); `.json` too |
+| `/events/` | every event: its days, players, plays, the best, its top 3 |
+| `/games/` | *De spellen*: how to join, a round, lives and the robot, the scoreboard, then every game with its rules and a picture. The rules are the installation's (its *Teksten*: the operator can change them; sent with the scoreboard, with the games not played at this event marked); until the first sync the game's own (`challenge/game_texts.py`). Pictures: `challenge/static/challenge/games/` (from `docs/gallery`) |
 | `/how-it-works/`, `/privacy/` | |
 | `/admin/` | events, registrations (CSV, winners with email, erase personal data) |
 | `/api/health`, `/api/sync/...` | for the control server (Bearer `SYNC_TOKEN`) |

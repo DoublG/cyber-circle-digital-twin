@@ -5,7 +5,7 @@
   {% for r in rows %}
     <tr class="{% if r.rank <= 3 %}top{{ r.rank }}{% endif %}{% if mine and r.pk == mine.pk %} mine{% endif %}"{% if mine and r.pk == mine.pk %} id="mine"{% endif %}>
       <td class="rank">{{ r.rank|stringformat:"02d" }}</td>
-      <td class="name" dir="auto">{{ r.name }}</td>
+      <td class="name"><span dir="auto">{{ r.name }}</span><span class="bar" aria-hidden="true"><i style="width: {{ r.bar }}%"></i></span></td>
       <td class="num">{{ r.best }}</td>
       <td class="num wide hearts">{% if r.lives %}{% for _ in ""|center:r.lives %}♥{% endfor %}{% else %}☠{% endif %}</td>
       <td class="num wide">{{ r.plays }}</td>
