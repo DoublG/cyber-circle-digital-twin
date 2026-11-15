@@ -5,10 +5,11 @@
 # Safe to run again (an update: also update.sh). What it does:
 #   1. /etc/cybercircle/cybercircle.env (once, with random passwords; SERVER_IP
 #      from the argument or this PC's address) - the settings of everything
-#   2. packages: mosquitto, mariadb-server, python3-venv, ...
+#   2. packages: mosquitto, postgresql, python3-venv, ...
 #   3. the user CC_USER and the project in CC_ROOT (/srv/cybercircle/cyber-circle-challenge)
 #   4. Mosquitto: plain MQTT (tiles) + WebSocket (game, control server, app), a password
-#   5. MariaDB: the database and its user
+#   5. PostgreSQL: the database and its user (an installation still on MariaDB:
+#      its data copied over, tools/ops/migrate_db.py - MariaDB itself stays, unused)
 #   6. the control server: a virtualenv, systemd service cybercircle-control
 #   7. a nightly database backup (cybercircle-backup.timer)
 #   8. https certificate (CONTROL_HTTPS=1), firewall ports (when ufw is on)
@@ -52,7 +53,7 @@ done
 say "packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
-apt-get install -y -q mosquitto mosquitto-clients mariadb-server python3 python3-venv python3-pip \
+apt-get install -y -q mosquitto mosquitto-clients postgresql python3 python3-venv python3-pip \
     rsync openssl curl ffmpeg
 
 # ---------------------------------------------------------------- 3. user and project
@@ -82,16 +83,34 @@ chmod 600 /etc/mosquitto/cybercircle.passwd /etc/mosquitto/cybercircle.acl
 systemctl enable --now mosquitto
 systemctl restart mosquitto
 
-# ---------------------------------------------------------------- 5. MariaDB
-say "database $DB_NAME (MariaDB)"
-systemctl enable --now mariadb
-mysql <<SQL
-CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4;
-CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';
-ALTER USER '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASSWORD';
-GRANT ALL ON \`$DB_NAME\`.* TO '$DB_USER'@'localhost';
-FLUSH PRIVILEGES;
+# ---------------------------------------------------------------- 5. PostgreSQL
+say "database $DB_NAME (PostgreSQL)"
+grep -q "^DB_PORT=" "$ENV_FILE" || sed -i "s/^DB_HOST=.*/&\nDB_PORT=5432/" "$ENV_FILE"   # (an older settings file)
+systemctl enable --now postgresql
+# (psql's variables: quoted by psql itself; \gexec runs the CREATE only when it is missing)
+sudo -u postgres psql -q -v ON_ERROR_STOP=1 -v user="$DB_USER" -v pw="$DB_PASSWORD" -v db="$DB_NAME" <<'SQL'
+SELECT format('CREATE ROLE %I LOGIN', :'user') WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'user') \gexec
+ALTER ROLE :"user" PASSWORD :'pw';
+SELECT format('CREATE DATABASE %I OWNER %I ENCODING ''UTF8'' TEMPLATE template0', :'db', :'user')
+    WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'db') \gexec
 SQL
+
+# ---------------------------------------------------------------- 5b. from MariaDB (the database until 2026-11)
+MOVED=/etc/cybercircle/moved-to-postgresql                            # (done: not again)
+if [ ! -f "$MOVED" ] && command -v mysql >/dev/null 2>&1 && systemctl is-active --quiet mariadb 2>/dev/null \
+        && mysql -N -e "SHOW DATABASES LIKE '$DB_NAME'" 2>/dev/null | grep -qx "$DB_NAME"; then
+    say "the MariaDB database $DB_NAME -> PostgreSQL (once; MariaDB is only read)"
+    systemctl stop cybercircle-control 2>/dev/null || true           # (nothing writes meanwhile)
+    mysqldump --single-transaction "$DB_NAME" | gzip > "/root/cybercircle-mariadb-$(date +%F).sql.gz"
+    echo "MariaDB dump kept: /root/cybercircle-mariadb-$(date +%F).sql.gz"
+    sudo -u "$CC_USER" python3 -m venv "$CC_ROOT/control/.venv"        # (the new packages: psycopg)
+    sudo -u "$CC_USER" "$CC_ROOT/control/.venv/bin/pip" install -q -r "$CC_ROOT/control/requirements.txt"
+    sudo -u "$CC_USER" "$CC_ROOT/control/.venv/bin/python" "$CC_ROOT/tools/ops/migrate_db.py" --if-empty \
+        --from "mysql+pymysql://$DB_USER:$DB_PASSWORD@localhost/$DB_NAME?charset=utf8mb4" \
+        --to "postgresql+psycopg://$DB_USER:$DB_PASSWORD@${DB_HOST:-localhost}:${DB_PORT:-5432}/$DB_NAME"
+    date -Is > "$MOVED"
+    echo "MariaDB is no longer used; once all is well: sudo apt purge mariadb-server"
+fi
 
 # ---------------------------------------------------------------- 6. control server
 say "control server (virtualenv, systemd: cybercircle-control)"

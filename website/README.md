@@ -18,7 +18,7 @@ Email, postcode and place stay here and are erased after the event.
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-export DJANGO_DEBUG=1 SYNC_TOKEN=dev
+export DJANGO_DEBUG=1 SYNC_TOKEN=dev     # (no DATABASE_URL: SQLite, db.sqlite3)
 .venv/bin/python manage.py migrate
 .venv/bin/python manage.py createsuperuser
 .venv/bin/python manage.py runserver
@@ -27,13 +27,18 @@ export DJANGO_DEBUG=1 SYNC_TOKEN=dev
 
 ## Hosting
 
-Settings: environment variables (`.env.example`). With Docker:
+Settings: environment variables (`.env.example`). The database: PostgreSQL
+(`DATABASE_URL`). With Docker, the site and its own PostgreSQL:
 
 ```bash
-docker build -t cyberchallenge-site .
-docker run -d --env-file .env -p 8000:8000 -v cc-site-data:/data cyberchallenge-site
-docker exec -it <container> python manage.py createsuperuser
+cp .env.example .env            # secrets, POSTGRES_PASSWORD; DATABASE_URL is set by docker-compose.yml
+docker compose up -d --build
+docker compose exec site python manage.py createsuperuser
+docker compose exec db pg_dump -U cyberchallenge cyberchallenge | gzip > site-$(date +%F).sql.gz   # a backup
 ```
+
+A PostgreSQL the host provides: `docker run -d --env-file .env -p 8000:8000
+cyberchallenge-site` with `DATABASE_URL` pointing at it.
 
 Behind an https proxy (it sets `X-Forwarded-Proto`). Without Docker:
 `pip install -r requirements.txt`, `manage.py migrate`, `manage.py collectstatic`,

@@ -1,0 +1,36 @@
+# The website with its own PostgreSQL (settings: .env, see .env.example).
+#   docker compose up -d --build
+#   docker compose exec site python manage.py createsuperuser
+# Behind the host's https proxy (it sets X-Forwarded-Proto) -> 127.0.0.1:${SITE_PORT:-8000}
+name: cyberchallenge-site
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: cyberchallenge
+      POSTGRES_USER: cyberchallenge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "cyberchallenge", "-d", "cyberchallenge"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+    restart: unless-stopped
+
+  site:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://cyberchallenge:${POSTGRES_PASSWORD}@db:5432/cyberchallenge
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${SITE_PORT:-8000}:8000"
+    restart: unless-stopped
+
+volumes:
+  db:                                      # registrations, scores: survives rebuilds (down -v deletes it)

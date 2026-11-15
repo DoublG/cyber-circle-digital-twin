@@ -45,6 +45,19 @@
   </div>
   <h2>Gamemasters ingelogd</h2>
   <div id="gm-online" class="gm-online"></div>
+  <h2>Sluitingstijd <span class="hint">– de dagen en uren van het event (Ranglijst › Event): vanaf de laatste instap
+    kan niemand nieuw meedoen, op het einde van de dag sluit het spel na de ronde (zoals ■ Stop spel). Openen doet een gamemaster.</span></h2>
+  <div id="closing" class="busy"></div>
+  <details id="closing-edit" class="closing-edit"><summary>Instellen</summary>
+    <div class="row">
+      <label><input type="checkbox" id="closing-enabled"> automatisch sluiten op het einde van de dag</label>
+      <label>laatste instap <input type="number" id="closing-entry" min="0" max="120" step="5" value="15"> min ervoor</label>
+      <button id="closing-save">Opslaan</button><span id="closing-msg" class="hint"></span>
+    </div>
+  </details>
+  <h2>Drukte <span class="hint">– wachten er bezoekers? Aan: is de vloer vol, dan wordt het spel elke ronde een
+    niveau moeilijker (tot 3), zodat de rij doorschuift. Uit: meteen weer gewoon. Niveaus: Instellingen.</span></h2>
+  <div id="busy" class="busy"></div>
   <h2>Volgende rondes</h2>
   <div id="plan" class="plan"></div>
   <h2>Dit event <span class="hint" id="event-games-hint">– welke spellen er gespeeld worden; uit = nooit, ook niet
@@ -309,9 +322,13 @@
     ranglijst leeg; spelers en hun QR-kaarten blijven. Het vorige event blijft volledig bewaard en wordt ook als zip
     opgeslagen (spelers met e-mail en kaart, resultaten, spellen – CSV voor Excel), en is hieronder altijd te downloaden.</p>
   <div id="event-current" class="row"></div>
-  <div class="row"><label>Naam nieuw event <input id="event-name" placeholder="bv. Maker Faire Gent 2026" size="32"></label>
-    <button id="event-new" class="danger">Nieuw event starten</button><span id="event-msg" class="hint"></span></div>
-  <table id="events"><thead><tr><th>Event</th><th>Van</th><th>Tot</th><th>Spellen</th><th>Spelers</th><th>Keer gespeeld</th>
+  <div id="event-days-current"></div>
+  <h3>Nieuw event</h3>
+  <div class="row"><label>Naam <input id="event-name" placeholder="bv. Maker Faire Gent 2026" size="32"></label></div>
+  <p class="hint">De dagen en uren: op het einde van elke dag sluit het spel vanzelf (de laatste instap ervoor: Spel › Sluitingstijd).</p>
+  <div id="event-days-new"></div>
+  <div class="row"><button id="event-new" class="danger">Nieuw event starten</button><span id="event-msg" class="hint"></span></div>
+  <table id="events"><thead><tr><th>Event</th><th>Dagen</th><th>Van</th><th>Tot</th><th>Spellen</th><th>Spelers</th><th>Keer gespeeld</th>
     <th>Beste</th><th></th></tr></thead><tbody></tbody></table>
   <h2>Ranglijst <span id="ranking-event" class="hint"></span></h2>
   <p class="hint">Per speler zijn beste spel op dit event: de meeste rondes overleefd; bij gelijkstand de meeste levens over, dan de meeste punten. Alleen bij gelijke rondes, levens én punten delen spelers een plaats.</p>
@@ -328,6 +345,7 @@
   <div class="row"><button id="settings-save">Opslaan</button><button id="settings-reset" class="danger">Alles standaard</button>
     <span id="settings-msg" class="hint"></span></div>
   <div id="life-tables" class="life"></div>
+  <div id="pressure-levels" class="life"></div>
   <div id="settings" class="settings"></div>
 </section>
 </main>

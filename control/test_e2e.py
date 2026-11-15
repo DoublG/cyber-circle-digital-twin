@@ -60,7 +60,7 @@ def until(cond, timeout=30.0):
 
 
 if os.environ.get("CC_TEST_DB"):            # another database (a URL), emptied first:
-    DB = os.environ["CC_TEST_DB"]          #   CC_TEST_DB=mysql+pymysql://user:pw@127.0.0.1:3306/cc_test
+    DB = os.environ["CC_TEST_DB"]          #   CC_TEST_DB=postgresql+psycopg://user:pw@127.0.0.1:5432/cc_test
     sys.path.insert(0, HERE)
     import db as _db
     from sqlalchemy import create_engine
@@ -284,19 +284,43 @@ try:
     check(status("POST", "/api/players", {"name": " \u200b\n", "color": "#ffcc00"}) == 422, "only invisible characters: refused")
     check(status("PUT", "/api/cards/name-test", {"name": "\u200e"}) == 422, "... also from the website")
 
-    print("--- the life table: by the number of players, one for all games, a game its own")
+    print("--- the life table: by the occupancy (% of the usable floor tiles), one for all games, a game its own")
     got = call("GET", "/api/settings")
-    check(got["life"]["default"] == {"from": 1, "win_places": 1, "win_percent": 0, "lose_places": 1, "lose_percent": 0}
+    check(got["life"]["default"] == {"from_pct": 0, "win_places": 1, "win_percent": 0, "lose_places": 1, "lose_percent": 0}
           and "quiz" not in got["life"]["games"] and "reaction" in got["life"]["games"], "the games with places, the default row")
+    check(got["life"]["usable"] == 13, f"usable floor tiles now: {got['life']['usable']} (the web interface's player counts)")
     saved = call("PUT", "/api/settings", {"game": {"tempo": 1}, "life_tables": {
-        "all": [{"from": 9, "win_percent": 20, "lose_percent": 25}, {"from": 1}, {"from": 5, "win_places": 2, "lose_places": 50}],
-        "reaction": [{"from": 1, "win_places": 0}], "quiz": [{"from": 1}], "nope": [{"from": 1}]}})["values"]
+        "all": [{"from_pct": 65, "win_percent": 20, "lose_percent": 25}, {"from_pct": 0},
+                {"from_pct": 35, "win_places": 2, "lose_places": 50}],
+        "reaction": [{"from": 5, "win_places": 0}], "quiz": [{"from_pct": 0}], "nope": [{"from_pct": 0}]}})["values"]
     lt = saved.get("life_tables", {})
-    check([r["from"] for r in lt.get("all", [])] == [1, 5, 9] and lt["all"][1]["lose_places"] == 13,
-          "saved: sorted by 'from', within the limits")
+    check([r["from_pct"] for r in lt.get("all", [])] == [0, 35, 65] and lt["all"][1]["lose_places"] == 13,
+          "saved: sorted by %, within the limits")
     check(set(lt) == {"all", "reaction"}, "only 'all' and games with places")
+    check(lt["reaction"][0]["from_pct"] == 35, "a row from before ({from: 5 players}): 35 %")
     check(call("GET", "/api/settings")["values"]["game"] == {"tempo": 1}, "the other settings as before")
     call("PUT", "/api/settings", {})
+
+    print("--- busy: the gamemasters' switch -> the game (harder while the floor is full), the levels' table")
+    check(call("GET", "/api/busy")["busy"] is False and not live()["busy"]["busy"], "calm at first")
+    b = call("PUT", "/api/busy", {"busy": True, "gamemaster": gm})
+    check(b["busy"] and b["by"] == "Erik" and live()["busy"]["by"] == "Erik", "Erik: busy (the live feed too)")
+    pr = until(lambda: (state().get("pressure") or {}).get("busy") and state()["pressure"])
+    check(bool(pr) and pr["level"] == 0 and pr["usable"] == 13,
+          f"the game heard it (<prefix>/busy); not full: level 0 ({pr})")
+    check(status("PUT", "/api/busy", {"busy": True, "gamemaster": 999}) == 404, "an unknown gamemaster: refused")
+    call("PUT", "/api/busy", {"busy": False})
+    check(until(lambda: not state()["pressure"]["busy"]), "off (the web interface): the game is calm again")
+    got = call("GET", "/api/settings")["pressure"]
+    check(len(got["default"]) == 3 and got["default"][2]["lose_min"] == 40, "the levels' defaults")
+    saved = call("PUT", "/api/settings", {"pressure_levels": [{"mercy": 500, "tempo": 130}, "x"]})["values"]
+    lv = saved.get("pressure_levels", [])
+    check(len(lv) == 3 and lv[0]["mercy"] == 100 and lv[0]["tempo"] == 130 and lv[1] == got["default"][1],
+          "saved: 3 levels, within the limits, missing values the default's")
+    check("pressure_levels" not in call("PUT", "/api/settings", {"pressure_levels": got["default"]})["values"],
+          "the defaults: nothing kept")
+    call("PUT", "/api/settings", {})
+    call("PUT", "/api/busy", {"busy": True, "gamemaster": gm})        # (a new event: calm again, below)
 
     print("--- texts: the game's defaults; changed ones reach the game")
     t = until(lambda: call("GET", "/api/texts")["defaults"].get("title.quiz") and call("GET", "/api/texts"))
@@ -434,10 +458,58 @@ try:
     check(not any(g["off"] for g in sel["games"]) and all(q["event"] is None for q in sel["questions"])
           and q2["question"] not in {q["question"] for q in call("GET", "/api/questions")},
           "new event: every game on, every question as normal again")
+    check(not call("GET", "/api/busy")["busy"] and until(lambda: not state()["pressure"]["busy"]),
+          "new event: calm (busy off), the game too")
     check(until(lambda: not any(r.get("event_off") for r in state().get("round_types", [{"event_off": 1}]))),
           "... the game heard it")
     gid = call("POST", "/api/games")["id"]
     check(any(e["current"] and e["games"] == 1 for e in call("GET", "/api/events")), "a new game counts for the new event")
+
+    print("--- the event's days: the closing time - the last entry (nobody new), later, the end: the game closes")
+    import datetime as _dt
+    now = _dt.datetime.now()
+    today = now.strftime("%Y-%m-%d")
+    if call("GET", "/api/mode")["mode"] != "open":
+        call("POST", "/api/mode", {"mode": "open"})
+    eid = next(e for e in call("GET", "/api/events") if e["current"])["id"]
+    check(call("GET", "/api/closing")["today"]["phase"] == "none", "the event has no days: never by itself")
+    check(status("PUT", f"/api/events/{eid}", {"days": [{"date": today, "start": "18:00", "end": "10:00"}]}) == 422,
+          "a day ending before it starts: refused")
+    check(status("PUT", f"/api/events/{eid}", {"days": [{"date": "2026-02-30"}]}) == 422, "no such date: refused")
+    if (now + _dt.timedelta(minutes=40)).date() != now.date() or now.hour < 1:
+        print("    (skipped: too close to midnight)")
+    else:
+        call("PUT", "/api/closing", {"enabled": True, "last_entry": 10})
+        call("PUT", "/api/busy", {"busy": True, "gamemaster": gm})
+        soon = (now + _dt.timedelta(minutes=2)).strftime("%H:%M")
+        tomorrow = (now + _dt.timedelta(days=1)).strftime("%Y-%m-%d")
+        ev = call("PUT", f"/api/events/{eid}", {"days": [{"date": tomorrow, "start": "10:00", "end": "17:00"},
+                                                         {"date": today, "start": "00:30", "end": soon}]})
+        check([d["date"] for d in ev["days"]] == [today, tomorrow], "the event's days, sorted")
+        c = call("GET", "/api/closing")["today"]
+        check(c["phase"] == "last_entry" and c["close_at"] == soon and c["next"]["date"] == tomorrow,
+              f"today ends at {soon}, 10 min before: the last entry; the next day known")
+        check(until(lambda: state().get("closing_time", {}).get("phase") == "last_entry"), "the game heard it (<prefix>/closing)")
+        check(not call("GET", "/api/busy")["busy"], "busy off: nobody new can come")
+        check(status("POST", f"/api/players/{pid0}/assign", {"tile": 9}) == 409, "a new player: refused (409)")
+        check(live()["closing"]["phase"] == "last_entry", "the web interface sees it")
+        c = call("POST", "/api/closing/extend", {"minutes": 30})["today"]
+        later = (_dt.datetime.strptime(soon, "%H:%M") + _dt.timedelta(minutes=30)).strftime("%H:%M")
+        check(c["phase"] == "open" and c["close_at"] == later, f"+30 min: {soon} -> {c['close_at']}, open again")
+        check(next(d for d in call("GET", "/api/events")[0]["days"] if d["date"] == today)["end"] == later,
+              "... the event's day ends later")
+        check(until(lambda: state().get("closing_time", {}).get("phase") == "open"), "... the game too")
+        call("PUT", f"/api/events/{eid}", {"days": [{"date": today, "start": "00:30", "end": _dt.datetime.now().strftime("%H:%M")}]})
+        check(call("GET", "/api/mode")["mode"] == "closed", "the end of the day: the game closed")
+        check(until(lambda: state().get("mode") == "closed"), "... the game closed (after its round)")
+        check(any("AUTOMATISCH GESLOTEN" in e["text"] for e in live()["events"]), "the event feed says so")
+        check(call("GET", "/api/closing")["today"]["phase"] == "none", "closed at today's end: done")
+        call("POST", "/api/mode", {"mode": "open"})
+        time.sleep(6)                                    # (the clock looks every 5 s)
+        check(call("GET", "/api/mode")["mode"] == "open", "opened again by a gamemaster: stays open")
+        nev = call("POST", "/api/events", {"name": "E2E event 3", "days": [{"date": tomorrow, "start": "09:00", "end": "17:30"}]})
+        check(nev["event"]["days"] == [{"date": tomorrow, "start": "09:00", "end": "17:30"}], "a new event with its days")
+    call("PUT", "/api/closing", {"enabled": False})
 finally:
     for p in procs:
         p.terminate()

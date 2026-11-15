@@ -42,6 +42,7 @@ extends Node
 ##   recovery   Recovery        back after a crash / power cut
 ##   views      GameViews       what the screens show
 ##   modes      ModeSwitch      the operating mode, the robot's boot / shutdown show
+##   pressure   Pressure        busy (visitors waiting) and full: harder, step by step
 
 signal state_changed(state: State)
 signal mode_changed(mode: Mode)
@@ -89,6 +90,7 @@ var standings := Standings.new(self)       # the ranking of the event (records f
 var settings := GameSettings.new(self)     # what the operator can change
 var views := GameViews.new(self)           # what the screens show
 var modes := ModeSwitch.new(self)          # the operating mode, the robot's shows
+var pressure := Pressure.new(self)         # busy and full: harder (the line moves on)
 var state := State.LOBBY
 var mode := Mode.OPEN
 var scores := {}                       # tile_id -> total points this play (tie-break)
@@ -124,8 +126,8 @@ func replica_fields() -> Dictionary:
 			"init": current.replica_init()}
 	return {"g_state": state, "g_mode": mode, "scores": scores, "survived": survived, "streaks": streaks,
 		"round_number": round_number, "records": standings.records, "started": _started,
-		"tempo": tempo, "round": r, "round_sync": RoundMirror.fields(current) if current else {},
-		"lives_shown": views.lives_shown, "view": views.shown}
+		"tempo": pace(), "round": r, "round_sync": RoundMirror.fields(current) if current else {},
+		"lives_shown": views.lives_shown, "view": views.shown, "closing": modes.closing}
 
 
 ## A display node: the game's fields from the master.
@@ -135,6 +137,8 @@ func apply_replica(f: Dictionary, full: bool) -> void:
 			set(k, f[k])
 	if f.has("records"):
 		standings.records = f.records
+	if f.has("closing"):
+		modes.closing = f.closing
 	if f.has("started"):
 		_started = f.started
 	if f.has("round"):
@@ -204,13 +208,13 @@ func resume(changes: Dictionary) -> void:
 	_timer = INF
 	log_event("HET SPEL GAAT VERDER (RONDE %d)" % (round_number + 1), Retro.TEAL)
 	_show_scores("Scorebord", "Het spel gaat verder", {}, changes)
-	await wait(lives_delay / tempo)
+	await wait(lives_delay / pace())
 	if state != State.SCOREBOARD or seq != _score_seq:
 		return
 	views.reveal_lives()
 	if not changes.is_empty():
 		_apply_lives(changes)
-	_timer = scoreboard_time / tempo
+	_timer = scoreboard_time / pace()
 
 
 ## The installation: questions, players and scores through the control server.
@@ -376,6 +380,7 @@ func _next_round() -> void:
 		_timer = 0.5                     # everyone exterminated: the end - no new round; the scoreboard
 		return                           # waits until their tiles are free (death animation, their clip)
 	round_number += 1                    # counts rounds (database, 1 life per round)
+	pressure.update()                    # busy and full: a level up (before the pick: the quiz's weight)
 	var entry := picker.take_next()
 	_current_entry = entry
 	_target_lives.clear()
@@ -386,22 +391,32 @@ func _next_round() -> void:
 	var playing := arena.players.player_ids().filter(func(id): return not arena.tiles[id - 1].is_dead)
 	var current_count := playing.size()
 	current.prepare(self, playing)
-	current.set_life_rule(settings.life_rule(type_name, current_count))   # the life table's row for this many
+	var life_rule := settings.life_rule(type_name, current_count)   # the life table's row for the occupancy ...
+	current.set_life_rule(pressure.apply_to_rule(life_rule, current_count), life_rule)   # ... busy: harder (not a low score)
 	current.adapt_rules()                                  # (other life settings: the rules say them)
 	Texts.dress(current, type_name)                        # the operator's name and rules for this game
+	if pressure.rules_line() != "":                        # busy: the players see why it gets harder
+		current.rules += "\n" + pressure.rules_line()
+	if modes.closing_line() != "":                         # the closing time is near
+		current.rules += "\n" + modes.closing_line()
 	_set_state(State.INTRO)
 	arena.narrator.say("round_" + type_name, "%s. %s" % [current.title, current.rules], "round", {}, true)
-	_timer = intro_time / tempo
+	_timer = intro_time / pace()
 	screen_wall.set_timer("")
 	views.show({"kind": "message"})
 	arena.npc.mood("intro")
+
+
+## The speed of the game now: the operator's tempo x busy's (Pressure).
+func pace() -> float:
+	return tempo * pressure.tempo_factor()
 
 
 ## The tempo: all of a round's times (network delays are not game times).
 func _apply_tempo(r: GameRound) -> void:
 	for t in r.tunables():
 		if t.unit in ["s", "ms"] and not t.key in GameSettings.NETWORK_TIMES:
-			var v = r.get(t.key) / tempo
+			var v = r.get(t.key) / pace()
 			r.set(t.key, roundi(v) if r.get(t.key) is int else v)
 
 
@@ -432,7 +447,7 @@ func status() -> Dictionary:
 		"plan": picker.planned_rounds(), "round_types": picker.types_status(),
 		"disabled": range(1, arena.tiles.size() + 1).filter(func(id): return not arena.installation.is_enabled(id)),
 		"broken": range(1, arena.tiles.size() + 1).filter(func(id): return arena.installation.is_broken(id)),
-		"dying": _dying(),
+		"dying": _dying(), "pressure": pressure.status(), "closing_time": modes.closing,
 		"installed": range(1, arena.tiles.size() + 1).filter(func(id): return arena.installation.is_installed(id))}
 
 
@@ -517,7 +532,7 @@ func _end_round() -> void:
 	_timer = INF                                  # held until the lives are done
 	if current.ranked and result_time > 0.0:
 		_show_round_ranking(changes)
-		_result_left = result_time / tempo
+		_result_left = result_time / pace()
 		while _result_left > 0.0:                 # (skip(): on to the scoreboard)
 			await get_tree().process_frame
 			if mode != Mode.PAUSED:
@@ -525,12 +540,12 @@ func _end_round() -> void:
 		if state != State.SCOREBOARD or seq != _score_seq:
 			return
 	_show_scores("Scorebord", current.title, current.points, changes)
-	await wait(lives_delay / tempo)
+	await wait(lives_delay / pace())
 	if state != State.SCOREBOARD or seq != _score_seq:
 		return
 	views.reveal_lives()
 	_apply_lives(changes)
-	_timer = scoreboard_time / tempo
+	_timer = scoreboard_time / pace()
 	if doomed.is_empty():
 		_celebrate_leader()                       # (else the robot is busy exterminating)
 
@@ -546,6 +561,9 @@ func _life_plan(changes: Dictionary) -> Dictionary:
 		var d: int = clampi(changes.get(id, 0), -1, 1)
 		if d > 0 and health >= CyberTile.HEART_COUNT:
 			d = 0
+		if d < 0 and pressure.in_grace(id):   # busy: just came from the line - this round costs no life
+			d = 0
+			log_event("%s: NIEUW - GEEN LEVEN KWIJT" % arena.players.player_name(id).to_upper(), Retro.SHIELD)
 		plan[id] = d
 		if health + d > 0:
 			survived[id] = survived.get(id, 0) + 1
@@ -595,6 +613,7 @@ func _finish_game() -> void:
 
 func _enter_lobby() -> void:
 	current = null
+	pressure.level = 0                   # (nobody playing: a new game starts at the normal level)
 	_set_state(State.LOBBY)
 	screen_wall.set_timer("")
 	views.show({"kind": "players"})

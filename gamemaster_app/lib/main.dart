@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'src/app_state.dart';
 import 'src/event_page.dart';
 import 'src/login_page.dart';
+import 'src/model.dart';
 import 'src/tiles_page.dart';
 import 'src/scan_page.dart';
 import 'src/settings_page.dart';
@@ -119,6 +120,16 @@ class _HomePageState extends State<HomePage> {
                 child: Text('⚠ $text', textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ),
+            if (s.closing.banner.isNotEmpty)                    // the closing time: nobody new any more
+              Container(
+                width: double.infinity,
+                color: Retro.amber,
+                padding: const EdgeInsets.all(6),
+                child: Text(s.closing.banner, textAlign: TextAlign.center,
+                    style: const TextStyle(color: Retro.bg, fontWeight: FontWeight.bold)),
+              ),
+            if (app.online && !login && app.api != null && !s.closing.lastEntryPassed)   // busy: visitors waiting
+              _BusyBar(app: app, pressure: s.pressure),
             if (app.online && app.website == 'down')            // registrations stop coming in
               Container(
                 width: double.infinity,
@@ -150,6 +161,47 @@ class _HomePageState extends State<HomePage> {
           ),
         );
       },
+    );
+  }
+}
+
+
+/// Busy or not: one tap switches it (the control server tells the game; the
+/// game's state brings it back to every app). Busy and the floor full: the game
+/// gets a level harder per round, so the line moves on.
+class _BusyBar extends StatelessWidget {
+  const _BusyBar({required this.app, required this.pressure});
+  final AppState app;
+  final Pressure pressure;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = pressure;
+    final color = !p.busy ? Retro.panel : p.level >= 3 ? Retro.bad : p.level == 2 ? Retro.orange : Retro.amber;
+    final fg = !p.busy ? Retro.dim : (p.level >= 3 ? Colors.white : Retro.bg);
+    return Material(
+      color: color,
+      child: InkWell(
+        onTap: () async {
+          try {
+            await app.api!.setBusy(!p.busy, app.gamemaster?.id ?? 0);
+            HapticFeedback.selectionClick();
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Drukte niet gewijzigd: $e')));
+            }
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(children: [
+            Text(p.busy ? '🔥 ' : '', style: const TextStyle(fontSize: 16)),
+            Expanded(child: Text(p.text, style: TextStyle(color: fg, fontWeight: FontWeight.bold))),
+            Text(p.busy ? 'ZET UIT' : 'ER WACHTEN MENSEN? TIK',
+                style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.bold)),
+          ]),
+        ),
+      ),
     );
   }
 }

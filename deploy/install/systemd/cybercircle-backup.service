@@ -3,7 +3,7 @@
 # by hand: sudo systemctl start cybercircle-backup
 [Unit]
 Description=Cyber Circle database backup
-After=mariadb.service
+After=postgresql.service
 
 [Service]
 Type=oneshot

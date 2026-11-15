@@ -27,6 +27,9 @@ extends MqttClient
 ##   <prefix>/alerts           control -> all   retained {"tiles": [{tile, label, reason, player, text}]}:
 ##                                            broken tiles (no new players there; Installation.set_broken)
 ##   <prefix>/selection        control -> game  {"games_off": ["code", ...]}: not played at this event (retained)
+##   <prefix>/busy             control -> game  retained {"busy": true, "by": "Erik"}: visitors waiting (Pressure)
+##   <prefix>/closing          control -> game  retained {"phase": "none" | "open" | "last_entry" | "closing",
+##                                            "close_at": "18:00", "last_entry_at": "17:45"}: the closing time
 ##   <prefix>/mode             control -> game  retained {"mode": "setup" | "closed" | "open" | "paused"}
 ##                                            (the tiles read it too: in setup their hearts show their place)
 ##   <prefix>/light/event      game -> all    a game moment for the lights: {"event": "hit", "tile": 3,
@@ -125,6 +128,8 @@ func setup(arena_node: Arena) -> void:
 	subscribe(topic_prefix + "/texts")
 	subscribe(topic_prefix + "/db")
 	subscribe(topic_prefix + "/selection")
+	subscribe(topic_prefix + "/busy")
+	subscribe(topic_prefix + "/closing")
 	subscribe(topic_prefix + "/alerts")
 	subscribe(topic_prefix + "/device/+/hello")
 	subscribe(topic_prefix + "/device/+/config")
@@ -199,6 +204,10 @@ func _on_operator(kind: String, data: Dictionary) -> void:
 		"alerts":                            # broken tiles (the control server)
 			var tiles: Array = data.get("tiles", []) if data.get("tiles") is Array else []
 			arena.installation.set_broken(tiles.map(func(a): return int(a.get("tile", 0)) if a is Dictionary else 0))
+		"closing":                           # the closing time (the control server closes the game itself)
+			arena.game.modes.set_closing(data)
+		"busy":                              # the gamemasters: visitors are waiting
+			arena.game.pressure.set_busy(bool(data.get("busy", false)), str(data.get("by", "")))
 		"selection":                         # the games not played at this event
 			arena.game.picker.set_event_off(data.get("games_off", []))
 		"texts":                             # the operator's texts (Texts)

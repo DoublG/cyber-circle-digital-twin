@@ -2,6 +2,8 @@ fastapi==0.162.0
 uvicorn==0.54.0
 paho-mqtt==2.1.0
 SQLAlchemy==2.0.55
+psycopg[binary]==3.3.9
+# only to copy an old MySQL / MariaDB database over (tools/ops/migrate_db.py)
 PyMySQL==1.1.3
 cryptography==50.0.2
 segno==1.6.6

@@ -27,7 +27,7 @@ Diagrams (architecture, network, tile and robot wiring, screens / sound / DMX, f
 plan, sequences): [WIRING.md](WIRING.md).
 
 ```
- operator (browser) ─▶ CONTROL SERVER (server box, Python) ── owns ──▶ MySQL database
+ operator (browser) ─▶ CONTROL SERVER (server box, Python) ── owns ──▶ PostgreSQL database
  gamemaster app ─HTTP─▶  web interface + HTTP API                       (players, questions,
                           │ MQTT                ▲ HTTP                  scores, tiles, mode)
                           ▼                     │
@@ -39,7 +39,7 @@ plan, sequences): [WIRING.md](WIRING.md).
 ```
 
 * **The control server** (Python, on the server box) is the only owner of the
-  MySQL database (SQLAlchemy). It serves the **web interface** for the operator and an
+  PostgreSQL database (SQLAlchemy). It serves the **web interface** for the operator and an
   **HTTP API** for the game and the app, and follows / steers the game over
   MQTT. See §10.
 * **The game master** (Godot) runs the rounds, the robot, the screens and the
@@ -76,7 +76,7 @@ the database and the game (one game computer).
 2. **MQTT broker** on the overview PC – Mosquitto with a plain listener (1883,
    the tiles) and a WebSocket listener (9001, the game and the control
    server), and a user + password (§2 *MQTT broker*).
-3. **Database** – MariaDB / MySQL, a database `cybercircle` and its user (§10).
+3. **Database** – PostgreSQL, a database `cybercircle` and its user (§10).
 4. **Control server** – the virtualenv, `pip install -r requirements.txt`,
    started at boot as a systemd service (§10). Check that
    `http://192.168.1.10:8080/` opens.
@@ -119,7 +119,7 @@ emulator (§5).
 | the boards' broker user (tiles, robot) | `install_server.sh` (`MQTT_DEVICE_USER` / `MQTT_DEVICE_PASSWORD` in the settings file): a login that reaches only the boards' own topics (`mosquitto-cybercircle.acl`) | `flash_tiles.sh` / `flash_robot.sh` build it in (by hand: `MQTT_USER` / `MQTT_PASSWORD` in `config.h`) |
 | update password (flashing over the network) | `OTA_PASSWORD` in the settings file (`install_server.sh` makes a random one) | built into every board by the flash scripts, and used by them for the next update |
 | broker address | the broker's listeners (1883 plain, 9001 WebSocket) | control server `--mqtt ws://…:9001`; game `--mqtt=ws://…:9001`; tiles `MQTT_HOST` + `MQTT_PORT 1883`. The app gets it from `/api/config` (the control server's `--mqtt`, `localhost` replaced by the address the app used; `--public-mqtt` behind NAT / Docker) |
-| database login | MySQL `CREATE USER` (§10) | control server `--db mysql+pymysql://user:pw@host/cybercircle?charset=utf8mb4` |
+| database login | PostgreSQL `CREATE ROLE` (§10) | control server `--db postgresql+psycopg://user:pw@host/cybercircle` |
 | control server address | `--host` (default `0.0.0.0`), `--port` (default 8080) | game `--control=http://…:8080`; the app's *Instellingen* |
 | https | `tools/ops/make_cert.sh`, or `deploy/certs/` (§12); control server `--ssl-cert` / `--ssl-key` | game `--ca=` for an own CA; phones trust the certificate once |
 | registration website | control server `--website=URL` | – |
@@ -207,7 +207,7 @@ sudo snap install godot-4                     # or unpack the official build
 cd /srv/cybercircle/cyber-circle-challenge
 godot-4 --headless --path game --import
 
-# 4. the database: MySQL / MariaDB for the control server, see §10
+# 4. the database: PostgreSQL for the control server, see §10
 #    (standalone without a control server: a SQLite file,
 #     python3 tools/ops/cybercircle_db.py init --db /srv/cybercircle/cybercircle.db --demo-players)
 ```
@@ -744,6 +744,8 @@ Prefix `cybercircle` (setting `topic_prefix` on the *Mqtt* node). Payloads are J
 | `cybercircle/device/<dev>/status` | broker → all | `{"online": false}`: the tile's last will – it dropped out (the robot: `robot/status`); the control server shows it offline at once |
 | `cybercircle/alerts` | control → all | retained: `{"tiles": [{tile, label, device, reason, player, text}]}` – the broken tiles now (the game puts nobody new there; its state lists them as `broken` for the apps) |
 | `cybercircle/selection` | control → game | retained: `{"games_off": ["code", …]}` – not played at the current event (the questions: via the API) |
+| `cybercircle/closing` | control → game | retained: `{"phase": "none" \| "open" \| "last_entry" \| "closing", "close_at": "18:00", "last_entry_at": "17:45"}` – the closing time: from the last entry nobody new joins (free tiles: *GESLOTEN – het spel sluit om 18:00*); the game's state has it as `closing_time` |
+| `cybercircle/busy` | control → game | retained: `{"busy": true, "by": "Erik"}` – visitors waiting (the gamemasters' switch): harder while the floor is full; the game's state has `pressure` `{busy, by, level, max, full, usable, taken}` |
 | `cybercircle/settings` | control → game | retained game settings `{"game": {...}, "quiz": {...}, …}` (only the changed values) |
 | `cybercircle/settings/schema` | master → all | retained: every setting with label, range, unit, default and current value |
 | `cybercircle/device/<dev>/identify` | control → tile | `{"seconds": 6}`: light up so the crew finds this tile (setup, swapping) |
@@ -908,12 +910,31 @@ with `--mqtt ws://127.0.0.1:9001`).
 
 ## 6. Database
 
-**MySQL** (or MariaDB) on the installation, owned by the control server
+**PostgreSQL** on the installation, owned by the control server
 through SQLAlchemy (`control/db.py` defines the tables and creates the missing
 ones itself; §10). The control server takes `--db` as a SQLAlchemy URL; a plain
 file path is a SQLite file – for tests and trying things out, as is the game's
 standalone `--db=FILE` and `tools/ops/cybercircle_db.py` (schema
 `game/data/schema.sql`, the same tables).
+
+**From MySQL / MariaDB** (the database until November 2026): `install_server.sh`
+moves it by itself – it installs PostgreSQL, stops the control server, keeps a
+dump of the old database (`/root/cybercircle-mariadb-<date>.sql.gz`), copies
+every row over (`tools/ops/migrate_db.py`: the same ids, so the QR cards,
+events and rankings stay; the row counts are checked) and starts the control
+server on PostgreSQL. MariaDB is left as it was, unused (`sudo apt purge
+mariadb-server` once all is well). `update.sh` stops with a hint until then. By
+hand, the control server stopped:
+
+```bash
+control/.venv/bin/python tools/ops/migrate_db.py \
+    --from "mysql+pymysql://cybercircle:OLDPW@localhost/cybercircle?charset=utf8mb4" \
+    --to   "postgresql+psycopg://cybercircle:DBSECRET@localhost/cybercircle"
+```
+
+(the target must be empty; `--replace` empties it first). Test:
+`control/.venv/bin/python control/test_migrate.py` (`CC_TEST_DB=postgresql+psycopg://...`:
+into PostgreSQL; `CC_TEST_SRC_DB=mysql+pymysql://...`: from MySQL / MariaDB).
 
 | table | written by | |
 |---|---|---|
@@ -924,7 +945,7 @@ standalone `--db=FILE` and `tools/ops/cybercircle_db.py` (schema
 | `results` | game | every play's end result: score, lives, exterminated, rank |
 
 * **Questions**: edit them in the web interface (*Vragen*, also CSV), or in any
-  MySQL client; set `active = 0` to hide one. Answer 1–4 = Square, Triangle, Cross, Circle.
+  PostgreSQL client (`psql`); set `active = 0` to hide one. Answer 1–4 = Square, Triangle, Cross, Circle.
   `min_age`: younger players get a shield (no life lost); `min_age` – `max_age`
   also steers the draw: questions (and categories) for the players' ages come
   more often (*Instellingen › Vragen › Sturing door leeftijd*, 0 = off). Changes are used
@@ -973,7 +994,9 @@ godot-4 --headless --path . --fixed-fps 60 res://tests/test_exterminated.tscn  #
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_pause.tscn  # the paused mode: the game's waits stand still
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_countdown.tscn  # the round's green countdown LED (outer ring, not in Cyclone)
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_ages.tscn       # ages: the shield in personal rounds, rounds and questions weighted by age
-godot-4 --headless --path . --fixed-fps 60 res://tests/test_lives.tscn      # the life table: rows by player count, best / last places or %, ties, rules text
+godot-4 --headless --path . --fixed-fps 60 res://tests/test_lives.tscn      # the life table: rows by occupancy %, best / last places or %, ties, rules text
+godot-4 --headless --path . --fixed-fps 60 res://tests/test_pressure.tscn   # busy: full floor, the levels up / down, what a level does, protection by score
+godot-4 --headless --path . --fixed-fps 60 res://tests/test_closing.tscn    # the closing time: no new players after the last entry, GESLOTEN on free tiles, the intro
 godot-4 --path . --disable-vsync res://tests/test_rhythm_shot.tscn      # Ritme (chart, judging, screenshot)
 godot-4 --path . --disable-vsync res://tests/test_code.tscn             # Code kraken (hints, codes, a round, screenshots)
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_settings.tscn  # settings, tempo, sounds
@@ -1104,16 +1127,15 @@ the tiles follow.
 The control server runs on the overview PC and owns the database.
 
 ```bash
-# the database: MySQL, or MariaDB (Raspberry Pi OS / Debian: sudo apt install mariadb-server)
-sudo mysql -e "CREATE DATABASE cybercircle CHARACTER SET utf8mb4;
-  CREATE USER 'cybercircle'@'localhost' IDENTIFIED BY 'DBSECRET';
-  GRANT ALL ON cybercircle.* TO 'cybercircle'@'localhost';"
+# the database: PostgreSQL (Raspberry Pi OS / Debian: sudo apt install postgresql)
+sudo -u postgres psql -c "CREATE ROLE cybercircle LOGIN PASSWORD 'DBSECRET'"
+sudo -u postgres createdb -O cybercircle -E UTF8 -T template0 cybercircle
 
 cd /srv/cybercircle/cyber-circle-challenge/control
 /usr/bin/python3 -m venv .venv                 # Python 3.11+
-.venv/bin/pip install -r requirements.txt     # fastapi, uvicorn, paho-mqtt, SQLAlchemy, PyMySQL
+.venv/bin/pip install -r requirements.txt     # fastapi, uvicorn, paho-mqtt, SQLAlchemy, psycopg
 .venv/bin/python server.py \
-    --db "mysql+pymysql://cybercircle:DBSECRET@localhost/cybercircle?charset=utf8mb4" \
+    --db "postgresql+psycopg://cybercircle:DBSECRET@localhost/cybercircle" \
     --mqtt ws://localhost:9001 --mqtt-user cybercircle --mqtt-password SECRET
 ```
 
@@ -1131,14 +1153,14 @@ app's web build), `--website`, `--website-interval` (`server.py --help`).
 ```
 [Unit]
 Description=Cyber Circle Challenge control server
-After=network-online.target mariadb.service mosquitto.service
+After=network-online.target postgresql.service mosquitto.service
 Wants=network-online.target
 
 [Service]
 User=cybercircle
 WorkingDirectory=/srv/cybercircle/cyber-circle-challenge/control
 ExecStart=/srv/cybercircle/cyber-circle-challenge/control/.venv/bin/python server.py \
-    --db "mysql+pymysql://cybercircle:DBSECRET@localhost/cybercircle?charset=utf8mb4" \
+    --db "postgresql+psycopg://cybercircle:DBSECRET@localhost/cybercircle" \
     --mqtt ws://localhost:9001 --mqtt-user cybercircle --mqtt-password SECRET
 Restart=always
 RestartSec=3
@@ -1270,6 +1292,8 @@ or a new master continues in the same mode.
   event, live; earlier events in the menu; `?id=<card>`: your place), the
   admin (events, registrations, the winners with their email as CSV, erasing
   personal data; `manage.py purge_personal_data --older-than 30` from cron).
+  Its database: PostgreSQL (`DATABASE_URL`; `website/docker-compose.yml`: the
+  site with its own PostgreSQL), SQLite without it (development).
   **The sync** – the control server calls out (the installation's network
   can't be reached from the internet): `--website-api https://<site>
   --website-token <SYNC_TOKEN>` (or `CC_WEBSITE_API` / `CC_WEBSITE_TOKEN`).
@@ -1346,23 +1370,79 @@ or a new master continues in the same mode.
   light speed, penalty; Ritme: fall time and spacing at the start / end, when
 hold notes start (chance, how long), when two at once start, band and line size, points, tile delay; Code kraken:
   points per code, the bonus per try fewer, extra per harder code, how long the hints stay on the tile;
-  **Levens na een ronde, per aantal spelers** (above the groups): a table, each row
-  *vanaf spelers* N: *+1: beste plaatsen*, *+1: beste %*, *−1: laatste plaatsen*, *−1:
-  slechtste %*. The row with the highest N at or below the players in the round applies
-  (counted at the intro). A % above 0 is used instead of the places; 0 places = nobody.
-  E.g. from 1: 1st +1, last −1 · from 5: best 2 places +1 · from 9: best 20 % +1, worst
+  **Levens na een ronde, naar bezetting** (above the groups): a table, each row
+  *vanaf bezetting %* P: *+1: beste plaatsen*, *+1: beste %*, *−1: laatste plaatsen*, *−1:
+  slechtste %*. **Occupancy**: the players in the round (the mobile ones too) in % of
+  the floor tiles that can be used now – installed, in service, not broken (max
+  100 %), so the same table fits a half installation or a day with a broken tile.
+  The column **= nu** shows what each row comes to in players for the tiles there
+  are now (e.g. 13 tiles: from 35 % = 5–8 players). The row with the highest P at
+  or below the occupancy applies (counted at the intro). A % above 0 is used instead
+  of the places; 0 places = nobody.
+  E.g. from 0 %: 1st +1, last −1 · from 35 %: best 2 places +1 · from 65 %: best 20 % +1, worst
   25 % (half of the bottom half) −1. One table for **all games**; tick *eigen tabel* for
   a game that needs its own. Default: one row, 1st +1, last −1. Players with equal
   progress get the same (a cut-off between equals takes them all); a % is at least 1
   player; +1 and −1 at once cancel; the shield (*Beschermd onder leeftijd*) still blocks a
   −1. The intro's rules text says the row when it is not the default; a game whose row
   gives nobody a life counts as a no-life round for the randomizer's director. The quiz
-  keeps its own rule (wrong / late −1, the streak +1). Saved with the settings as
-  `life_tables: {"all": [rows], "<game>": [rows]}`), *Randomizer* and *Vragen* (weights per round type and
+  keeps its own rule (wrong / late −1, the streak +1). (A table saved before, by
+  player count: its rows become the % of 13 tiles.) Saved with the settings as
+  `life_tables: {"all": [rows], "<game>": [rows]}`;
+  **Drukte: wat elk niveau doet** – see *Busy* below), *Randomizer* and *Vragen* (weights per round type and
   per question category, see below) and *Geluid* (volume, random
   sound interval) and *Licht* (the brightness of the virtual lights in the
   room, flashes on / off – also sent to the real lights).
   **Tempo** (×) scales every time at once: 1.25 = everything 25 % faster.
+* **Busy (Drukte)** – a player who survives for long keeps a tile somebody in the
+  line wants. When visitors are waiting, a gamemaster switches **Drukte** on: in the
+  app (the bar under the title: *ER WACHTEN MENSEN? TIK*) or on the web interface's
+  *Spel* tab. While it is on **and the floor is full** – the players and invites on
+  the floor tiles that can be used (installed, in service, not broken) are at least
+  *Druk: vol vanaf* % of them (default 100 %; the mobile players don't count) – the
+  game goes **one level harder per round**, up to *Druk: hoogste niveau* (3; 0 =
+  never). Not full for *Druk: rondes niet vol* rounds (2: an extermination frees a
+  tile for a moment): a level down. Switched off: normal at once; a new event starts
+  calm. What a level does (*Instellingen › Drukte: wat elk niveau doet*, saved as
+  `pressure_levels`):
+
+  | level | help when lives run low | win a life | streak bonus | −1: at least | speed | quiz chance |
+  |---|---|---|---|---|---|---|
+  | 1 | 50 % | yes | no | (the table) | 100 % | 100 % |
+  | 2 | 25 % | yes | no | 25 % of the players | 110 % | 150 % |
+  | 3 | 0 % | no | no | 40 % | 120 % | 200 % |
+
+  *Help*: the randomizer's director (*Sturing door levens*) – how much it still
+  favours rounds that can win a life when lives run low. *−1: at least*: the life
+  table's rule, made harder when it takes fewer. *Speed* × the game's tempo. *Quiz
+  chance*: the rounds that only take lives. Never touched: the ages' protection.
+  **By score** (the rounds survived in this play – the ranking) while it is busy:
+  a **new player** is protected (the shield) for their first *Druk: nieuwe speler
+  beschermd* rounds (1) – they just waited in the line; a **low score** – fewer than
+  *Druk: gewone regels onder* % (50) of the rounds of the best player in the game –
+  plays by the **normal rules** (the life table as it is, a life to win, the streak
+  bonus), none of the level's extras; the rest get the level's rules. So the
+  pressure lands on the players who hold a tile long. The web interface's tiles show
+  who is protected (*🛡 nieuw*, *lage score: gewone regels*). The intro
+  says it: *DRUK (niveau 2): er wachten spelers, het wordt moeilijker – …*; the event
+  feed logs every level. API: `GET|PUT /api/busy {busy, gamemaster?}`.
+* **The event's days and the closing time** – an event (*Ranglijst › Event*) has
+  one or more **days, each with its hours** (e.g. Sat 10:00–18:00, Sun 10:00–17:00):
+  given when it is started, changed any time (the current event's days, *Dagen
+  opslaan*). At the **end of today's day** the game closes by itself (*Spel ›
+  Sluitingstijd*; *automatisch sluiten* is on by default): from the **last entry**
+  (15 min before; *Instellen*) nobody new joins – the control server refuses new
+  players (the app shows why, with a banner), the free tiles show *GESLOTEN – het
+  spel sluit om 18:00*, the intro says it, and busy goes off (no line any more). At
+  the end the control server closes the game as *■ Stop spel* does: after the round
+  being played, everyone's result saved, the robot's shutdown show. Once per end: a
+  gamemaster who opens again afterwards keeps it open. **+15 / +30 min**: today's
+  day ends later (the event's day itself changes). A day without hours in the event:
+  no closing by itself. It never opens by itself at the start (a gamemaster checks
+  the installation first); the start and the next day are shown. API: `POST
+  /api/events {name, days: [{date, start, end}]}`, `PUT /api/events/{id} {name?,
+  days?}`, `GET|PUT /api/closing {enabled, last_entry}`, `POST /api/closing/extend
+  {minutes}`.
   Game settings apply at once, round settings from the next round. Empty =
   the default (shown greyed out); "Alles standaard" resets everything. The
   settings are kept in the database and the game gets them (retained MQTT)
@@ -1509,11 +1589,11 @@ fake camera showing QR cards: `python gamemaster_app/test_browser/scan_flow.py`.
 Raspberry Pis (§3–4). `deploy/docker-compose.yml` starts every part in one go,
 split the way the installation is, to test the certificates and how the parts
 find each other: `certs` (makes the CA and the certificate once), `broker`
-(Mosquitto), `mysql` (MySQL 8.4, its data in the volume `database`),
+(Mosquitto), `postgres` (PostgreSQL 16, its data in the volume `postgres`),
 `control` (the control server on https), `game` (Godot 4.7.2 headless, as a screen PC runs it) and
 `tile-1..3` (emulated tiles). Ports on this PC (`deploy/.env`, see
 `.env.example`): 8443 https web interface + `/gm/`, 1883 MQTT (tiles), 8883
-mqtts, 9443 wss, 3307 MySQL (user / password `cybercircle`), 8191–8193 the
+mqtts, 9443 wss, 5433 PostgreSQL (user / password `cybercircle`), 8191–8193 the
 tiles' tops.
 
 ```bash
@@ -1530,11 +1610,13 @@ python3 check.py              # certificates, lookup, every link, a visitor on a
   game and the control server trust it with `--ca=ca.pem`; browsers and phones
   once by importing `ca.pem` (then `https://localhost:8443` has no warning).
   The tiles use plain MQTT on 1883 (the firmware has no TLS).
-* **The database**: MySQL in the volume `database` (the tables and the
+* **The database**: PostgreSQL in the volume `postgres` (the tables and the
   example questions on the first start); it survives restarts and rebuilds
-  (`docker compose down -v` deletes it). The control server's tests run on
-  any MySQL too: `CC_TEST_DB=mysql+pymysql://user:pw@host:port/db python control/test_e2e.py`
-  (it empties that database first).
+  (`docker compose down -v` deletes it). (The old MySQL volume, `cybercircle_database`,
+  is no longer used: `docker volume rm cybercircle_database`.) The control server's
+  tests run on any PostgreSQL too: `CC_TEST_DB=postgresql+psycopg://user:pw@host:port/db
+  python control/test_e2e.py` (also `test_website_sync.py`, with `CC_TEST_SITE_DB=postgres://...`
+  for the website; they empty those databases first).
 * **The app**: `/api/config` tells it `wss://<the address it used>:9443/mqtt`
   (`--public-mqtt`); its web version is `https://localhost:8443/gm/` (build it
   first: §11).
@@ -1553,11 +1635,11 @@ they pick the right builds themselves. One settings file for all of it:
 | script | where | what |
 |---|---|---|
 | `build.sh [--test] [--apk] [--no-export]` | development PC | Godot import, (tests), the gamemaster web app (and APK), the game exported for **x86_64 and arm64** (needs Godot's export templates; otherwise the machines run the project), `dist/cybercircle-<date>.tar.gz` |
-| `sudo install_server.sh [SERVER_IP]` | overview PC / server Pi | settings file (random passwords), Mosquitto (plain + WebSocket, a password), MariaDB (database + user), the control server (virtualenv, **systemd: `cybercircle-control`**), nightly backup (**`cybercircle-backup.timer`**), https certificate (`CONTROL_HTTPS=1`), firewall ports (ufw) – then checks the broker and the web interface |
+| `sudo install_server.sh [SERVER_IP]` | overview PC / server Pi | settings file (random passwords), Mosquitto (plain + WebSocket, a password), PostgreSQL (database + user; an installation on MariaDB: its data copied over once), the control server (virtualenv, **systemd: `cybercircle-control`**), nightly backup (**`cybercircle-backup.timer`**), https certificate (`CONTROL_HTTPS=1`), firewall ports (ufw) – then checks the broker and the web interface |
 | `sudo install_game.sh [--display 1,2]` | the server box (the **master**), each Pi (`--display` + its screens: a **display node**) | the role in this machine's settings (`GAME_ROLE`, `GAME_SHOW`, `GAME_NODE`), the kiosk user logging in automatically (GDM, LightDM or `raspi-config` on a Pi), Godot for this CPU (official x86_64 / arm64 build, unless exported), screen never blanks / locks / sleeps, the game as a **user service `cybercircle-game`** started with the desktop session (also via `/etc/xdg/autostart` for desktops without `graphical-session.target`, e.g. Raspberry Pi OS); ARM: the Compatibility renderer (OpenGL ES 3, `GAME_ENGINE_ARGS`); master: the display port (7350) in the firewall; a Pi with 2 screens: the desktop on X11 |
 | `sudo update.sh [release.tar.gz]` | each machine | a new version in place (settings, database, certificates kept), dependencies, restart |
 | `flash_tiles.sh [ota <IP>]`, `flash_robot.sh [ota <IP>]` | any PC / Pi with PlatformIO | the tile / robot firmware with this installation's broker, the boards' own login and the update password (no editing of `config.h`); over USB, or `ota <IP>` over the network |
-| `backup.sh` | (the timer) | `mysqldump` → `/var/backups/cybercircle/cybercircle-<date>.sql.gz`, kept 30 days |
+| `backup.sh` | (the timer) | `pg_dump` → `/var/backups/cybercircle/cybercircle-<date>.sql.gz`, kept 30 days (restore: see the script's head) |
 | (the control server) | *Ranglijst › Nieuw event starten* | the closed event as a zip (CSV: players, results, games, rounds) → `EVENT_BACKUP_DIR` (`/srv/cybercircle/events`), kept for good |
 
 ```bash
@@ -1581,7 +1663,7 @@ cybercircle-game -f` (as the kiosk user). The systemd units are in
 command line is built from the settings by `start_game.sh` (screens, monitors,
 broker, control server, voice folder, extra options).
 
-**Raspberry Pi.** Tested: `install_server.sh` on Debian arm64 (MariaDB, the
+**Raspberry Pi.** Tested: `install_server.sh` on Debian arm64 (then with MariaDB; PostgreSQL and psycopg have arm64 packages / wheels too; the
 control server's Python packages as arm64 wheels, the broker) – a Pi 4/5 runs
 the server well. The game installs on a Pi (Godot arm64, OpenGL ES 3, ETC2/ASTC
 textures: `import_etc2_astc` is on in the project) – as a **display node**

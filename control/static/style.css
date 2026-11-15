@@ -170,3 +170,13 @@ tr.dim td { opacity: .5; }
 .life-table td { padding: 2px 6px; }
 .life-table input { width: 70px; }
 .life .own { cursor: pointer; }
+.busy { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.busy #busy-toggle.active { background: var(--bad); color: var(--bg); border-color: var(--bad); font-weight: bold; }
+.busy .level { font-weight: bold; padding: 2px 8px; border: 2px solid var(--dim); color: var(--dim); }
+.busy .level.l1 { border-color: var(--amber); color: var(--amber); }
+.busy .level.l2 { border-color: var(--orange); color: var(--orange); }
+.busy .level.l3 { border-color: var(--bad); color: var(--bg); background: var(--bad); }
+.closing-edit { margin: 0 0 12px; } .closing-edit summary { cursor: pointer; color: var(--dim); }
+.closing-edit label { display: inline-flex; gap: 6px; align-items: center; }
+.life-table td.calc { color: var(--teal); white-space: nowrap; min-width: 9em; }
+.day-row { margin: 4px 0; } .day-row input { width: auto; }

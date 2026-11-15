@@ -7,7 +7,7 @@ ENV_FILE=${CC_ENV_FILE:-/etc/cybercircle/cybercircle.env}
 [ -f "$ENV_FILE" ] && . "$ENV_FILE"
 : "${CC_ROOT:?CC_ROOT not set (in $ENV_FILE)}"
 
-args=(--db "mysql+pymysql://${DB_USER}:${DB_PASSWORD}@${DB_HOST:-localhost}/${DB_NAME}?charset=utf8mb4"
+args=(--db "postgresql+psycopg://${DB_USER}:${DB_PASSWORD}@${DB_HOST:-localhost}:${DB_PORT:-5432}/${DB_NAME}"
       --mqtt "ws://127.0.0.1:${MQTT_WS_PORT:-9001}" --mqtt-user "$MQTT_USER" --mqtt-password "$MQTT_PASSWORD"
       --port "${CONTROL_PORT:-8080}")
 if [ "${CONTROL_HTTPS:-0}" = "1" ]; then

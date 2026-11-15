@@ -36,7 +36,7 @@ SETUP.md §5 (the robot: `firmware/robot/include/config.h`). Keep the script in 
 
 | box | runs | drives |
 |---|---|---|
-| **Server** (one mini PC, fixed IP) | control server, MariaDB, Mosquitto, MediaMTX, the Godot **master** (game logic, overview render) | the overview screen (its sound card only as the fallback, §4) |
+| **Server** (one mini PC, fixed IP) | control server, PostgreSQL, Mosquitto, MediaMTX, the Godot **master** (game logic, overview render) | the overview screen (its sound card only as the fallback, §4) |
 | **Screen Pi 1–4** (Raspberry Pi 5, 4 GB): **Pi 1–3 inside the robot**, Pi 4 at the mobile station | a Godot **display node** (`arena.tscn --replica`): follows the master's game state over Godot's multiplayer (ENet, UDP 7350), renders the split views of its 2 screens, plays the sound; reads its own tiles on MQTT | up to 2 screens each over micro-HDMI: Pi 1 = screens 1+2, Pi 2 = 3+4, Pi 3 = 5 (second output spare), **Pi 4 = Mobile A + B, at the mobile station** (elsewhere in the booth) |
 
 **How a display node works** (SETUP.md §4 *Display nodes*): the master runs the

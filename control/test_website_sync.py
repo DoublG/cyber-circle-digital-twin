@@ -48,8 +48,21 @@ def wait_up(url):
 if not os.path.exists(SITE_PY):
     sys.exit(f"no website venv: python3 -m venv website/.venv && website/.venv/bin/pip install -r website/requirements.txt")
 tmp = tempfile.mkdtemp()
-env = {**os.environ, "DJANGO_DEBUG": "1", "SYNC_TOKEN": TOKEN, "DATABASE_URL": f"sqlite:///{tmp}/site.db"}
+# (other databases, emptied first - e.g. both PostgreSQL: CC_TEST_DB=postgresql+psycopg://... for the
+#  control server, CC_TEST_SITE_DB=postgres://... for the website; default: SQLite files)
+SITE_DB = os.environ.get("CC_TEST_SITE_DB") or f"sqlite:///{tmp}/site.db"
+CTRL_DB = os.environ.get("CC_TEST_DB") or f"{tmp}/control.db"
+if os.environ.get("CC_TEST_DB"):
+    sys.path.insert(0, HERE)
+    import db as _db
+    from sqlalchemy import create_engine
+    _e = create_engine(CTRL_DB)
+    _db.meta.drop_all(_e)
+    _e.dispose()
+env = {**os.environ, "DJANGO_DEBUG": "1", "SYNC_TOKEN": TOKEN, "DATABASE_URL": SITE_DB}
 subprocess.run([SITE_PY, "manage.py", "migrate", "-v", "0"], cwd=SITE_DIR, env=env, check=True)
+if os.environ.get("CC_TEST_SITE_DB"):
+    subprocess.run([SITE_PY, "manage.py", "flush", "--noinput", "-v", "0"], cwd=SITE_DIR, env=env, check=True)
 
 
 def start_site():
@@ -58,7 +71,7 @@ def start_site():
 
 
 site = start_site()
-ctrl = subprocess.Popen([sys.executable, os.path.join(HERE, "server.py"), "--db", f"{tmp}/control.db", "--port", str(CTRL_PORT),
+ctrl = subprocess.Popen([sys.executable, os.path.join(HERE, "server.py"), "--db", CTRL_DB, "--port", str(CTRL_PORT),
                          "--host", "127.0.0.1", "--mqtt", "ws://127.0.0.1:1", "--website-api", SITE, "--website-token", TOKEN,
                          "--website-sync-interval", "1", "--website-interval", "1"],
                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

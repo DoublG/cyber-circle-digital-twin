@@ -91,7 +91,7 @@ func snapshot() -> Dictionary:
 		"upcoming": game.picker.upcoming.map(func(e): return {"type": RoundPicker.type_name(e.type),
 			"forced": e.get("forced", false), "options": e.get("options", {})}),
 		"planned": game.picker.planned, "history": game.picker.history.map(func(t): return RoundPicker.type_name(t)),
-		"question_memory": game.questions.memory}
+		"question_memory": game.questions.memory, "pressure_level": game.pressure.level}
 
 
 func save() -> void:
@@ -152,6 +152,7 @@ func apply(cp: Dictionary) -> void:
 		if t:
 			game.picker.upcoming.append({"type": t, "forced": e.forced, "options": e.options})
 	game.picker.planned = int(cp.planned)
+	game.pressure.level = clampi(int(cp.get("pressure_level", 0)), 0, Pressure.MAX_LEVEL)
 	game.picker.history.clear()
 	for n in cp.history:
 		var t: Script = RoundPicker.type_named(n)

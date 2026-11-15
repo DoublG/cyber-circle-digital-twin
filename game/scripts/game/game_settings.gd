@@ -25,17 +25,32 @@ const GAME_TUNABLES := [
 	{"key": "personal_min_players", "label": "Spelers nodig voor eigen spellen", "min": 1, "max": 13,
 		"step": 1, "unit": ""},
 	{"key": "queue_length", "label": "Rondes vooruit gepland", "min": 1, "max": 10, "step": 1, "unit": ""},
+	{"key": "pressure_max", "label": "Druk: hoogste niveau (0 = nooit moeilijker)", "min": 0, "max": 3, "step": 1,
+		"unit": ""},
+	{"key": "pressure_full_at", "label": "Druk: vol vanaf (bezette vloertegels)", "min": 50, "max": 100, "step": 5,
+		"unit": "%"},
+	{"key": "pressure_cooldown", "label": "Druk: rondes niet vol voor een niveau lager", "min": 1, "max": 10,
+		"step": 1, "unit": ""},
+	{"key": "grace_rounds", "label": "Druk: nieuwe speler beschermd (rondes)", "min": 0, "max": 5, "step": 1,
+		"unit": ""},
+	{"key": "pressure_ease", "label": "Druk: gewone regels onder (% van de rondes van de beste)", "min": 0, "max": 100,
+		"step": 5, "unit": "%"},
 ]
-## Lives at the end of a round with places, by the number of players: a table
-## of rows {from, win_places, win_percent, lose_places, lose_percent} - the row
-## with the highest "from" at or below the players in the round applies (none:
-## the first). One table for every game ("all"), a game can have its own
-## (its type name). See GameRound.win_places ... for what the values mean.
-const LIFE_ROW := {"from": 1, "win_places": 1, "win_percent": 0, "lose_places": 1, "lose_percent": 0}
-const LIFE_LIMITS := {"from": [1, 18], "win_places": [0, 13], "win_percent": [0, 100],
+## Lives at the end of a round with places, by the occupancy: a table of rows
+## {from_pct, win_places, win_percent, lose_places, lose_percent} - the row with
+## the highest "from_pct" at or below the occupancy applies (none: the first).
+## Occupancy: the players in the round (the mobile ones too) in % of the floor
+## tiles that can be used (installed, in service, not broken - capped at 100):
+## the same table fits a half installation, or a day with a tile broken (the web
+## interface shows what a % comes to in players now). One table for every game
+## ("all"), a game can have its own (its type name). See GameRound.win_places
+## ... for what the values mean.
+const LIFE_ROW := {"from_pct": 0, "win_places": 1, "win_percent": 0, "lose_places": 1, "lose_percent": 0}
+const LIFE_LIMITS := {"from_pct": [0, 100], "win_places": [0, 13], "win_percent": [0, 100],
 	"lose_places": [0, 13], "lose_percent": [0, 100]}
 const ARENA_KEYS := ["clip_wait", "clip_time"]                 # game settings kept by the arena
 const PICKER_KEYS := ["personal_min_players", "queue_length"]  # ... and by the round picker
+const PRESSURE_KEYS := ["pressure_max", "pressure_full_at", "pressure_cooldown", "grace_rounds", "pressure_ease"]  # ... busy (Pressure)
 
 var game: GameManager
 var values := {}                   # the operator's values: {"game": {key: v}, "<round type>": {key: v}, ...}
@@ -67,18 +82,32 @@ func round_value(type: Script, key: String) -> Variant:
 	return of_round(RoundPicker.type_name(type)).get(key, type.new().get(key))
 
 
-## The life rule for a round of this type with this many players (a LIFE_ROW).
+## The life rule for a round of this type with this many players (a LIFE_ROW),
+## by the occupancy they make now.
 func life_rule(type_name: String, player_count: int) -> Dictionary:
 	var table: Array = life_tables.get(type_name, life_tables.get("all", [LIFE_ROW]))
+	var pct := occupancy_pct(player_count)
 	var rule: Dictionary = table[0]
-	for row in table:                  # (sorted by "from")
-		if row.from <= player_count:
+	for row in table:                  # (sorted by "from_pct")
+		if row.from_pct <= pct:
 			rule = row
 	return rule
 
 
+## This many players in % of the floor tiles that can be used now (max 100).
+func occupancy_pct(player_count: int) -> float:
+	var usable: int = game.pressure.occupancy().usable if game.arena else Retro.FLOOR_TILES
+	return minf(player_count * 100.0 / maxi(usable if usable > 0 else Retro.FLOOR_TILES, 1), 100.0)
+
+
+## The fewest players that make `pct` % of `usable` tiles (what the web interface shows).
+static func players_for(pct: int, usable: int) -> int:
+	return maxi(ceili(pct * usable / 100.0 - 0.0001), 1)
+
+
 ## The operator's tables, made safe: rows of whole numbers within LIFE_LIMITS,
-## sorted by "from", one per "from"; a table without rows is left out.
+## sorted by "from_pct", one per "from_pct"; a table without rows is left out.
+## (A row from before the occupancy, {from: players}: its % of 13 floor tiles.)
 static func clean_life_tables(given: Variant) -> Dictionary:
 	var out := {}
 	if not given is Dictionary:
@@ -91,10 +120,12 @@ static func clean_life_tables(given: Variant) -> Dictionary:
 			if not r is Dictionary:
 				continue
 			var row := {}
+			if not r.has("from_pct") and (r.get("from") is int or r.get("from") is float):
+				r = r.merged({"from_pct": 0 if r.from <= 1 else ceili((r.from - 0.5) * 100.0 / Retro.FLOOR_TILES)})
 			for k in LIFE_ROW:
 				var v = r.get(k, LIFE_ROW[k])
 				row[k] = clampi(int(v) if (v is int or v is float) else LIFE_ROW[k], LIFE_LIMITS[k][0], LIFE_LIMITS[k][1])
-			rows[row.from] = row
+			rows[row.from_pct] = row
 		if rows.is_empty():
 			continue
 		var froms := rows.keys()
@@ -149,6 +180,7 @@ func apply(given_values: Dictionary) -> void:
 		clean[g.group] = out
 	values = clean
 	life_tables = clean_life_tables(given_values.get("life_tables", {}))
+	game.pressure.levels = Pressure.clean_levels(given_values.get("pressure_levels", []))
 	game.questions.category_weights.clear()
 	for g in _live_groups():
 		for t in g.items:
@@ -199,4 +231,6 @@ func _owner_of(key: String) -> Object:
 		return game.arena
 	if key in PICKER_KEYS:
 		return game.picker
+	if key in PRESSURE_KEYS:
+		return game.pressure
 	return game

@@ -26,6 +26,12 @@ Gamemaster app in a browser (iPhone): http://<this pc>:8080/gm/ (the Flutter web
   gamemaster   POST /api/session {device, gamemaster} (sign of life: who is logged in, on the dashboard)
   alerts       GET /api/alerts (a tile broken now: its last will came, or it stopped saying hello;
                the web interface and the gamemaster apps show it; also MQTT <prefix>/alerts, retained)
+  closing      GET|PUT /api/closing {enabled, last_entry}, POST /api/closing/extend {minutes} (the game
+               closes by itself at the end of the event's day; no new players from the last entry;
+               MQTT <prefix>/closing, retained); the days: POST /api/events {name, days: [{date,
+               start, end}]}, PUT /api/events/{id} {name?, days?}
+  busy         GET|PUT /api/busy {busy, gamemaster?} (visitors waiting: harder when the floor is full;
+               MQTT <prefix>/busy, retained; the game's state: "pressure")
   this event   GET|PUT /api/selection {games_off?, questions?: {id: true|false|null}} (which games are
                played and which questions asked at the current event; a new event: all as normal)
   gamemaster   GET /api/config (where MQTT, the layout), GET /api/cards/{code} (who has this QR card),
@@ -35,7 +41,9 @@ Gamemaster app in a browser (iPhone): http://<this pc>:8080/gm/ (the Flutter web
 
 import argparse
 import asyncio
+import datetime
 import json
+import math
 import os
 import threading
 import time
@@ -147,8 +155,34 @@ class SelectionIn(BaseModel):
     questions: dict[str, bool | None] = {}   # question id -> on / off at this event, None = as normal
 
 
+class ClosingIn(BaseModel):
+    enabled: bool = True                     # close the game by itself at the end of the event's day
+    last_entry: int = 15                     # minutes before: no new players any more (0: until the end)
+
+
+class ExtendIn(BaseModel):
+    minutes: int = 15                        # today: this much later (from the time, or from now when past)
+
+
+class BusyIn(BaseModel):
+    busy: bool                               # visitors are waiting: the game gets harder when the floor is full
+    gamemaster: int = 0                      # who switched it (the app); 0: the web interface
+
+
+class DayIn(BaseModel):
+    date: str                                # "2026-11-21"
+    start: str = "10:00"                     # opening hours (this PC's clock)
+    end: str = "18:00"                       # the game closes by itself (after the round), the last entry before
+
+
 class EventIn(BaseModel):
     name: str                                # e.g. "Maker Faire Gent 2026"
+    days: list[DayIn] = []                   # one or more days with their hours
+
+
+class EventEditIn(BaseModel):
+    name: str | None = None
+    days: list[DayIn] | None = None
 
 
 class PlanIn(BaseModel):
@@ -269,6 +303,8 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
             link.publish_settings(game_settings())
             link.publish_texts(texts())
             link.publish_selection(db.selection())
+            link.publish_busy(busy_state())
+            link.publish_closing(closing_plan())
         if kind in ("device", "devices", "mqtt"):
             check_alerts(force=kind == "mqtt")   # (a tile's last will: at once; reconnected: send them again)
         if "loop" in loop:
@@ -288,7 +324,9 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         site.scoreboard = website_scoreboard
         site.start()
         watch = asyncio.create_task(watch_alerts())
+        clock = asyncio.create_task(watch_closing())
         yield
+        clock.cancel()
         watch.cancel()
         site.stop()
         link.stop()
@@ -333,7 +371,8 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
                 "events": list(link.events), "sounds": link.sounds, "installed": installed(), "devices": link.device_list(), "mode": db.setting("mode", "setup"),
                 "t01_clock": float(db.setting("t01_clock", "12") or 12), "event": db.event(), "selection": db.selection(),
                 "website": {k: v for k, v in site.snapshot().items() if k != "history"},
-                "gamemasters_online": online_ref[0]() if online_ref else [],
+                "gamemasters_online": online_ref[0]() if online_ref else [], "busy": busy_state(),
+                "closing": closing_plan(),
                 "alerts": alerts_view()}
 
     # ------------------------------------------------------------ performance (web interface: Prestaties)
@@ -620,15 +659,153 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         mode = db.setting("mode", "setup")
         return {"mode": mode, "allowed": MODES[mode]}
 
+    def change_mode(target):
+        mode = db.setting("mode", "setup")
+        if target not in MODES.get(mode, []):
+            raise HTTPException(409, f"not possible from {mode}: {target}")
+        db.set_setting("mode", target)
+        link.publish_mode(target)
+        changed("mode")
+        return {"mode": target, "allowed": MODES[target]}
+
     @app.post("/api/mode")
     def set_mode(m: ModeIn):
-        mode = db.setting("mode", "setup")
-        if m.mode not in MODES.get(mode, []):
-            raise HTTPException(409, f"not possible from {mode}: {m.mode}")
-        db.set_setting("mode", m.mode)
-        link.publish_mode(m.mode)
-        changed("mode")
-        return {"mode": m.mode, "allowed": MODES[m.mode]}
+        return change_mode(m.mode)
+
+    # ------------------------------------------------------------ the closing time (the game closes by itself)
+    # An event has its days, each with its hours (Ranglijst › Event). Today's end:
+    # from last_entry minutes before, nobody new joins (the game refuses, the apps
+    # say so); at the end the game closes - after the round being played, the
+    # robot's shutdown show, as the button does. Once per end: opened again
+    # afterwards, it stays open (+15 min: a later end). Busy goes off at the last
+    # entry (nobody new can come any more). Not: opening by itself at the start
+    # (a gamemaster checks the installation first) - the start is shown.
+
+    CLOSING_DEFAULT = {"enabled": True, "last_entry": 15}
+
+    def closing_config():
+        try:
+            c = json.loads(db.setting("closing", "{}") or "{}")
+        except ValueError:
+            c = {}
+        return {**CLOSING_DEFAULT, **{k: v for k, v in c.items() if k in CLOSING_DEFAULT}}
+
+    def _hhmm(s):
+        """'18:00' -> (18, 0), or None."""
+        try:
+            h, m = (int(x) for x in str(s).split(":"))
+            return (h, m) if 0 <= h < 24 and 0 <= m < 60 else None
+        except ValueError:
+            return None
+
+    def clean_days(days):
+        """[DayIn] -> [{date, start, end}] sorted, or 422: a real date, HH:MM, start before end, each date once."""
+        out = {}
+        for d in days:
+            try:
+                date = datetime.date.fromisoformat(d.date).isoformat()
+            except ValueError:
+                raise HTTPException(422, f"not a date (YYYY-MM-DD): {d.date}")
+            a, b = _hhmm(d.start), _hhmm(d.end)
+            if not a or not b:
+                raise HTTPException(422, f"{date}: not a time (HH:MM): {d.start if not a else d.end}")
+            if b <= a:
+                raise HTTPException(422, f"{date}: the end ({d.end}) before the start ({d.start})")
+            if date in out:
+                raise HTTPException(422, f"{date}: twice")
+            out[date] = {"date": date, "start": "%02d:%02d" % a, "end": "%02d:%02d" % b}
+        return [out[k] for k in sorted(out)]
+
+    def closing_plan(now=None):
+        """Today: {enabled, date, event, start, close_at, last_entry_at, phase, seconds (to the end),
+        done (closed at it already), next (the event's next day)}. phase: none (no day today, or
+        done) / open / last_entry / closing."""
+        now = now or datetime.datetime.now()
+        c = closing_config()
+        ev = db.event() or {}
+        date = now.strftime("%Y-%m-%d")
+        days = ev.get("days") or []
+        day = next((d for d in days if d["date"] == date), None)
+        plan = {"enabled": c["enabled"], "date": date, "event": ev.get("name"), "start": day and day["start"],
+                "close_at": None, "last_entry_at": None, "phase": "none", "seconds": None, "done": False,
+                "next": next((d for d in days if d["date"] > date), None)}
+        hm = _hhmm(day["end"]) if day and c["enabled"] else None
+        if not hm:
+            return plan
+        close = now.replace(hour=hm[0], minute=hm[1], second=0, microsecond=0)
+        entry = close - datetime.timedelta(minutes=max(0, int(c["last_entry"])))
+        done = db.setting("closing_done", "") == f"{date} {close:%H:%M}"
+        plan.update(close_at=f"{close:%H:%M}", last_entry_at=f"{entry:%H:%M}", seconds=int((close - now).total_seconds()),
+                    done=done)
+        if now >= close:
+            plan["phase"] = "none" if done else "closing"   # (opened again after it: open until a new end)
+        elif now >= entry:
+            plan["phase"] = "last_entry"
+        else:
+            plan["phase"] = "open"
+        return plan
+
+    closing_seen = {"phase": None}
+
+    def check_closing(now=None):
+        """The clock (every few seconds): a new phase -> the game hears it (retained); the end
+        there -> busy off, the game closed (open / paused; after the round)."""
+        plan = closing_plan(now)
+        if plan["phase"] != closing_seen["phase"]:
+            closing_seen["phase"] = plan["phase"]
+            link.publish_closing(plan)
+            if plan["phase"] in ("last_entry", "closing") and busy_state()["busy"]:
+                db.set_setting("busy", "{}")                 # (nobody new can come: no line any more)
+                link.publish_busy(busy_state())
+            changed("closing")
+        if plan["phase"] == "closing":
+            mode = db.setting("mode", "setup")
+            db.set_setting("closing_done", f"{plan['date']} {plan['close_at']}")
+            if mode in ("open", "paused"):
+                change_mode("closed")
+                link.events.appendleft({"text": f"AUTOMATISCH GESLOTEN ({plan['close_at']}, einde van de dag)",
+                                        "color": "#ffbd38", "time": time.strftime("%H:%M:%S")})
+            closing_seen["phase"] = None                     # (done: phase none - published next time)
+        return plan
+
+    async def watch_closing():
+        while True:
+            await asyncio.sleep(5.0)
+            try:
+                check_closing()
+            except Exception as e:                           # (the database busy, ...: next time)
+                print("closing:", e)
+
+    @app.get("/api/closing")
+    def get_closing():
+        """The closing settings and today's plan (from the current event's days)."""
+        return {"config": closing_config(), "today": closing_plan()}
+
+    @app.put("/api/closing")
+    def put_closing(c: ClosingIn):
+        db.set_setting("closing", json.dumps({"enabled": c.enabled, "last_entry": max(0, min(120, c.last_entry))}))
+        check_closing()
+        return get_closing()
+
+    @app.post("/api/closing/extend")
+    def extend_closing(e: ExtendIn):
+        """Today later: the event's day ends this much later (from its end, or from now when that is past)."""
+        plan, now = closing_plan(), datetime.datetime.now()
+        ev = db.event()
+        day = next((d for d in (ev or {}).get("days", []) if d["date"] == plan["date"]), None)
+        if not day:
+            raise HTTPException(409, "the event has no day today (Ranglijst › Event: its days)")
+        h, m = _hhmm(day["end"])
+        base = now.replace(hour=h, minute=m, second=0, microsecond=0)
+        if base < now:
+            base = now.replace(second=0, microsecond=0)
+        new = base + datetime.timedelta(minutes=max(1, min(240, e.minutes)))
+        if new.date() != now.date():
+            raise HTTPException(409, "not past midnight")
+        db.update_event(ev["id"], days=[{**d, "end": f"{new:%H:%M}"} if d is day else d for d in ev["days"]])
+        changed("event")
+        check_closing()
+        return get_closing()
 
     @app.post("/api/game/{action}")
     def game(action: str):
@@ -744,14 +921,22 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         except ValueError:
             return {}
 
-    LIFE_ROW = {"from": 1, "win_places": 1, "win_percent": 0, "lose_places": 1, "lose_percent": 0}
-    LIFE_LIMITS = {"from": (1, PLACES), "win_places": (0, FLOOR_TILES), "win_percent": (0, 100),
+    # the life table: a row from an occupancy on (the round's players in % of the usable floor tiles)
+    LIFE_ROW = {"from_pct": 0, "win_places": 1, "win_percent": 0, "lose_places": 1, "lose_percent": 0}
+    LIFE_LIMITS = {"from_pct": (0, 100), "win_places": (0, FLOOR_TILES), "win_percent": (0, 100),
                    "lose_places": (0, FLOOR_TILES), "lose_percent": (0, 100)}
 
+    def usable_floor():
+        """The floor tiles that can be used now (installed, in service, not broken): the occupancy's 100 %."""
+        enabled = {t["number"]: t["enabled"] for t in db.tiles()}
+        broken = set(broken_tiles())
+        return [n for n in installed() if n <= FLOOR_TILES and enabled.get(n, 1) and n not in broken]
+
     def clean_life_tables(given):
-        """{"all": [rows], "<game>": [rows]}: rows {from, win_places, win_percent, lose_places,
-        lose_percent} (whole numbers in LIFE_LIMITS), sorted by "from", one per "from"
-        (as the game's GameSettings.clean_life_tables)."""
+        """{"all": [rows], "<game>": [rows]}: rows {from_pct, win_places, win_percent, lose_places,
+        lose_percent} (whole numbers in LIFE_LIMITS), sorted by "from_pct", one per "from_pct"
+        (as the game's GameSettings.clean_life_tables; a row from before, {from: players}: its %
+        of the 13 floor tiles)."""
         out = {}
         for key, rows in (given.items() if isinstance(given, dict) else []):
             if not (key == "all" or key in ROUND_TYPES and key != "quiz") or not isinstance(rows, list):
@@ -761,22 +946,49 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
                 if not isinstance(r, dict):
                     continue
                 row = {}
+                f = r.get("from")
+                if "from_pct" not in r and isinstance(f, (int, float)) and not isinstance(f, bool):
+                    r = {**r, "from_pct": 0 if f <= 1 else math.ceil((f - 0.5) * 100 / FLOOR_TILES)}
                 for k, d in LIFE_ROW.items():
                     v = r.get(k, d)
                     lo, hi = LIFE_LIMITS[k]
                     row[k] = min(hi, max(lo, int(v))) if isinstance(v, (int, float)) and not isinstance(v, bool) else d
-                by_from[row["from"]] = row
+                by_from[row["from_pct"]] = row
             if by_from:
                 out[key] = [by_from[f] for f in sorted(by_from)]
+        return out
+
+    # busy: what each level does (as the game's Pressure: LEVEL_ROW, DEFAULT_LEVELS, LEVEL_LIMITS)
+    PRESSURE_DEFAULT = [{"mercy": 50, "streak": 0, "win": 1, "lose_min": 0, "tempo": 100, "quiz": 100},
+                        {"mercy": 25, "streak": 0, "win": 1, "lose_min": 25, "tempo": 110, "quiz": 150},
+                        {"mercy": 0, "streak": 0, "win": 0, "lose_min": 40, "tempo": 120, "quiz": 200}]
+    PRESSURE_LIMITS = {"mercy": (0, 100), "streak": (0, 1), "win": (0, 1), "lose_min": (0, 100),
+                       "tempo": (50, 200), "quiz": (0, 1000)}
+
+    def clean_pressure_levels(given):
+        """The 3 levels' rows (whole numbers in PRESSURE_LIMITS; missing: the default's)."""
+        out = []
+        for i, d in enumerate(PRESSURE_DEFAULT):
+            g = given[i] if isinstance(given, list) and i < len(given) and isinstance(given[i], dict) else {}
+            row = {}
+            for k, dv in d.items():
+                v = g.get(k, dv)
+                lo, hi = PRESSURE_LIMITS[k]
+                row[k] = min(hi, max(lo, int(v))) if isinstance(v, (int, float)) and not isinstance(v, bool) else dv
+            out.append(row)
         return out
 
     @app.get("/api/settings")
     def get_settings():
         """What the game offers (from the master, with defaults) and the saved values;
-        for the life table: the games with places and the default row."""
-        return {"schema": link.schema, "values": game_settings(),
+        for the life table: the games with places and the default row; for busy: the levels."""
+        values = game_settings()
+        if "life_tables" in values:                      # (a table saved by player count: as % now)
+            values["life_tables"] = clean_life_tables(values["life_tables"])
+        return {"schema": link.schema, "values": values,
                 "life": {"games": {t: n for t, n in ROUND_TYPES.items() if t != "quiz"}, "default": LIFE_ROW,
-                         "limits": LIFE_LIMITS}}
+                         "limits": LIFE_LIMITS, "usable": len(usable_floor()), "floor_tiles": FLOOR_TILES},
+                "pressure": {"default": PRESSURE_DEFAULT, "limits": PRESSURE_LIMITS}}
 
     @app.put("/api/settings")
     def put_settings(values: dict):
@@ -788,6 +1000,10 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         tables = clean_life_tables(values.get("life_tables"))
         if tables:
             clean["life_tables"] = tables
+        if isinstance(values.get("pressure_levels"), list):
+            levels = clean_pressure_levels(values["pressure_levels"])
+            if levels != PRESSURE_DEFAULT:
+                clean["pressure_levels"] = levels
         db.set_setting("game_settings", json.dumps(clean))
         link.publish_settings(clean)
         return {"values": clean}
@@ -1027,6 +1243,9 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
     def assign(pid: int, a: AssignIn):
         if db.player(pid) is None:
             raise HTTPException(404, "unknown player")
+        plan = closing_plan()
+        if plan["phase"] in ("last_entry", "closing"):
+            raise HTTPException(409, f"laatste instap voorbij: het spel sluit om {plan['close_at']}")
         if not 0 <= a.tile <= PLACES:
             raise HTTPException(404, "unknown tile")
         cmd = {"assign": pid}
@@ -1128,6 +1347,36 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         changed("selection")
         return selection_view()
 
+    # ------------------------------------------------------------ busy: visitors waiting (the gamemasters' switch)
+    # On: the game gets harder, a level per round, while the floor is full (the game's
+    # Pressure: its state's "pressure"); off: normal at once. A new event starts calm.
+
+    def busy_state():
+        try:
+            b = json.loads(db.setting("busy", "{}") or "{}")
+        except ValueError:
+            b = {}
+        return {"busy": bool(b.get("busy")), "by": str(b.get("by", "")), "since": b.get("since")}
+
+    @app.get("/api/busy")
+    def get_busy():
+        """{busy, by, since} and the game's pressure now ({level, max, full, usable, taken})."""
+        return {**busy_state(), "pressure": (link.state or {}).get("pressure")}
+
+    @app.put("/api/busy")
+    def put_busy(b: BusyIn):
+        """The gamemasters: visitors are waiting (on) or not (off)."""
+        gm = db.gamemaster(b.gamemaster) if b.gamemaster else None
+        if b.gamemaster and not gm:
+            raise HTTPException(404, "unknown gamemaster")
+        now = busy_state()
+        if now["busy"] != b.busy:
+            db.set_setting("busy", json.dumps({"busy": b.busy, "by": gm["name"] if gm else "web",
+                                               "since": time.time()}))
+        link.publish_busy(busy_state())
+        changed("busy")
+        return get_busy()
+
     # ------------------------------------------------------------ games and scores (game master)
 
     # ------------------------------------------------------------ the game state (crash / power cut)
@@ -1197,20 +1446,37 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
 
     @app.post("/api/events")
     def new_event(e: EventIn):
-        """A new event: the current one is closed (kept, with all its games) and saved
-        as a zip in the event backup folder; the ranking starts empty."""
+        """A new event (its days with their hours: the game closes by itself at the end of
+        each): the current one is closed (kept, with all its games) and saved as a zip in
+        the event backup folder; the ranking starts empty."""
         name = e.name.strip()
         if not name:
             raise HTTPException(400, "a name, please")
+        days = clean_days(e.days)
         old = db.current_event_id()
         backup = event_export.save(db.export_event(old), event_dir) if old else None
-        db.new_event(name)
+        db.new_event(name, days)
         link.db_changed("ranking")                    # the game: the ranking (and records) again
         link.db_changed("questions")                  # ... and the questions: the new event's selection
         link.publish_selection(db.selection())        # (empty: every game)
+        db.set_setting("busy", "{}")                   # (a new event starts calm)
+        link.publish_busy(busy_state())
         changed("event")
         changed("selection")
+        check_closing()
         return {"event": db.event(), "backup": os.path.basename(backup) if backup else None}
+
+    @app.put("/api/events/{eid}")
+    def edit_event(eid: int, e: EventEditIn):
+        """An event's name and / or its days (the current one's: today's end is the closing time)."""
+        if not db.event(eid):
+            raise HTTPException(404, "unknown event")
+        if e.name is not None and not e.name.strip():
+            raise HTTPException(400, "a name, please")
+        db.update_event(eid, (e.name or "").strip() or None, clean_days(e.days) if e.days is not None else None)
+        changed("event")
+        check_closing()
+        return db.event(eid)
 
     @app.get("/api/events/{eid}/export")
     def export_event(eid: int):

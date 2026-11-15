@@ -1,6 +1,6 @@
 extends Node
 ## Life table (headless): who gains / loses a life at the end of a round - by
-## the number of players a row: the best / last N places or the best / worst
+## the occupancy (the players in % of the usable floor tiles) a row: the best / last N places or the best / worst
 ## N % of the players (one table for all games, a game can have its own),
 ## equal players together, shields still block a -1;
 ## the rules text says other settings; a round type that can win no life
@@ -41,23 +41,34 @@ func _ready() -> void:
 		arena.players.join(id, "P%d" % id, ages[id])
 	await _wait(0.3)
 
-	print("--- the life table: by the number of players")
+	print("--- the life table: by the occupancy (13 usable floor tiles)")
 	var st := game.settings
 	check(st.life_rule("reaction", 8) == GameSettings.LIFE_ROW, "no table: 1st +1, last -1")
 	st.apply({"life_tables": {"all": [
-		{"from": 9, "win_percent": 20, "lose_percent": 25},
-		{"from": 1, "win_places": 1, "lose_places": 1},
-		{"from": 5, "win_places": 2, "lose_places": 1, "bogus": 3},
-		{"from": 0, "win_places": 99}], "reaction": [{"from": 1, "win_places": 0, "lose_places": 2}], "x": []}})
+		{"from_pct": 65, "win_percent": 20, "lose_percent": 25},
+		{"from_pct": 0, "win_places": 1, "lose_places": 1},
+		{"from_pct": 35, "win_places": 2, "lose_places": 1, "bogus": 3},
+		{"from_pct": -5, "win_places": 99}], "reaction": [{"from_pct": 0, "win_places": 0, "lose_places": 2}], "x": []}})
 	print("    ", st.life_tables)
-	check(st.life_tables.all.map(func(r): return r.from) == [1, 5, 9], "rows sorted by 'from', one per 'from' (0 -> 1)")
+	check(st.life_tables.all.map(func(r): return r.from_pct) == [0, 35, 65], "rows sorted by '%', one per % (-5 -> 0)")
 	check(st.life_tables.all[0].win_places == 13, "values within their limits (99 -> 13)")
 	check(not st.life_tables.has("x"), "a table without rows: left out")
-	check(st.life_rule("simon", 3).win_places == 13, "Simon, 3 players: the row from 1")
-	check(st.life_rule("simon", 5).win_places == 2 and st.life_rule("simon", 8).win_places == 2, "5 - 8 players: from 5")
-	check(st.life_rule("simon", 13).win_percent == 20 and st.life_rule("simon", 13).lose_percent == 25,
-		"13 players: from 9 (best 20 %, worst 25 %)")
+	check(is_equal_approx(st.occupancy_pct(13), 100.0) and is_equal_approx(st.occupancy_pct(18), 100.0),
+		"13 of 13: 100 % (the mobile players on top: still 100)")
+	check(st.life_rule("simon", 3).win_places == 13, "Simon, 3 players (23 %): the row from 0 %")
+	check(st.life_rule("simon", 5).win_places == 2 and st.life_rule("simon", 8).win_places == 2,
+		"5 - 8 players (38 - 62 %): from 35 %")
+	check(st.life_rule("simon", 9).win_percent == 20 and st.life_rule("simon", 13).lose_percent == 25,
+		"9 - 13 players (69 - 100 %): from 65 % (best 20 %, worst 25 %)")
+	check(GameSettings.players_for(35, 13) == 5 and GameSettings.players_for(65, 13) == 9
+		and GameSettings.players_for(0, 13) == 1 and GameSettings.players_for(50, 6) == 3,
+		"what a % comes to in players (web interface): 35 % of 13 = 5, 65 % = 9, 50 % of 6 = 3")
+	arena.installation.set_broken([10, 11, 12, 13])
+	check(st.life_rule("simon", 6).win_percent == 20, "4 tiles broken: 6 of 9 = 67 % - from 65 %")
+	arena.installation.set_broken([])
 	check(st.life_rule("reaction", 13).lose_places == 2, "Reactie: its own table")
+	var old := GameSettings.clean_life_tables({"all": [{"from": 1}, {"from": 5, "win_places": 2}, {"from": 9}]})
+	check(old.all.map(func(r): return r.from_pct) == [0, 35, 66], "a table from before (players): 1 -> 0 %, 5 -> 35 %, 9 -> 66 %")
 	check(st.of_round("reaction").is_empty(), "(no per-game life settings any more)")
 	var items: Array = st.schema().filter(func(g): return g.group == "reaction")[0].items
 	check(not items.any(func(t): return t.key.begins_with("win_") or t.key.begins_with("lose_")),
@@ -66,7 +77,7 @@ func _ready() -> void:
 	var r := ReactionRound.new()
 	r.adapt_rules()
 	check(r.rules.contains("langste reeks treffers +1 leven"), "default: the round's own rules text")
-	r.set_life_rule({"from": 1, "win_places": 2, "win_percent": 0, "lose_places": 1, "lose_percent": 50})
+	r.set_life_rule({"from_pct": 0, "win_places": 2, "win_percent": 0, "lose_places": 1, "lose_percent": 50})
 	r.adapt_rules()
 	print("    ", r.rules.split("\n")[-1])
 	check(r.rules.contains("Na de ronde: de beste 2 plaatsen +1 leven, de laatste 50% van de spelers -1 leven."),
@@ -78,17 +89,17 @@ func _ready() -> void:
 	check(game.picker.gives_lives(SimonRound), "Simon (the table for all) can")
 	check(not game.picker.gives_lives(QuizRound), "the quiz: not (only the streak)")
 
-	print("--- a round with 8 players: the row from 5 ... from 8: best 25 %, worst 50 %; P1 (8) shielded")
+	print("--- a round with 8 players (62 %): the row from 60 %: best 25 %, worst 50 %; P1 (8) shielded")
 	st.apply({"reaction": {"min_age": 10}, "life_tables": {"all": [
-		{"from": 1, "win_places": 1, "lose_places": 1},
-		{"from": 8, "win_percent": 25, "lose_percent": 50},
-		{"from": 10, "win_places": 3, "lose_places": 3}]}})
+		{"from_pct": 0, "win_places": 1, "lose_places": 1},
+		{"from_pct": 60, "win_percent": 25, "lose_percent": 50},
+		{"from_pct": 70, "win_places": 3, "lose_places": 3}]}})
 	game.picker.random_rounds = false
 	game.picker.round_types = [ReactionRound]
 	game.start_game()
 	await _until(func(): return game.state == GameManager.State.PLAYING)
 	var rr: ReactionRound = game.current
-	check(rr.win_percent == 25 and rr.lose_percent == 50, "8 players: the row from 8")
+	check(rr.win_percent == 25 and rr.lose_percent == 50, "8 players: the row from 60 %")
 	check(rr.rules.contains("de beste 25% van de spelers +1 leven"), "... and its rules say so")
 	var streak := {1: 0, 2: 9, 3: 8, 4: 7, 5: 6, 6: 5, 7: 4, 8: 4}   # P7 and P8 equal last
 	for id in streak:

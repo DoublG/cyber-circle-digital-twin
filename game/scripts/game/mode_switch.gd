@@ -4,12 +4,19 @@ extends RefCounted
 ## shows that go with it: it comes to life when the game opens (CLOSED / SETUP
 ## -> OPEN) and is shut down - the players won - when it closes (-> CLOSED).
 ## Closing during a round waits for its end (its scoreboard): close_pending.
+## The closing time (the control server's schedule, retained MQTT `closing`):
+## from the last entry on nobody new joins; at the closing time the control
+## server closes the game (after the round, as by hand).
 
 var game: GameManager
 var power_show := ""              # "boot" / "shutdown" while one plays
 var close_pending := false        # a close was asked during a round: after its scoreboard
 var _closing_now := false         # (the round is over: close for real)
 var _mode_set := false            # (the first mode from the control server: no show, just on / off)
+## The closing time: {phase, close_at, last_entry_at} - phase "none" (no time
+## today), "open" (before the last entry), "last_entry" (no new players),
+## "closing" (the time is there: the game closes after this round).
+var closing := {}
 
 
 func _init(game_node: GameManager) -> void:
@@ -20,9 +27,39 @@ func name() -> String:
 	return GameManager.Mode.keys()[game.mode].to_lower()
 
 
-## Players can register and join only while the game is open.
+## Players can register and join only while the game is open (and not after the last entry).
 func accepting_players() -> bool:
-	return game.mode == GameManager.Mode.OPEN and not close_pending
+	return game.mode == GameManager.Mode.OPEN and not close_pending and not last_entry_passed()
+
+
+## The last entry is over: nobody new joins (the players in it play on).
+func last_entry_passed() -> bool:
+	return str(closing.get("phase", "")) in ["last_entry", "closing"]
+
+
+## The control server's closing time (MQTT `closing`).
+func set_closing(c: Dictionary) -> void:
+	var before := str(closing.get("phase", ""))
+	closing = c
+	var phase := str(c.get("phase", ""))
+	if phase == before:
+		return
+	var at := str(c.get("close_at", ""))
+	if phase == "last_entry":
+		game.log_event("LAATSTE INSTAP VOORBIJ - HET SPEL SLUIT OM %s" % at, Retro.AMBER)
+		game.arena.narrator.say("last_entry", "Er kunnen geen nieuwe spelers meer bij. Het spel sluit om %s." % at,
+			"round")
+	elif phase == "closing":
+		game.log_event("SLUITINGSTIJD %s - HET SPEL SLUIT NA DEZE RONDE" % at, Retro.AMBER)
+	game.screen_wall.refresh_all()         # (the free tiles: GESLOTEN)
+	game.on_players_changed()
+
+
+## The line for the round's rules after the last entry ("" before).
+func closing_line() -> String:
+	if not last_entry_passed():
+		return ""
+	return "Het spel sluit om %s: nieuwe spelers kunnen niet meer meedoen." % str(closing.get("close_at", ""))
 
 
 ## Operator: change the operating mode (see GameManager.Mode).

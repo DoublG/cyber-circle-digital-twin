@@ -473,6 +473,9 @@ func _tile_slot(tile_id: int) -> Control:
 	slot.out_of_service = not arena.installation.is_enabled(tile_id)
 	slot.mode = arena.game.modes.name()
 	var invite: Dictionary = arena.players.pending_info(tile_id)
+	if invite.is_empty() and arena.game.modes.last_entry_passed() and slot.mode in ["open", "paused"]:
+		slot.mode = "closed"                     # (after the last entry: nobody new)
+		slot.closed_text = "GESLOTEN\nhet spel sluit om %s" % str(arena.game.modes.closing.get("close_at", ""))
 	if not invite.is_empty():
 		slot.player = invite.name
 		slot.color = invite.color

@@ -19,6 +19,7 @@ var player := ""                  # "" = free tile
 var out_of_service := false
 var mode := "open"                # the game's mode: "setup" shows the tile number big, "closed" GESLOTEN
 var color := Color.WHITE
+var closed_text := ""             # closed: instead of GESLOTEN (after the last entry: the closing time)
 var tile: CyberTile                # invited: the tile (which icons are pressed)
 var _t := 0.0
 
@@ -47,6 +48,8 @@ func _ready() -> void:
 	_setup.visible = state == &"setup"
 	%OutOfService.visible = state == &"out_of_service"
 	%Closed.visible = state == &"closed"
+	if closed_text != "":
+		%Closed.text = closed_text
 	%Invited.visible = state == &"invited"
 	%Free.visible = state == &"free"
 	_player_name.text = player.to_upper()

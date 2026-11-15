@@ -337,6 +337,17 @@ class MqttLink:
         """The current event's games that are not played (the questions: the game fetches them, db)."""
         self.client.publish(f"{self.prefix}/selection", json.dumps({"games_off": sel["games_off"]}), retain=True)
 
+    def publish_busy(self, busy):
+        """Visitors waiting (the gamemasters' switch, retained): {busy, by}; the game gets harder when full."""
+        self.client.publish(f"{self.prefix}/busy", json.dumps({"busy": bool(busy.get("busy")), "by": busy.get("by", "")}),
+                            retain=True)
+
+    def publish_closing(self, plan):
+        """The closing time (retained): {phase, close_at, last_entry_at} - the game takes no new players
+        from the last entry on; the control server closes it at the time."""
+        self.client.publish(f"{self.prefix}/closing", json.dumps(
+            {k: plan.get(k) for k in ("phase", "close_at", "last_entry_at")}), retain=True)
+
     def set_master(self, master):
         self.master = master
         self.client.publish(f"{self.prefix}/master", json.dumps(master), retain=True)

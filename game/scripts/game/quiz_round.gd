@@ -82,8 +82,8 @@ func _init() -> void:
 func _rules(streak: int) -> String:
 	return ("Druk op je tegel op het icoon van je antwoord (zelfde vorm, kleur en plek).\n"
 		+ "Je mag je antwoord veranderen tot de tijd om is: je laatste keuze telt.\n"
-		+ "Juist: je blijft in het spel. Fout of te laat: je verliest een leven.\n"
-		+ "%d juiste antwoorden op rij = +1 leven!") % streak
+		+ "Juist: je blijft in het spel. Fout of te laat: je verliest een leven."
+		+ ("\n%d juiste antwoorden op rij = +1 leven!" % streak if streak > 0 else ""))
 
 
 func tunables() -> Array:            # (no duration: the round ends after the last question)
@@ -98,7 +98,7 @@ func tunables() -> Array:            # (no duration: the round ends after the la
 
 func prepare(game_manager: GameManager, _tile_ids: Array) -> void:
 	game = game_manager
-	rules = _rules(game.streak_bonus)
+	rules = _rules(game.streak_bonus if game.pressure.streak_ok() else 0)   # (busy: no streak bonus)
 
 
 func _start() -> void:
@@ -158,7 +158,7 @@ func is_protected(id: int) -> bool:
 	if _index < 0 or _index >= _questions.size():
 		return false
 	var age: int = game.arena.players.player_age(id)
-	return age > 0 and age < int(_questions[_index].get("min_age", 0))
+	return (age > 0 and age < int(_questions[_index].get("min_age", 0))) or game.pressure.in_grace(id)
 
 
 func is_finished() -> bool:
@@ -183,7 +183,7 @@ func _next_question() -> void:
 	for id in players:
 		_tile(id).shielded = is_protected(id) and not _tile(id).is_dead
 	var own_time := float(q.get("time", 0))                   # the question's own time (0: the setting)
-	_question_time = own_time / game.tempo if own_time > 0.0 else question_time
+	_question_time = own_time / game.pace() if own_time > 0.0 else question_time
 	_stop_video()
 	_image_file = str(q.get("image", ""))
 	_image = _load_image(_image_file) if q.has("image") else null
@@ -422,7 +422,7 @@ func _attacks(right: Array[int], wrong: Array[int], shielded: Array[int]) -> voi
 func _count_streak(id: int, right: bool) -> void:
 	var n: int = game.streaks.get(id, 0) + 1 if right else 0
 	game.streaks[id] = n
-	if right and n % game.streak_bonus == 0:
+	if right and game.pressure.streak_ok(id) and n % game.streak_bonus == 0:
 		_streak_bonus[id] = true
 		game.screen_wall.popup(id, "%d OP RIJ!" % n, Retro.GOOD, false)
 		game.log_event("%s: %d JUIST OP RIJ - +1 LEVEN" % [game.arena.players.player_name(id).to_upper(), n], Retro.GOOD)

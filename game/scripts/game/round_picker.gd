@@ -143,8 +143,10 @@ func round_chances(after: Script) -> Dictionary:
 		var since := seq.size() - 1 - seq.rfind(t) if t in seq else mini(seq.size() + 1, 10)
 		var weight: float = round_weights.get(type_name(t), 1.0)
 		weight *= 1.0 + drought * maxi(since - 1, 0)
-		if not gives_lives(t):
+		if not gives_lives(t, false):            # (by the life table: busy takes them all at level 3)
 			weight *= lives_factor
+		if not t.new().gives_lives:
+			weight *= game.pressure.quiz_factor()    # busy: more of the rounds that only take lives
 		weight *= age_factor(t, ages)
 		w[t] = weight
 	var total: float = w.values().reduce(func(a, b): return a + b, 0.0)
@@ -154,11 +156,15 @@ func round_chances(after: Script) -> Dictionary:
 
 
 ## The round type can win a life: by nature (not the quiz) and the life
-## table's row for the players now (win_places / win_percent not both 0).
-func gives_lives(t: Script) -> bool:
+## table's row for the players now (win_places / win_percent not both 0);
+## busy: as its level makes it (Pressure.apply_to_rule).
+func gives_lives(t: Script, busy := true) -> bool:
 	if not t.new().gives_lives:
 		return false
-	var rule := game.settings.life_rule(type_name(t), _alive_tiles().size())
+	var n := _alive_tiles().size()
+	var rule := game.settings.life_rule(type_name(t), n)
+	if busy:
+		rule = game.pressure.apply_to_rule(rule, n)
 	return rule.win_places > 0 or rule.win_percent > 0
 
 
@@ -166,13 +172,14 @@ func gives_lives(t: Script) -> bool:
 ## players' lives (average share of their own full hearts - age): low -> fewer, full -> more.
 func _director() -> float:
 	var alive := _alive_tiles()
+	var help := mercy * game.pressure.mercy_factor()   # busy: less help when lives run low (the push stays)
 	if alive.is_empty() or mercy <= 0.0:
 		return 1.0
 	var f: float = alive.map(func(t): return float(t.health) / maxi(t.max_health, 1)) \
 		.reduce(func(a, b): return a + b, 0.0) / alive.size()
 	var tension := clampf((0.7 - f) / 0.45, 0.0, 1.0)    # lives running out (full effect at 1/4)
 	var ease := clampf((f - 0.8) / 0.2, 0.0, 1.0)        # (almost) all hearts full
-	return maxf(0.1, 1.0 - mercy * tension) * (1.0 + mercy * ease)
+	return maxf(0.1, 1.0 - help * tension) * (1.0 + mercy * ease)
 
 
 ## The ages of the players still alive (0 = unknown).

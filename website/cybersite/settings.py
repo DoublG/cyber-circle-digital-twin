@@ -4,7 +4,7 @@ Everything that differs per host comes from environment variables (.env.example)
     DJANGO_DEBUG           1 = development (default 0)
     DJANGO_ALLOWED_HOSTS   comma separated, e.g. cyberchallenge.coderdojobelgium.be
     DJANGO_CSRF_TRUSTED_ORIGINS  e.g. https://cyberchallenge.coderdojobelgium.be
-    DATABASE_URL           default: SQLite next to manage.py (postgres://... in production)
+    DATABASE_URL           PostgreSQL: postgres://user:password@host:5432/db (without: SQLite next to manage.py)
     SYNC_TOKEN             the shared secret of the installation's control server (the sync API)
 """
 import os
@@ -62,7 +62,8 @@ TEMPLATES = [{
 }]
 WSGI_APPLICATION = "cybersite.wsgi.application"
 
-DATABASES = {"default": dj_database_url.config(default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}", conn_max_age=60)}
+DATABASES = {"default": dj_database_url.config(default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}", conn_max_age=60,
+                                            conn_health_checks=True)}   # (a restarted database: reconnect)
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_PASSWORD_VALIDATORS = [

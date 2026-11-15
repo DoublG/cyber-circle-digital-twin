@@ -149,7 +149,14 @@ class Api {
       throw ApiError('Geen verbinding met de server ($base)');
     }
     if (r.statusCode == 404) return null;
-    if (r.statusCode >= 300) throw ApiError('${r.statusCode}: ${r.body}');
+    if (r.statusCode >= 300) {                    // the server's reason ({"detail": "..."}) when it gives one
+      String? detail;
+      try {
+        final j = jsonDecode(r.body);
+        if (j is Map && j['detail'] is String) detail = j['detail'] as String;
+      } catch (_) {}
+      throw ApiError(detail ?? '${r.statusCode}: ${r.body}');
+    }
     return r.body.isEmpty ? null : jsonDecode(r.body);
   }
 
@@ -232,6 +239,9 @@ class Api {
         if (gamesOff != null) 'games_off': gamesOff,
         'questions': {for (final e in questions.entries) '${e.key}': e.value},
       }) as Map<String, dynamic>);
+
+  /// Busy: visitors are waiting (on) or not (off) - switched by this gamemaster.
+  Future<void> setBusy(bool on, int gamemaster) => _send('PUT', '/api/busy', {'busy': on, 'gamemaster': gamemaster});
 
   /// Cancel an invite / remove a player from their place.
   Future<void> leave(int tile) => _send('POST', '/api/tiles/$tile/leave');

@@ -135,10 +135,10 @@ for i in range(4):                           # the 4 icons, as on the tile's top
         time.sleep(0.25)
 check(bool(until(lambda: any(p["tile"] == 1 and p["name"] == name for p in live()["state"]["players"]))),
       "'%s' plays on T01: activated with the emulated tile's icons" % name)
-r = subprocess.run(["docker", "exec", "cybercircle-mysql-1", "sh", "-c",
-                    'mysql -N -ucybercircle -p"$MYSQL_PASSWORD" cybercircle -e "SELECT COUNT(*) FROM players WHERE name = \'%s\'"' % name],
+r = subprocess.run(["docker", "exec", "cybercircle-postgres-1", "psql", "-At", "-U", "cybercircle", "cybercircle",
+                    "-c", "SELECT COUNT(*) FROM players WHERE name = '%s'" % name],
                    capture_output=True, text=True)
-check(r.stdout.strip() == "1", "'%s' is stored in MySQL (players: %s)" % (name, r.stdout.strip() or r.stderr.strip()[-80:]))
+check(r.stdout.strip() == "1", "'%s' is stored in PostgreSQL (players: %s)" % (name, r.stdout.strip() or r.stderr.strip()[-80:]))
 
 print("the game crashes and comes back from the control server's copy (a new container: no local file):")
 lives = next(p["lives"] for p in live()["state"]["players"] if p["tile"] == 1)

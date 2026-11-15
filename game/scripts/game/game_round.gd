@@ -32,7 +32,7 @@ var min_age := 0
 var max_age := 99
 var age_settings := true          # min_age / max_age are operator settings (not in the quiz)
 ## Lives at the end of the round (the rounds with places; life_changes) - the
-## row of the operator's life table for this many players (GameSettings.life_rule,
+## row of the operator's life table for the occupancy (GameSettings.life_rule,
 ## set_life_rule at the intro):
 ##   win_places   the best N places +1 life (1: the 1st place(s); 0: nobody)
 ##   win_percent  instead (> 0): the best N % of the players +1
@@ -44,6 +44,9 @@ var win_places := 1
 var win_percent := 0
 var lose_places := 1
 var lose_percent := 0
+## Busy (Pressure): the rule above is the level's; base_rule the life table's as
+## it is - for the players with a low score (Pressure.eased). {}: the same.
+var base_rule := {}
 var tile_clock := TileClock.new()  # the tiles stamp their presses (Ritme, Zwarte Piet)
 ## Display nodes (RoundMirror): the fields this round type's views read, sent
 ## on change ...
@@ -61,9 +64,10 @@ func tunables() -> Array:
 
 
 ## The life rule for this round (a row of the life table, GameSettings.LIFE_ROW).
-func set_life_rule(rule: Dictionary) -> void:
+func set_life_rule(rule: Dictionary, base := {}) -> void:
 	for k in ["win_places", "win_percent", "lose_places", "lose_percent"]:
 		set(k, int(rule.get(k, get(k))))
+	base_rule = base
 
 
 ## The rounds' rules end with "Na de ronde: ... +1 leven, ... -1 leven." for
@@ -108,11 +112,12 @@ func begin(game_manager: GameManager, tile_ids: Array[int]) -> void:
 	_start()
 
 
-## This player is younger than the round's min_age: the last place costs no life.
+## This player is younger than the round's min_age, or new while it is busy
+## (Pressure.in_grace: just came from the line): the last place costs no life.
 ## (The quiz: per question.)
 func is_protected(id: int) -> bool:
 	var age: int = game.arena.players.player_age(id)
-	return age > 0 and age < min_age
+	return (age > 0 and age < min_age) or game.pressure.in_grace(id)
 
 
 func update(delta: float) -> void:
@@ -225,8 +230,12 @@ func life_changes() -> Dictionary:
 		return out                         # everyone equally far
 	var up := _cut(places, win_places, win_percent, true)
 	var down := _cut(places, lose_places, lose_percent, false)
+	var b := base_rule
+	var up_base := _cut(places, int(b.win_places), int(b.win_percent), true) if not b.is_empty() else up
+	var down_base := _cut(places, int(b.lose_places), int(b.lose_percent), false) if not b.is_empty() else down
 	for id in places:
-		var d := (1 if id in up else 0) - (1 if id in down else 0)
+		var easy: bool = game.pressure.eased(id)          # busy, a low score: the normal rules
+		var d := (1 if id in (up_base if easy else up) else 0) - (1 if id in (down_base if easy else down) else 0)
 		if d < 0 and is_protected(id):
 			var who := game.arena.players.player_name(id).to_upper()
 			game.log_event("%s: SCHILD - GEEN LEVEN KWIJT" % who, Retro.SHIELD)

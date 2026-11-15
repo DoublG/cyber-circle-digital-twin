@@ -157,8 +157,8 @@ def architecture():
         "the ONLY owner of the database (SQLAlchemy)",
         "live view (SSE /api/live) · accessible-page gateway",
         "(internal :8079 – MediaMTX asks who may watch)"], fill="#ffffff")
-    d.box(380, 270, 170, 70, "MariaDB / MySQL", ["players, questions,", "scores, settings"], fill="#ffffff", lsize=11)
-    d.box(570, 270, 160, 70, "Backup timer", ["nightly mysqldump", "(kept 30 days)"], fill="#ffffff", lsize=11)
+    d.box(380, 270, 170, 70, "PostgreSQL", ["players, questions,", "scores, settings"], fill="#ffffff", lsize=11)
+    d.box(570, 270, 160, 70, "Backup timer", ["nightly pg_dump", "(kept 30 days)"], fill="#ffffff", lsize=11)
     d.box(380, 370, 350, 80, "MediaMTX  (only with A11Y_VIDEO=1)", [
         "RTSP :8554 in (the game) → WebRTC :8889,", "udp :8189 out (the phones)"], fill="#ffffff", lsize=11)
     d.box(380, 480, 410, 85, "Mosquitto MQTT broker", [

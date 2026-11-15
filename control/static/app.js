@@ -49,7 +49,9 @@ function renderLive() {
   $("#status").textContent = (s.power_show === "boot" ? "ROBOT START OP"
     : s.power_show === "shutdown" ? "ROBOT WORDT UITGESCHAKELD"
     : s.round && s.state !== "LOBBY" ? `${st}: ${String(s.round).toUpperCase()}` : st)
-    + (s.closing ? " · SLUIT NA DEZE RONDE" : "");
+    + (s.closing ? " · SLUIT NA DEZE RONDE" : "")
+    + (live.closing?.phase === "last_entry" && ["open", "paused"].includes(live.mode)
+      ? ` · LAATSTE INSTAP VOORBIJ – SLUIT OM ${live.closing.close_at}` : "");
   $("#timer").textContent = s.timer || "";
   const master = live.master?.node ? `master: ${live.master.node}` : "geen master gekozen";
   const w = live.website || {};
@@ -62,6 +64,8 @@ function renderLive() {
   $("#mode-buttons").innerHTML = (MODE_ACTIONS[live.mode] || []).map(([m, label, ask]) =>
     `<button data-mode="${m}" ${ask ? `data-ask="${esc(ask)}"` : ""} title="${esc(MODE_TITLES[`${live.mode}>${m}`] || "")}" class="${m === "closed" && live.mode !== "setup" ? "danger" : ""}">${label}</button>`).join("");
   renderAlerts();
+  renderBusy(s);
+  renderClosing();
   renderPlan(s);
   renderRandomizer(s);
   renderEventGames(s);
@@ -85,6 +89,94 @@ function renderAlerts() {
   if (alertsSeen && [...now].some(t => !alertsSeen.has(t))) beep();
   alertsSeen = now;
 }
+
+// busy: visitors waiting (the gamemasters' switch) -> harder while the floor is full (the game's pressure)
+function renderBusy(s) {
+  const b = live.busy || {}, p = s.pressure || {};
+  const lvl = p.level || 0;
+  $("#busy").innerHTML = `<button id="busy-toggle" class="${b.busy ? "active" : ""}">${b.busy ? "🔥 DRUK – zet uit" : "Rustig – zet op DRUK"}</button>
+    <span class="level l${lvl}">niveau ${lvl} / ${p.max ?? 3}</span>
+    <span class="hint">${p.usable ? `vloer ${p.taken} / ${p.usable} bezet${p.full ? " – vol" : ""}` : ""}${
+      b.busy && b.by ? ` · aangezet door ${esc(b.by)}` : ""}${b.busy && !p.full ? " · niet vol: blijft gelijk, zakt daarna" : ""}${
+      !b.busy ? " · rustig: gewone regels" : ""}</span>`;
+}
+$("#busy").onclick = async e => {
+  if (!e.target.closest("#busy-toggle")) return;
+  live.busy = await api("PUT", "/api/busy", { busy: !(live.busy || {}).busy });
+  renderBusy(live.state || {});
+};
+
+// the closing time: today's day of the event, later (+15 / +30 min), the settings
+const DAY_NAMES = ["zo", "ma", "di", "wo", "do", "vr", "za"];
+const dayLabel = d => { const t = new Date(d.date + "T12:00"); return `${DAY_NAMES[t.getDay()]} ${t.getDate()}/${t.getMonth() + 1}`; };
+function renderClosing() {
+  const c = live.closing || {};
+  const left = c.seconds > 0 ? (c.seconds >= 3600 ? `nog ${Math.floor(c.seconds / 3600)} u ${Math.floor(c.seconds % 3600 / 60)} min`
+    : `nog ${Math.ceil(c.seconds / 60)} min`) : "";
+  const next = c.next ? ` · volgende dag: ${dayLabel(c.next)} ${c.next.start}–${c.next.end}` : "";
+  const text = !c.enabled ? "Niet automatisch – het spel sluit als je op ■ Stop spel drukt."
+    : !c.close_at ? `Vandaag geen dag van ${c.event ? esc(c.event) : "het event"}${next}.`
+    : c.phase === "none" ? `Vandaag om ${c.close_at} gesloten – weer open: sluit niet meer vanzelf (of: later).`
+    : `Vandaag ${c.start}–<b>${c.close_at}</b> · laatste instap ${c.last_entry_at}${left ? ` · ${left}` : ""}`
+      + (c.phase === "last_entry" ? ` · <span class="bad">laatste instap voorbij</span>` : "");
+  $("#closing").innerHTML = `<span class="level ${c.phase === "last_entry" ? "l2" : c.enabled && c.close_at ? "l1" : ""}">${
+    c.enabled && c.close_at && c.phase !== "none" ? c.close_at : "–"}</span><span>${text}</span>
+    ${c.enabled && c.close_at ? `<button class="small" data-extend="15">+15 min</button><button class="small" data-extend="30">+30 min</button>` : ""}`;
+}
+$("#closing").onclick = async e => {
+  const b = e.target.closest("button[data-extend]");
+  if (!b) return;
+  const r = await api("POST", "/api/closing/extend", { minutes: Number(b.dataset.extend) });
+  live.closing = r.today;
+  renderClosing();
+};
+async function loadClosing() {
+  const { config } = await api("GET", "/api/closing");
+  $("#closing-enabled").checked = config.enabled;
+  $("#closing-entry").value = config.last_entry;
+}
+$("#closing-save").onclick = async () => {
+  const r = await api("PUT", "/api/closing", { enabled: $("#closing-enabled").checked,
+    last_entry: Number($("#closing-entry").value) });
+  live.closing = r.today;
+  renderClosing();
+  $("#closing-msg").textContent = "Opgeslagen ✓";
+};
+loadClosing();
+
+// an event's days: [{date, start, end}] - one editor for the new event, one for the current one
+function daysEditor(box, days, onSave) {
+  const draw = () => {
+    box.innerHTML = days.map((d, i) => `<div class="row day-row">
+      <input type="date" data-i="${i}" data-k="date" value="${esc(d.date)}">
+      <input type="time" data-i="${i}" data-k="start" value="${esc(d.start)}"> –
+      <input type="time" data-i="${i}" data-k="end" value="${esc(d.end)}">
+      <span class="hint">${d.date ? dayLabel(d) : ""}</span>
+      <button class="small danger" data-del="${i}" title="dag weg">✕</button></div>`).join("")
+      + `<div class="row"><button class="small" data-add>+ dag</button>${onSave ? `<button class="small" data-save>Dagen opslaan</button><span class="hint" data-msg></span>` : ""}</div>`;
+  };
+  box.oninput = e => { const i = e.target.dataset.i; if (i !== undefined) days[Number(i)][e.target.dataset.k] = e.target.value; };
+  box.onchange = e => { if (e.target.dataset.k === "date") draw(); };
+  box.onclick = async e => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    if (b.dataset.del !== undefined) days.splice(Number(b.dataset.del), 1);
+    else if (b.dataset.add !== undefined) {
+      const last = days[days.length - 1];
+      const d = last?.date ? new Date(last.date + "T12:00") : new Date();
+      if (last?.date) d.setDate(d.getDate() + 1);
+      days.push({ date: d.toISOString().slice(0, 10), start: last?.start || "10:00", end: last?.end || "18:00" });
+    } else if (b.dataset.save !== undefined) {
+      await onSave(days);
+      box.querySelector("[data-msg]").textContent = "opgeslagen ✓";
+      return;
+    } else return;
+    draw();
+  };
+  draw();
+  return days;
+}
+let newDays = [];
 
 function fmtAgo(s) {
   return s < 60 ? `${s} s geleden` : `${Math.floor(s / 60)} min geleden`;
@@ -123,7 +215,9 @@ function tileCards(s, from, to) {
         ${p.rank ? `<span class="rank">#${p.rank}</span>` : ""}
         <div class="name">${esc(p.name)}</div>
         <div class="hearts">${"♥".repeat(p.lives)}${"♡".repeat(Math.max(0, (p.max_lives || 0) - p.lives))}</div>
-        <div class="score">${p.survived ?? 0} rondes overleefd${s.ranked && s.state === "PLAYING" ? ` · ${p.points ?? 0} punten deze ronde` : ""}${p.streak >= 2 ? ` · ${p.streak} op rij` : ""}</div>
+        <div class="score">${p.survived ?? 0} rondes overleefd${s.ranked && s.state === "PLAYING" ? ` · ${p.points ?? 0} punten deze ronde` : ""}${p.streak >= 2 ? ` · ${p.streak} op rij` : ""}${
+          (s.pressure?.grace || []).includes(t) ? ` · <span class="good">🛡 nieuw: beschermd</span>`
+          : (s.pressure?.eased || []).includes(t) ? ` · <span class="good">lage score: gewone regels</span>` : ""}</div>
         <div class="actions">
           <button class="small" data-tile="${t}" data-points="1">+1</button>
           <button class="small" data-tile="${t}" data-points="5">+5</button>
@@ -974,9 +1068,15 @@ async function loadRanking() {
   const when = t => t ? esc(String(t).slice(0, 16)) : "–";
   $("#event-current").innerHTML = cur ? `<b>Huidig event: ${esc(cur.name)}</b>
     <span class="hint">sinds ${when(cur.started_at)} · ${cur.games} spellen · ${cur.players} spelers · ${cur.plays} keer gespeeld</span>` : "";
+  if (cur) daysEditor($("#event-days-current"), structuredClone(cur.days || []), async days => {
+    await api("PUT", `/api/events/${cur.id}`, { days });
+    loadRanking();
+  });
+  if (!$("#event-days-new").innerHTML) daysEditor($("#event-days-new"), newDays);
+  const daysText = e => (e.days || []).map(d => `${dayLabel(d)} ${d.start}–${d.end}`).join(", ") || "–";
   $("#ranking-event").textContent = cur ? `– ${cur.name}` : "";
   $("#events tbody").innerHTML = events.map(e => `<tr class="${e.current ? "current" : ""}"><td>${esc(e.name)}${e.current ? " <span class=\"good\">(huidig)</span>" : ""}</td>
-    <td>${when(e.started_at)}</td><td>${e.current ? "–" : when(e.ended_at)}</td><td>${e.games}</td><td>${e.players}</td><td>${e.plays}</td><td>${e.best}</td>
+    <td>${daysText(e)}</td><td>${when(e.started_at)}</td><td>${e.current ? "–" : when(e.ended_at)}</td><td>${e.games}</td><td>${e.players}</td><td>${e.plays}</td><td>${e.best}</td>
     <td><a class="button-like" href="/api/events/${e.id}/export" download>⬇ download (zip)</a></td></tr>`).join("");
   $("#ranking tbody").innerHTML = rows.map((r, i) =>
     `<tr><td>#${r.rank ?? i + 1}</td><td>${esc(r.name)}</td><td>${r.best}</td><td>${r.lives ?? "–"}</td><td>${r.points ?? "–"}</td><td>${r.plays}</td></tr>`).join("")
@@ -987,8 +1087,10 @@ $("#event-new").onclick = async () => {
   if (!name) { $("#event-msg").textContent = "geef het nieuwe event een naam"; return; }
   const cur = (await api("GET", "/api/events")).find(e => e.current);
   if (!confirm(`Event "${cur ? cur.name : ""}" afsluiten en "${name}" starten?\nDe ranglijst begint leeg. Het oude event blijft bewaard (en als zip in de backupmap).`)) return;
-  const r = await api("POST", "/api/events", { name });
+  const r = await api("POST", "/api/events", { name, days: newDays.filter(d => d.date) });
   $("#event-name").value = "";
+  newDays.length = 0;
+  daysEditor($("#event-days-new"), newDays);
   $("#event-msg").textContent = r.backup ? `gestart – backup: ${r.backup}` : "gestart";
   loadRanking();
 };
@@ -999,21 +1101,38 @@ connectLive();
 const UNITS = { s: "s", ms: "ms", x: "×", "%": "%" };
 
 // ---------------------------------------------------------------- the life table (Instellingen)
-// By the number of players in the round: the row with the highest "vanaf" at or
-// below it applies. One table for every game, a game can have its own.
+// By the occupancy: the round's players in % of the floor tiles that can be used
+// now (installed, in service, not broken); the row with the highest "vanaf %" at
+// or below it applies - shown in players for the tiles there are now. One table
+// for every game, a game can have its own.
 let lifeEdit = null, lifeInfo = null;
-const LIFE_COLS = [["from", "vanaf spelers"], ["win_places", "+1: beste plaatsen"], ["win_percent", "+1: beste %"],
+const LIFE_COLS = [["from_pct", "vanaf bezetting %"], ["win_places", "+1: beste plaatsen"], ["win_percent", "+1: beste %"],
   ["lose_places", "−1: laatste plaatsen"], ["lose_percent", "−1: slechtste %"]];
+// the usable floor tiles now (the game's count when it runs, else the control server's)
+const lifeUsable = () => live.state?.pressure?.usable || lifeInfo?.usable || FLOOR_TILES;
+// the fewest players that make pct % (as the game's GameSettings.players_for)
+const playersFor = (pct, usable) => Math.max(1, Math.ceil(pct * usable / 100 - 0.0001));
+function lifePlayers(rows, i, usable) {
+  const lo = playersFor(rows[i].from_pct, usable);
+  const hi = rows[i + 1] ? playersFor(rows[i + 1].from_pct, usable) - 1 : null;
+  return hi === null ? `${lo}+ spelers` : hi < lo ? "– (nooit)" : hi === lo ? `${lo} speler${lo > 1 ? "s" : ""}` : `${lo}–${hi} spelers`;
+}
 
 function renderLife() {
-  const table = key => `<table class="life-table" data-life="${key}"><tr>${LIFE_COLS.map(([, h]) => `<th>${h}</th>`).join("")}<th></th></tr>` +
-    lifeEdit[key].map((r, i) => `<tr>${LIFE_COLS.map(([k]) => {
+  const usable = lifeUsable();
+  const table = key => `<table class="life-table" data-life="${key}"><tr><th>${LIFE_COLS[0][1]}</th><th>= nu</th>${
+      LIFE_COLS.slice(1).map(([, h]) => `<th>${h}</th>`).join("")}<th></th></tr>` +
+    lifeEdit[key].map((r, i) => `<tr>${LIFE_COLS.map(([k], c) => {
       const [lo, hi] = lifeInfo.limits[k];
-      return `<td><input type="number" min="${lo}" max="${hi}" step="1" data-row="${i}" data-k="${k}" value="${r[k]}"></td>`;
+      return `<td><input type="number" min="${lo}" max="${hi}" step="${c ? 1 : 5}" data-row="${i}" data-k="${k}" value="${r[k]}"></td>`
+        + (c ? "" : `<td class="calc" data-calc="${i}">${lifePlayers(lifeEdit[key], i, usable)}</td>`);
     }).join("")}<td>${lifeEdit[key].length > 1 ? `<button class="small danger" data-del="${i}" title="rij weg">✕</button>` : ""}</td></tr>`).join("") +
     `</table><button class="small" data-add="${key}">+ rij</button> <span class="hint">${esc(lifeSummary(lifeEdit[key]))}</span>`;
-  $("#life-tables").innerHTML = `<fieldset><legend>Levens na een ronde, per aantal spelers</legend>
-    <p class="hint">De rij met de hoogste <b>vanaf spelers</b> die past bij het aantal spelers in de ronde geldt.
+  $("#life-tables").innerHTML = `<fieldset><legend>Levens na een ronde, naar bezetting</legend>
+    <p class="hint"><b>Bezetting</b>: de spelers in de ronde (ook de mobiele) in % van de vloertegels die nu bruikbaar
+      zijn – nu <b>${usable}</b> (geplaatst, in dienst, niet kapot); de kolom <b>= nu</b> rekent het om in spelers.
+      Zo past dezelfde tabel bij een halve installatie of een dag met een kapotte tegel.
+      De rij met de hoogste <b>vanaf %</b> die past geldt.
       Een % groter dan 0 gaat voor de plaatsen; 0 plaatsen = niemand. Gelijke spelers krijgen hetzelfde; het schild
       (jonger dan de leeftijd van het spel) houdt een −1 tegen. De quiz heeft zijn eigen regel (fout = −1).</p>
     <h4>Alle spellen</h4>${table("all")}
@@ -1024,7 +1143,8 @@ function renderLife() {
 function lifeSummary(rows) {
   const side = (n, pct, best) => pct > 0 ? `${best ? "beste" : "slechtste"} ${pct}%`
     : n === 1 ? (best ? "1e plaats" : "laatste plaats") : n > 1 ? `${best ? "beste" : "laatste"} ${n} plaatsen` : "niemand";
-  return rows.map((r, i) => `${r.from}${rows[i + 1] ? `–${rows[i + 1].from - 1}` : "+"} spelers: +1 ${side(r.win_places, r.win_percent, true)}, −1 ${side(r.lose_places, r.lose_percent, false)}`).join(" · ");
+  const usable = lifeUsable();
+  return rows.map((r, i) => `${r.from_pct}%${rows[i + 1] ? `–${rows[i + 1].from_pct - 1}%` : "+"} (${lifePlayers(rows, i, usable)}): +1 ${side(r.win_places, r.win_percent, true)}, −1 ${side(r.lose_places, r.lose_percent, false)}`).join(" · ");
 }
 
 $("#life-tables").oninput = e => {
@@ -1033,11 +1153,13 @@ $("#life-tables").oninput = e => {
   const key = i.closest("table").dataset.life;
   lifeEdit[key][Number(i.dataset.row)][i.dataset.k] = Number(i.value);
   i.closest("table").nextElementSibling.nextElementSibling.textContent = lifeSummary(lifeEdit[key]);
+  i.closest("table").querySelectorAll("[data-calc]").forEach(td =>
+    td.textContent = lifePlayers(lifeEdit[key], Number(td.dataset.calc), lifeUsable()));
 };
 $("#life-tables").onchange = e => {
   if (e.target.matches("input[data-k]")) {           // sorted again by "vanaf" when a value is done
     const key = e.target.closest("table").dataset.life;
-    lifeEdit[key].sort((a, b) => a.from - b.from);
+    lifeEdit[key].sort((a, b) => a.from_pct - b.from_pct);
     renderLife();
   }
 };
@@ -1049,15 +1171,52 @@ $("#life-tables").onclick = e => {
     if (!b.checked) delete lifeEdit[b.dataset.own];
   } else if (b.dataset.add) {
     const rows = lifeEdit[b.dataset.add], last = rows[rows.length - 1];
-    rows.push({ ...last, from: Math.min(lifeInfo.limits.from[1], last.from + 4) });
+    rows.push({ ...last, from_pct: Math.min(lifeInfo.limits.from_pct[1], last.from_pct + 25) });
   } else if (b.dataset.del) {
     lifeEdit[b.closest("table").dataset.life].splice(Number(b.dataset.del), 1);
   } else return;
   renderLife();
 };
 
+// ---------------------------------------------------------------- busy: what each level does (Instellingen)
+let pressureEdit = null, pressureInfo = null;
+const PRESSURE_COLS = [["mercy", "hulp bij weinig levens", "%"], ["win", "leven winnen", "aan"],
+  ["streak", "bonus juist op rij", "aan"], ["lose_min", "−1: minstens", "% spelers"],
+  ["tempo", "snelheid", "%"], ["quiz", "kans quiz", "%"]];
+
+function renderPressure() {
+  $("#pressure-levels").innerHTML = `<fieldset><legend>Drukte: wat elk niveau doet</legend>
+    <p class="hint">Staat <b>Drukte</b> aan (Spel, of de gamemaster-app) en is de vloer vol, dan gaat het spel elke ronde
+      een niveau hoger. <b>Hulp</b>: hoeveel de randomizer nog helpt als de levens op raken (100% = gewoon).
+      <b>−1: minstens</b>: zoveel % van de spelers verliest een leven (meer als de tabel hierboven al meer zegt).
+      <b>Snelheid</b> 120% = 1,2× zo snel (alle tijden korter). <b>Kans quiz</b>: de rondes die alleen levens kosten.
+      Het schild van de leeftijden blijft; een nieuwe speler is de eerste ronde(s) beschermd (Instellingen › Spel › Druk).</p>
+    <table class="life-table"><tr><th>niveau</th>${PRESSURE_COLS.map(([, h, u]) => `<th>${h}${u === "aan" ? "" : ` (${u})`}</th>`).join("")}</tr>` +
+    pressureEdit.map((r, i) => `<tr><td><b>${i + 1}</b></td>${PRESSURE_COLS.map(([k, , u]) => {
+      const [lo, hi] = pressureInfo.limits[k];
+      return u === "aan" ? `<td><input type="checkbox" data-row="${i}" data-pk="${k}" ${r[k] ? "checked" : ""}></td>`
+        : `<td><input type="number" min="${lo}" max="${hi}" step="5" data-row="${i}" data-pk="${k}" value="${r[k]}"></td>`;
+    }).join("")}</tr>`).join("") + `</table>
+    <button class="small" id="pressure-default">standaard</button></fieldset>`;
+}
+$("#pressure-levels").oninput = e => {
+  const i = e.target.closest("input[data-pk]");
+  if (!i) return;
+  const [lo, hi] = pressureInfo.limits[i.dataset.pk];
+  pressureEdit[Number(i.dataset.row)][i.dataset.pk] = i.type === "checkbox" ? (i.checked ? 1 : 0)
+    : Math.min(hi, Math.max(lo, Math.round(Number(i.value))));
+};
+$("#pressure-levels").onclick = e => {
+  if (!e.target.closest("#pressure-default")) return;
+  pressureEdit = structuredClone(pressureInfo.default);
+  renderPressure();
+};
+
 async function loadSettings() {
-  const { schema, values, life } = await api("GET", "/api/settings");
+  const { schema, values, life, pressure } = await api("GET", "/api/settings");
+  pressureInfo = pressure;
+  pressureEdit = structuredClone(values.pressure_levels || pressure.default);
+  renderPressure();
   lifeInfo = life;
   lifeEdit = structuredClone(values.life_tables || {});
   if (!lifeEdit.all) lifeEdit.all = [{ ...life.default }];
@@ -1111,6 +1270,7 @@ $("#settings-save").onclick = async () => {
   const plain = life.all?.length === 1 && Object.keys(life).length === 1
     && Object.entries(lifeInfo.default).every(([k, v]) => life.all[0][k] === v);
   if (!plain) values.life_tables = life;             // (only the default: nothing to save)
+  if (JSON.stringify(pressureEdit) !== JSON.stringify(pressureInfo.default)) values.pressure_levels = pressureEdit;
   await api("PUT", "/api/settings", values);
   await loadSettings();
   $("#settings-msg").textContent = "Opgeslagen ✓";

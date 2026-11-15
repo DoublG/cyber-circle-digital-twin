@@ -113,4 +113,25 @@ void main() {
     expect(s.freeFloor, 11);
     expect(s.brokenTexts, ['T03 KAPOT', 'T05 KAPOT - Erik speelt erop']);
   });
+
+  test('busy: the game\'s pressure in its state, the bar\'s text', () {
+    final calm = GameState.fromJson({'state': 'LOBBY'});
+    expect(calm.pressure.busy, false);
+    expect(calm.pressure.text, 'RUSTIG · gewone regels');
+    final s = GameState.fromJson({'pressure': {'busy': true, 'by': 'Erik', 'level': 2, 'max': 3, 'full': true,
+      'taken': 13, 'usable': 13}});
+    expect(s.pressure.level, 2);
+    expect(s.pressure.by, 'Erik');
+    expect(s.pressure.text, 'DRUK · niveau 2 / 3 · vloer 13/13 vol');
+  });
+
+  test('the closing time: the banner after the last entry', () {
+    expect(GameState.fromJson({'closing': false, 'closing_time': {}}).closing.banner, '');
+    final open = GameState.fromJson({'closing_time': {'phase': 'open', 'close_at': '18:00', 'last_entry_at': '17:45'}});
+    expect(open.closing.lastEntryPassed, false);
+    expect(open.closing.banner, '');
+    final last = GameState.fromJson({'closing_time': {'phase': 'last_entry', 'close_at': '18:00', 'last_entry_at': '17:45'}});
+    expect(last.closing.lastEntryPassed, true);
+    expect(last.closing.banner, 'LAATSTE INSTAP VOORBIJ - het spel sluit om 18:00');
+  });
 }

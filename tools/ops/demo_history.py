@@ -48,6 +48,8 @@ def _db_now(d):
         db_now = con.execute(dbm.select(dbm.func.now())).scalar()
     if isinstance(db_now, str):
         db_now = datetime.datetime.fromisoformat(db_now)
+    if db_now.tzinfo:                               # (PostgreSQL: in its session's time zone, as it writes it)
+        db_now = db_now.replace(tzinfo=None)
     shift = datetime.timedelta(hours=round((db_now - local).total_seconds() / 3600))
     return local + shift, shift
 
@@ -66,7 +68,7 @@ def _when(rng, now, days):
 def seed(db_path, players=300, seed_value=7, days=2, event=""):
     rng = random.Random(seed_value)
     d = dbm.Database(db_path)
-    now, shift = _db_now(d)                         # (the database's clock: SQLite UTC, MySQL local)
+    now, shift = _db_now(d)                         # (the database's clock: SQLite UTC, PostgreSQL local)
     now -= shift                                    # (the opening hours: local time; written + shift)
     eid = d.current_event_id()                      # (the history: the current event's)
     first_day = (now - datetime.timedelta(days=days - 1)).replace(hour=OPEN, minute=0, second=0)

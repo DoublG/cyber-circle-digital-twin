@@ -3,8 +3,8 @@
 #   sudo systemctl status cybercircle-control      journalctl -u cybercircle-control -f
 [Unit]
 Description=Cyber Circle control server
-After=network-online.target mariadb.service mosquitto.service
-Wants=network-online.target mariadb.service mosquitto.service
+After=network-online.target postgresql.service mosquitto.service
+Wants=network-online.target postgresql.service mosquitto.service
 
 [Service]
 User=@CC_USER@

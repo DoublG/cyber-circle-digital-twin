@@ -67,6 +67,54 @@ class Invite {
   final Color color;
 }
 
+/// Busy (the game's "pressure"): visitors waiting - the gamemasters' switch;
+/// while the floor is full the game gets a level harder per round (0 .. max).
+class Pressure {
+  const Pressure({this.busy = false, this.by = '', this.level = 0, this.max = 3, this.full = false,
+      this.taken = 0, this.usable = 0});
+  final bool busy;
+  final String by;               // who switched it on
+  final int level;
+  final int max;
+  final bool full;               // the usable floor tiles taken
+  final int taken;
+  final int usable;
+
+  factory Pressure.fromJson(Map<String, dynamic>? j) {
+    int i(dynamic v) => v is num ? v.toInt() : 0;
+    if (j == null) return const Pressure();
+    return Pressure(busy: j['busy'] == true, by: '${j['by'] ?? ''}', level: i(j['level']),
+        max: j['max'] is num ? i(j['max']) : 3, full: j['full'] == true, taken: i(j['taken']), usable: i(j['usable']));
+  }
+
+  /// The bar in the app: "DRUK · niveau 2 / 3 · vloer 13/13 vol" / "RUSTIG".
+  String get text => busy
+      ? 'DRUK · niveau $level / $max${usable > 0 ? ' · vloer $taken/$usable${full ? ' vol' : ''}' : ''}'
+      : 'RUSTIG · gewone regels';
+}
+
+/// The closing time (the control server's schedule, in the game's state):
+/// after the last entry nobody new can join; at the time the game closes.
+class Closing {
+  const Closing({this.phase = 'none', this.closeAt = '', this.lastEntryAt = ''});
+  final String phase;            // none / open / last_entry / closing
+  final String closeAt;          // "18:00"
+  final String lastEntryAt;
+
+  factory Closing.fromJson(Map<String, dynamic>? j) => j == null
+      ? const Closing()
+      : Closing(phase: '${j['phase'] ?? 'none'}', closeAt: '${j['close_at'] ?? ''}',
+          lastEntryAt: '${j['last_entry_at'] ?? ''}');
+
+  /// Nobody new can join any more.
+  bool get lastEntryPassed => phase == 'last_entry' || phase == 'closing';
+
+  /// The banner: "" while new players can still join.
+  String get banner => phase == 'last_entry'
+      ? 'LAATSTE INSTAP VOORBIJ - het spel sluit om $closeAt'
+      : phase == 'closing' ? 'SLUITINGSTIJD $closeAt - het spel sluit na deze ronde' : '';
+}
+
 class GameState {
   GameState({
     this.state = '',
@@ -82,6 +130,8 @@ class GameState {
     Map<int, int>? dying,
     Set<int>? installed,
     Set<int>? broken,
+    this.pressure = const Pressure(),
+    this.closing = const Closing(),
   })  : broken = broken ?? {},
         installed = installed ?? {for (var t = 1; t <= places; t++) t},
         players = players ?? {},
@@ -105,6 +155,10 @@ class GameState {
   /// Places whose physical tile is broken (gone: its last will, or no more
   /// hellos - the control server's alerts): nobody new goes there.
   final Set<int> broken;
+  /// Busy: visitors waiting (the switch) and how hard the game is now.
+  final Pressure pressure;
+  /// The closing time today.
+  final Closing closing;
   /// The places of this installation (a partial one: e.g. half the floor, or
   /// only the mobile places); the others are not shown and never used.
   final Set<int> installed;
@@ -135,6 +189,9 @@ class GameState {
       pending: pending,
       disabled: {for (final d in (j['disabled'] as List? ?? [])) i(d)},
       broken: {for (final d in (j['broken'] as List? ?? [])) i(d)},
+      pressure: Pressure.fromJson(j['pressure'] as Map<String, dynamic>?),
+      closing: Closing.fromJson(j['closing_time'] is Map<String, dynamic> && (j['closing_time'] as Map).isNotEmpty
+          ? j['closing_time'] as Map<String, dynamic> : null),
       installed: j['installed'] is List ? {for (final d in j['installed'] as List) i(d)} : null,
       dying: {
         for (final d in (j['dying'] as List? ?? []))

@@ -22,6 +22,12 @@ fi
 owner=$(stat -c %U "$CC_ROOT")
 chown -R "$owner:$owner" "$CC_ROOT"
 
+if systemctl list-unit-files cybercircle-control.service >/dev/null 2>&1 && [ -d "$CC_ROOT/control/.venv" ] \
+        && ! command -v pg_dump >/dev/null 2>&1; then     # (the database moved: MariaDB -> PostgreSQL, 2026-11)
+    echo "== the database is now PostgreSQL: run  sudo $CC_ROOT/deploy/install/install_server.sh"
+    echo "   (it installs PostgreSQL and copies the MariaDB data over; the control server keeps running until then)"
+    exit 1
+fi
 if systemctl list-unit-files cybercircle-control.service >/dev/null 2>&1 && [ -d "$CC_ROOT/control/.venv" ]; then
     echo "== control server"
     sudo -u "$owner" "$CC_ROOT/control/.venv/bin/pip" install -q -r "$CC_ROOT/control/requirements.txt"

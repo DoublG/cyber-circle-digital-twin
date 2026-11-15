@@ -56,10 +56,13 @@ static func dress(round: GameRound, type: String) -> void:
 ## The defaults (for the web interface: shown when a text is empty).
 static func defaults(game: GameManager) -> Dictionary:
 	var out := {"cta": "\n".join(Retro.CALLS_TO_ACTION), "join_steps": JOIN_STEPS, "join_text": JOIN_TEXT}
+	var level: int = game.pressure.level
+	game.pressure.level = 0                    # (the defaults: as when it is calm - busy changes the quiz's text)
 	for t in RoundPicker.ROUND_TYPES:
 		var r: GameRound = t.new()
 		r.prepare(game, [])
 		var type := RoundPicker.type_name(t)
 		out["title." + type] = r.title
 		out["rules." + type] = r.rules
+	game.pressure.level = level
 	return out

@@ -1,8 +1,9 @@
 """The Cyber Circle Challenge database. The control server is its only owner: the game
 master, the app and the web interface all go through the control server's
-HTTP API. SQLAlchemy (Core): MySQL / MariaDB on the installation
-(mysql+pymysql://user:password@host/cybercircle), or a SQLite file (a plain
-path: tests, trying things out). The tables match ../game/data/schema.sql
+HTTP API. SQLAlchemy (Core): PostgreSQL on the installation
+(postgresql+psycopg://user:password@host/cybercircle), or a SQLite file (a plain
+path: tests, trying things out). An old MySQL / MariaDB database: copied over
+with tools/ops/migrate_db.py. The tables match ../game/data/schema.sql
 (the game's standalone SQLite mode and tools/ops/cybercircle_db.py)."""
 
 import datetime
@@ -21,7 +22,6 @@ FLOOR_TILES = 13                          # places around the robot
 PLACES = 18                               # + 5 mobile players (M1-M5 = 14-18)
 
 meta = MetaData()
-# (MySQL: an indexed / unique column must be a VARCHAR, not TEXT)
 players = Table(
     "players", meta,
     Column("id", Integer, primary_key=True, autoincrement=True),
@@ -57,7 +57,8 @@ events = Table(                                                # an event (a fai
     Column("id", Integer, primary_key=True, autoincrement=True),
     Column("name", String(255), nullable=False),
     Column("started_at", DateTime, nullable=False, server_default=func.now()),
-    Column("ended_at", DateTime))                              # NULL: the current one
+    Column("ended_at", DateTime),                              # NULL: the current one
+    Column("days", Text))                                      # JSON [{date, start, end}]: its opening hours
 games = Table(
     "games", meta,
     Column("id", Integer, primary_key=True, autoincrement=True),
@@ -102,12 +103,12 @@ gamemasters_t = Table(
 settings_t = Table(
     "settings", meta,
     Column("key", String(191), primary_key=True),              # e.g. "mode": setup / closed / open / paused
-    Column("value", Text(16_000_000), nullable=False))           # (MySQL: MEDIUMTEXT - the game's checkpoint)
+    Column("value", Text, nullable=False))                      # (also the game's checkpoint: large)
 
 # columns added after the first installations: (table, column, SQL type) - added when missing
 LATER_COLUMNS = (("questions", "image", "VARCHAR(255) NOT NULL DEFAULT ''"),
                  ("players", "card", "VARCHAR(191)"), ("players", "email", "VARCHAR(255)"),
-                 ("games", "event_id", "INTEGER"))
+                 ("games", "event_id", "INTEGER"), ("events", "days", "TEXT"))
 
 
 def engine_url(db):
@@ -140,11 +141,21 @@ def clean_name(name):
         raise ValueError("empty name")
     return s
 
+def event_days(raw):
+    """An event's days from the database: [{date, start, end}] (sorted; bad entries left out)."""
+    try:
+        days = json.loads(raw) if raw else []
+    except ValueError:
+        return []
+    return sorted((d for d in days if isinstance(d, dict) and {"date", "start", "end"} <= set(d)),
+                  key=lambda d: d["date"])
+
+
 class Database:
     def __init__(self, db):
         self.url = engine_url(db)
         sqlite = self.url.startswith("sqlite")
-        # MySQL closes idle connections: check them before use, renew them hourly
+        # a server restarted / idle connections closed: check them before use, renew them hourly
         self.engine = create_engine(self.url, pool_pre_ping=True, **({} if sqlite else {"pool_recycle": 3600}))
         if sqlite:
             @event.listens_for(self.engine, "connect")
@@ -152,16 +163,11 @@ class Database:
                 con.execute("PRAGMA journal_mode = WAL")
                 con.execute("PRAGMA foreign_keys = ON")
         meta.create_all(self.engine)
-        cols = {t: {c["name"] for c in inspect(self.engine).get_columns(t)} for t in ("questions", "players", "games")}
+        cols = {t: {c["name"] for c in inspect(self.engine).get_columns(t)} for t in ("questions", "players", "games", "events")}
         with self.engine.begin() as con:
             for table, column, sqltype in LATER_COLUMNS:       # databases from before these columns
                 if column not in cols[table]:
                     con.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {sqltype}"))
-        if self.engine.dialect.name == "mysql":
-            vtype = next(c["type"] for c in inspect(self.engine).get_columns("settings") if c["name"] == "value")
-            if type(vtype).__name__ == "TEXT":          # (a database from before the checkpoint)
-                with self.engine.begin() as con:
-                    con.execute(text("ALTER TABLE settings MODIFY value MEDIUMTEXT NOT NULL"))
         if "card" not in cols["players"]:          # (and its index, before the QR cards)
             with self.engine.begin() as con:
                 con.execute(text("CREATE UNIQUE INDEX players_card ON players (card)"))
@@ -285,7 +291,7 @@ class Database:
         return self._all(
             select(p.id, p.name, p.color, p.age, p.card, func.max(r.score).label("best"), func.count(r.id).label("plays"))
             .select_from(players.outerjoin(results, r.player_id == p.id))
-            .where(p.name.like(f"%{search}%"))
+            .where(p.name.ilike(f"%{search}%"))           # (any case, as before)
             .group_by(p.id, p.name, p.color, p.age, p.card).order_by(p.id.desc()).limit(limit))
 
     # ------------------------------------------------------------ questions
@@ -391,8 +397,8 @@ class Database:
             n_games = con.execute(select(func.count()).select_from(games).where(g.event_id == ev["id"])).scalar()
             row = con.execute(select(func.count(func.distinct(r.player_id)), func.count(r.id), func.max(r.score))
                               .where(r.game_id.in_(ids))).one()
-        return {**ev, "games": n_games, "players": row[0], "plays": row[1], "best": row[2] or 0,
-                "current": ev["id"] == self.current_event_id()}
+        return {**ev, "days": event_days(ev.get("days")), "games": n_games, "players": row[0], "plays": row[1],
+                "best": row[2] or 0, "current": ev["id"] == self.current_event_id()}
 
     def event(self, event_id=None):
         ev = self._one(select(events).where(events.c.id == (event_id or self.current_event_id())))
@@ -402,16 +408,23 @@ class Database:
         """Every event, the newest first, with its numbers (games, players, plays, best)."""
         return [self._event_stats(e) for e in self._all(select(events).order_by(events.c.id.desc()))]
 
-    def new_event(self, name):
+    def new_event(self, name, days=None):
         """Closes the current event (it is kept, with all its games) and starts a new
-        one: from now on the ranking starts empty. Returns (the old id, the new id)."""
+        one: from now on the ranking starts empty. days: its opening hours
+        [{date, start, end}]. Returns (the old id, the new id)."""
         old = self.current_event_id()
         with self.engine.begin() as con:
             if old:
                 con.execute(update(events).where(events.c.id == old).values(ended_at=func.now()))
-            eid = con.execute(insert(events).values(name=name)).inserted_primary_key[0]
+            eid = con.execute(insert(events).values(name=name, days=json.dumps(days or []))).inserted_primary_key[0]
         self.set_setting("event_id", str(eid))
         return old, eid
+
+    def update_event(self, event_id, name=None, days=None):
+        """An event's name and / or its days [{date: "YYYY-MM-DD", start: "HH:MM", end: "HH:MM"}]."""
+        values = {**({"name": name} if name else {}), **({"days": json.dumps(days)} if days is not None else {})}
+        if values:
+            self._write(update(events).where(events.c.id == event_id).values(**values))
 
     def export_event(self, event_id):
         """Everything of one event (for marketing, a backup): the event, the players
