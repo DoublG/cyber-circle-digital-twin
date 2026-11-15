@@ -81,7 +81,9 @@ class GameState {
     Set<int>? disabled,
     Map<int, int>? dying,
     Set<int>? installed,
-  })  : installed = installed ?? {for (var t = 1; t <= places; t++) t},
+    Set<int>? broken,
+  })  : broken = broken ?? {},
+        installed = installed ?? {for (var t = 1; t <= places; t++) t},
         players = players ?? {},
         pending = pending ?? {},
         disabled = disabled ?? {},
@@ -100,6 +102,9 @@ class GameState {
   /// Exterminated players' tiles: seconds until the tile is free again
   /// (-1: the robot has not fired yet).
   final Map<int, int> dying;
+  /// Places whose physical tile is broken (gone: its last will, or no more
+  /// hellos - the control server's alerts): nobody new goes there.
+  final Set<int> broken;
   /// The places of this installation (a partial one: e.g. half the floor, or
   /// only the mobile places); the others are not shown and never used.
   final Set<int> installed;
@@ -129,6 +134,7 @@ class GameState {
       players: players,
       pending: pending,
       disabled: {for (final d in (j['disabled'] as List? ?? [])) i(d)},
+      broken: {for (final d in (j['broken'] as List? ?? [])) i(d)},
       installed: j['installed'] is List ? {for (final d in j['installed'] as List) i(d)} : null,
       dying: {
         for (final d in (j['dying'] as List? ?? []))
@@ -141,10 +147,19 @@ class GameState {
     if (disabled.contains(tile) || !installed.contains(tile)) return PlaceStatus.disabled;
     if (players.containsKey(tile)) return PlaceStatus.playing;
     if (pending.containsKey(tile)) return PlaceStatus.pending;
+    if (broken.contains(tile)) return PlaceStatus.disabled;     // (free, but nobody can go there: KAPOT)
     return PlaceStatus.free;
   }
 
   bool isMobile(int tile) => tile > floorTiles;
+
+  bool isBroken(int tile) => broken.contains(tile) && installed.contains(tile);
+
+  /// The banner: "T05 KAPOT (Erik speelt erop)", one per broken place.
+  List<String> get brokenTexts => [
+        for (final t in broken.where(isBroken).toList()..sort())
+          '${label(t)} KAPOT${players.containsKey(t) ? ' - ${players[t]!.name} speelt erop' : pending.containsKey(t) ? ' - ${pending[t]!.name} wacht erop' : ''}'
+      ];
 
   /// The tile is in an extermination (comes free soon).
   bool isDying(int tile) => dying.containsKey(tile);

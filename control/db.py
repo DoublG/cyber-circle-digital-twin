@@ -8,6 +8,7 @@ path: tests, trying things out). The tables match ../game/data/schema.sql
 import datetime
 import json
 import os
+import unicodedata
 import uuid
 
 from sqlalchemy import (Column, DateTime, Float, ForeignKey, Index, Integer, MetaData, String, Table, Text,
@@ -120,6 +121,25 @@ def _plain(row):
             for k, v in row._mapping.items()}
 
 
+
+NAME_MAX = 40          # characters (the screens cut it shorter where they must)
+_KEEP = {"\u200d"}     # zero-width joiner: emoji made of several (👩‍💻)
+
+
+def clean_name(name):
+    """A visitor's name, any script (Zoë, Иван, 李明, محمد, 😀): composed the same
+    way however it was typed (NFC: "ë" is one character, so capitals and length
+    work), without invisible / control characters (a pasted line break, a
+    right-to-left mark), spaces collapsed, at most NAME_MAX characters.
+    ValueError when nothing is left."""
+    s = unicodedata.normalize("NFC", str(name or ""))
+    s = "".join(c if not c.isspace() else " " for c in s
+                if c in _KEEP or c.isspace() or unicodedata.category(c) not in ("Cc", "Cf", "Co", "Cs", "Cn"))
+    s = " ".join(s.split())[:NAME_MAX].strip()
+    if not s:
+        raise ValueError("empty name")
+    return s
+
 class Database:
     def __init__(self, db):
         self.url = engine_url(db)
@@ -227,6 +247,7 @@ class Database:
     # ------------------------------------------------------------ players
 
     def add_player(self, name, color="#ffcc00", age=0, card=None):
+        name = clean_name(name)
         """card: the QR card's code. A card belongs to one player for good: a
         card that is linked already gives that player (they come back and play
         again - their plays add up), no new one."""
@@ -249,6 +270,7 @@ class Database:
         """The registration website's sync (or a gamemaster for a visitor without
         a phone): the player behind a card, created or updated (a card
         registered again: the same player, new name / age / email)."""
+        name = clean_name(name)
         p = self.player_by_card(card)
         pid = p["id"] if p else self.add_player(name, age=age, card=card)
         self._write(update(players).where(players.c.id == pid).values(name=name, age=int(age), email=email or None))

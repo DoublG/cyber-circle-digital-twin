@@ -4,6 +4,7 @@
 // (REST) and follows the game live (MQTT; in the browser through the server).
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'src/app_state.dart';
 import 'src/event_page.dart';
@@ -43,6 +44,26 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   static const _settings = 3;
   int _tab = 0;
+  Set<int> _broken = {};
+
+  @override
+  void initState() {
+    super.initState();
+    widget.app.live.addListener(_onLive);
+  }
+
+  @override
+  void dispose() {
+    widget.app.live.removeListener(_onLive);
+    super.dispose();
+  }
+
+  /// A tile broke (the control server's alert, in the game's state): the phone buzzes.
+  void _onLive() {
+    final now = widget.app.live.state.broken;
+    if (now.difference(_broken).isNotEmpty) HapticFeedback.vibrate();
+    _broken = Set.of(now);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -89,6 +110,14 @@ class _HomePageState extends State<HomePage> {
                 padding: const EdgeInsets.all(6),
                 child: const Text('GEEN VERBINDING - zit je op de wifi van de installatie? (probeert opnieuw)',
                     textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            for (final text in s.brokenTexts)                   // a tile broken: the gamemasters must go there
+              Container(
+                width: double.infinity,
+                color: Retro.bad,
+                padding: const EdgeInsets.all(6),
+                child: Text('⚠ $text', textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ),
             if (app.online && app.website == 'down')            // registrations stop coming in
               Container(

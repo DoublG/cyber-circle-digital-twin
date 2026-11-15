@@ -123,7 +123,8 @@ func register(tile_id: int, player: String, color := Color(1.0, 0.8, 0.1), age :
 		push_warning("register %s: already on tile %d" % [player, already])
 		return 0
 	if tile_id <= 0:
-		var open := func(t): return t.idle and not is_pending(t.tile_id) and arena.installation.is_enabled(t.tile_id)
+		var open := func(t): return (t.idle and not is_pending(t.tile_id) and arena.installation.is_enabled(t.tile_id)
+			and not arena.installation.is_broken(t.tile_id))
 		var free := arena.tiles.filter(func(t): return open.call(t) and not t is DroneTile)
 		if free.is_empty() and mobile:                    # the gamemaster's choice: a free mobile place, M1 first
 			var drones := arena.tiles.filter(func(t): return open.call(t) and t is DroneTile)
@@ -139,6 +140,9 @@ func register(tile_id: int, player: String, color := Color(1.0, 0.8, 0.1), age :
 		return 0
 	if not arena.installation.is_enabled(tile_id):
 		push_warning("register %s: tile %d is out of service" % [player, tile_id])
+		return 0
+	if arena.installation.is_broken(tile_id):
+		push_warning("register %s: tile %d is broken" % [player, tile_id])
 		return 0
 	for id in _pending:  # same colour twice at once makes tiles hard to tell apart
 		if id != tile_id and _pending[id].color.is_equal_approx(color):

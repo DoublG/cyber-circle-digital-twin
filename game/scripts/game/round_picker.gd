@@ -153,12 +153,13 @@ func round_chances(after: Script) -> Dictionary:
 	return w
 
 
-## The round type can win a life: by nature (not the quiz) and its life
-## settings (win_places / win_percent not both 0).
+## The round type can win a life: by nature (not the quiz) and the life
+## table's row for the players now (win_places / win_percent not both 0).
 func gives_lives(t: Script) -> bool:
 	if not t.new().gives_lives:
 		return false
-	return game.settings.round_value(t, "win_places") > 0 or game.settings.round_value(t, "win_percent") > 0
+	var rule := game.settings.life_rule(type_name(t), _alive_tiles().size())
+	return rule.win_places > 0 or rule.win_percent > 0
 
 
 ## The director: x weight of the rounds that cannot win a life, from the

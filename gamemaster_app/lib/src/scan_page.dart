@@ -270,7 +270,7 @@ class _ScanPageState extends State<ScanPage> {
       PlaceStatus.free => 'VRIJ',
       PlaceStatus.pending => '${s.pending[t]!.name} (wacht)',
       PlaceStatus.playing => s.isDying(t) ? '${s.players[t]!.name}  ·  vrij over ${s.dyingText(t)}' : s.players[t]!.name,
-      PlaceStatus.disabled => 'BUITEN GEBRUIK',
+      PlaceStatus.disabled => s.isBroken(t) ? 'KAPOT' : 'BUITEN GEBRUIK',
     };
     return ListTile(
       enabled: free,
@@ -295,6 +295,8 @@ class _ScanPageState extends State<ScanPage> {
       final Color fill, text;
       if (dyingNow) {
         (fill, text) = (Retro.bad, Retro.cream);
+      } else if (s.isBroken(t)) {
+        (fill, text) = (Retro.bad.withOpacity(0.6), Retro.cream);
       } else {
         (fill, text) = switch (st) {
           PlaceStatus.free => (Retro.bg, Retro.good),

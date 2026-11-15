@@ -35,6 +35,7 @@ fi
 
 say "gamemaster app: web (served by the control server at /gm/)"
 (cd gamemaster_app && flutter build web --release --base-href /gm/ --no-web-resources-cdn | tail -1)
+python3 tools/assets/flutter_web_fonts.py gamemaster_app/build/web   # (offline: names in any script; cached in out/)
 if [ $APK = 1 ]; then
     say "gamemaster app: Android"
     (cd gamemaster_app && flutter build apk --release | tail -1)

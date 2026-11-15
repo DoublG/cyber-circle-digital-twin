@@ -12,6 +12,7 @@ sends commands. Topics (prefix "cybercircle"):
   device/<dev>/hello    tile -> all     retained: a physical tile announces itself {device, fw, ...}
   device/<dev>/config   control -> tile retained {"tile": n}: the place it stands on (0 = none) -
                                         the tile then uses tile/<n>/cmd and tile/<n>/event
+  alerts        control -> all  retained {"tiles": [{tile, label, device, reason, player, text}]}: broken tiles
   tiles         control -> game  retained {"enabled": {"1": true, ...}, "devices": {"1": "dev", ...}}
   mode          control -> game  retained {"mode": "setup" | "closed" | "open" | "paused"}
   settings      control -> game  retained {"game": {"tempo": 1.2, ...}, "quiz": {...}, ...}
@@ -327,6 +328,10 @@ class MqttLink:
 
     def publish_settings(self, values):
         self.client.publish(f"{self.prefix}/settings", json.dumps(values), retain=True)
+
+    def publish_alerts(self, tiles):
+        """The broken tiles now (retained): [{tile, label, reason, ...}]."""
+        self.client.publish(f"{self.prefix}/alerts", json.dumps({"tiles": tiles}), retain=True)
 
     def publish_selection(self, sel):
         """The current event's games that are not played (the questions: the game fetches them, db)."""

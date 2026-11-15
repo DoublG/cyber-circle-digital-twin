@@ -31,8 +31,9 @@ var countdown := Vector2(-1.0, 0.0)  # (s left, s in all) now; x <= 0: none (to 
 var min_age := 0
 var max_age := 99
 var age_settings := true          # min_age / max_age are operator settings (not in the quiz)
-## Lives at the end of the round (operator settings per round type, the rounds
-## with places; life_changes):
+## Lives at the end of the round (the rounds with places; life_changes) - the
+## row of the operator's life table for this many players (GameSettings.life_rule,
+## set_life_rule at the intro):
 ##   win_places   the best N places +1 life (1: the 1st place(s); 0: nobody)
 ##   win_percent  instead (> 0): the best N % of the players +1
 ##   lose_places  the last N places -1 life (1: the last place(s); 0: nobody)
@@ -59,14 +60,10 @@ func tunables() -> Array:
 	return [setting("duration", "Speeltijd", 10, 300, 5, "s")]
 
 
-## The life settings (GameSettings adds them to tunables(); rounds with places).
-func life_tunables() -> Array:
-	if not ranked:
-		return []
-	return [setting("win_places", "+1 leven: beste plaatsen (0 = niemand)", 0, 13, 1),
-		setting("win_percent", "+1 leven: beste % spelers (0 = per plaats)", 0, 100, 5, "%"),
-		setting("lose_places", "-1 leven: laatste plaatsen (0 = niemand)", 0, 13, 1),
-		setting("lose_percent", "-1 leven: slechtste % spelers (0 = per plaats)", 0, 100, 5, "%")]
+## The life rule for this round (a row of the life table, GameSettings.LIFE_ROW).
+func set_life_rule(rule: Dictionary) -> void:
+	for k in ["win_places", "win_percent", "lose_places", "lose_percent"]:
+		set(k, int(rule.get(k, get(k))))
 
 
 ## The rounds' rules end with "Na de ronde: ... +1 leven, ... -1 leven." for

@@ -276,6 +276,28 @@ try:
     check(until(lambda: not next(r for r in state()["round_types"] if r["type"] == "simon")["event_off"]),
           "Simon zegt on again (only Code kraken off)")
 
+    print("--- names in any script: stored the same way however they were typed")
+    for typed, want in (("  Zoe\u0308 \n Peeters ", "Zoë Peeters"), ("محمد\u200f", "محمد"), ("李明", "李明"),
+                        ("Lot 👩\u200d💻", "Lot 👩\u200d💻")):
+        nid = call("POST", "/api/players", {"name": typed, "color": "#ffcc00"})["id"]
+        check(call("GET", f"/api/players/{nid}")["name"] == want, f"{typed!r} -> {want!r}")
+    check(status("POST", "/api/players", {"name": " \u200b\n", "color": "#ffcc00"}) == 422, "only invisible characters: refused")
+    check(status("PUT", "/api/cards/name-test", {"name": "\u200e"}) == 422, "... also from the website")
+
+    print("--- the life table: by the number of players, one for all games, a game its own")
+    got = call("GET", "/api/settings")
+    check(got["life"]["default"] == {"from": 1, "win_places": 1, "win_percent": 0, "lose_places": 1, "lose_percent": 0}
+          and "quiz" not in got["life"]["games"] and "reaction" in got["life"]["games"], "the games with places, the default row")
+    saved = call("PUT", "/api/settings", {"game": {"tempo": 1}, "life_tables": {
+        "all": [{"from": 9, "win_percent": 20, "lose_percent": 25}, {"from": 1}, {"from": 5, "win_places": 2, "lose_places": 50}],
+        "reaction": [{"from": 1, "win_places": 0}], "quiz": [{"from": 1}], "nope": [{"from": 1}]}})["values"]
+    lt = saved.get("life_tables", {})
+    check([r["from"] for r in lt.get("all", [])] == [1, 5, 9] and lt["all"][1]["lose_places"] == 13,
+          "saved: sorted by 'from', within the limits")
+    check(set(lt) == {"all", "reaction"}, "only 'all' and games with places")
+    check(call("GET", "/api/settings")["values"]["game"] == {"tempo": 1}, "the other settings as before")
+    call("PUT", "/api/settings", {})
+
     print("--- texts: the game's defaults; changed ones reach the game")
     t = until(lambda: call("GET", "/api/texts")["defaults"].get("title.quiz") and call("GET", "/api/texts"))
     check(t and t["defaults"]["title.quiz"] == "Quiz" and "Haal een QR-codekaart" in t["defaults"]["join_steps"],
@@ -324,6 +346,39 @@ try:
           "physical tile tile-abc123 placed on T07")
     call("PUT", "/api/tiles/7", {"enabled": True})
     check(until(lambda: 7 not in state()["disabled"]), "T07 back in service")
+
+    print("--- a tile broken: its last will -> the web interface, the gamemasters, the game")
+    def broken(n):
+        return next((x for x in live()["alerts"]["tiles"] if x["tile"] == n), None)
+    al = until(lambda: broken(7), 10)
+    check(al and al["reason"] == "unknown" and al["device"] == "tile-abc123",
+          "T07's tile never said hello: an alert (never seen)")
+    tile7 = paho.Client(paho.CallbackAPIVersion.VERSION2, transport="websockets")
+    tile7.connect("127.0.0.1", MQTT_PORT)
+    tile7.loop_start()
+    tile7.publish("cybercircle/device/tile-abc123/hello", json.dumps({"device": "tile-abc123", "fw": "test"}),
+                  retain=True).wait_for_publish(5)
+    check(until(lambda: broken(7) is None, 10), "it says hello: the alert is gone")
+    check(any("T07 weer in orde" in x["text"] for x in call("GET", "/api/alerts")["log"]), "... in the log: back")
+    t0 = time.time()
+    tile7.publish("cybercircle/device/tile-abc123/status", json.dumps({"online": False})).wait_for_publish(5)
+    al = until(lambda: broken(7), 10)
+    check(al and al["reason"] == "last_will" and time.time() - t0 < 2.0,
+          f"its last will: broken at once ({time.time() - t0:.1f} s) - {al and al['text']}")
+    check(until(lambda: 7 in state()["broken"], 10), "the game knows (its state: broken, the apps show it)")
+    pid3 = call("POST", "/api/players", {"name": "Lot", "color": "#ff33aa"})["id"]
+    call("POST", f"/api/players/{pid3}/assign", {"tile": 7})
+    time.sleep(1.5)
+    check(not any(p["tile"] == 7 for p in state()["pending"]), "nobody new on a broken tile")
+    check(any("T07 KAPOT" in e["text"] for e in live()["events"]), "the game's event feed says so")
+    tile7.publish("cybercircle/device/tile-abc123/hello", json.dumps({"device": "tile-abc123", "fw": "test"}),
+                  retain=True).wait_for_publish(5)
+    check(until(lambda: broken(7) is None and 7 not in state()["broken"], 10), "back: no alert, the game too")
+    call("PUT", "/api/tiles/7", {"enabled": False})              # (no physical tile on T07 after this)
+    call("PUT", "/api/tiles/7", {"device": ""})
+    call("PUT", "/api/tiles/7", {"enabled": True})
+    tile7.publish("cybercircle/device/tile-abc123/hello", b"", retain=True).wait_for_publish(5)
+    tile7.loop_stop()
 
     print("--- a game: start, stop -> Tess' result in the database through the control server")
     call("POST", "/api/game/start")

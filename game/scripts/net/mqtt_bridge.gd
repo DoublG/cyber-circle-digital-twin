@@ -24,6 +24,8 @@ extends MqttClient
 ##   <prefix>/event            game -> all    {text, color}: the event feed
 ##   <prefix>/tiles            control -> game  retained {"enabled": {"3": false, ...}}: tiles out of service
 ##   <prefix>/db               control -> game  {"changed": "players" | "questions" | "ranking"}: fetch again
+##   <prefix>/alerts           control -> all   retained {"tiles": [{tile, label, reason, player, text}]}:
+##                                            broken tiles (no new players there; Installation.set_broken)
 ##   <prefix>/selection        control -> game  {"games_off": ["code", ...]}: not played at this event (retained)
 ##   <prefix>/mode             control -> game  retained {"mode": "setup" | "closed" | "open" | "paused"}
 ##                                            (the tiles read it too: in setup their hearts show their place)
@@ -123,8 +125,10 @@ func setup(arena_node: Arena) -> void:
 	subscribe(topic_prefix + "/texts")
 	subscribe(topic_prefix + "/db")
 	subscribe(topic_prefix + "/selection")
+	subscribe(topic_prefix + "/alerts")
 	subscribe(topic_prefix + "/device/+/hello")
 	subscribe(topic_prefix + "/device/+/config")
+	subscribe(topic_prefix + "/device/+/status")
 	arena.game.settings_changed.connect(_publish_settings)
 	arena.sound.sounds_changed.connect(_publish_sounds)
 	arena.light_cue.connect(func(event, data):
@@ -192,6 +196,9 @@ func _on_operator(kind: String, data: Dictionary) -> void:
 				arena.game.db.refresh()
 		"settings":                          # the operator's settings
 			arena.game.settings.apply(data)
+		"alerts":                            # broken tiles (the control server)
+			var tiles: Array = data.get("tiles", []) if data.get("tiles") is Array else []
+			arena.installation.set_broken(tiles.map(func(a): return int(a.get("tile", 0)) if a is Dictionary else 0))
 		"selection":                         # the games not played at this event
 			arena.game.picker.set_event_off(data.get("games_off", []))
 		"texts":                             # the operator's texts (Texts)
@@ -232,7 +239,8 @@ func _process(delta: float) -> void:
 
 # ---------------------------------------------------------------- the physical tiles (SETUP test screens)
 
-## device/<dev>/hello or /config (an empty retained message: gone).
+## device/<dev>/hello, /config (an empty retained message: gone) or /status
+## (the tile's last will: offline at once on the SETUP test screens).
 func _on_device(parts: PackedStringArray, payload: PackedByteArray) -> void:
 	if parts.size() != 2:
 		return
@@ -244,6 +252,9 @@ func _on_device(parts: PackedStringArray, payload: PackedByteArray) -> void:
 			_device_seen[dev] = Time.get_ticks_msec()
 		else:
 			devices.erase(dev)
+			_device_seen.erase(dev)
+	elif parts[1] == "status":
+		if data is Dictionary and data.get("online") == false:
 			_device_seen.erase(dev)
 	elif parts[1] == "config":
 		if data is Dictionary and int(data.get("tile", 0)) > 0:

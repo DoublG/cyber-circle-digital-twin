@@ -101,4 +101,16 @@ void main() {
     expect(s.questions[2].on, false);
     expect(s.questions[2].minAge, 10);
   });
+
+  test('a broken tile: not free, KAPOT in the banner with who is on it', () {
+    final s = GameState.fromJson({
+      'floor_tiles': 13, 'tile_count': 18, 'broken': [3, 5],
+      'players': [{'tile': 5, 'name': 'Erik', 'lives': 2, 'max_lives': 3}],
+    });
+    expect(s.status(3), PlaceStatus.disabled);      // free but broken: nobody goes there
+    expect(s.status(5), PlaceStatus.playing);       // the player stays
+    expect(s.isBroken(3), true);
+    expect(s.freeFloor, 11);
+    expect(s.brokenTexts, ['T03 KAPOT', 'T05 KAPOT - Erik speelt erop']);
+  });
 }

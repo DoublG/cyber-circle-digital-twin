@@ -61,6 +61,7 @@ function renderLive() {
   $("#mode").className = `mode ${live.mode}`;
   $("#mode-buttons").innerHTML = (MODE_ACTIONS[live.mode] || []).map(([m, label, ask]) =>
     `<button data-mode="${m}" ${ask ? `data-ask="${esc(ask)}"` : ""} title="${esc(MODE_TITLES[`${live.mode}>${m}`] || "")}" class="${m === "closed" && live.mode !== "setup" ? "danger" : ""}">${label}</button>`).join("");
+  renderAlerts();
   renderPlan(s);
   renderRandomizer(s);
   renderEventGames(s);
@@ -71,6 +72,31 @@ function renderLive() {
   renderNodes();
   if ($("#tab-tiles").classList.contains("active")) { renderTileTable(); renderLayout(); loadRobot(); }
   if ($("#tab-recovery").classList.contains("active")) renderRecovery();
+}
+
+// a tile broken (its last will, or no more hellos; not in SETUP): a red bar on every tab, a beep when one breaks
+let alertsSeen = null;
+function renderAlerts() {
+  const tiles = live.alerts?.tiles || [];
+  const box = $("#alerts");
+  box.hidden = !tiles.length;
+  box.innerHTML = tiles.map(a => `<div>⚠ ${esc(a.text)} <span class="t">(${esc(a.device)}, ${fmtAgo(a.ago)})</span></div>`).join("");
+  const now = new Set(tiles.map(a => a.tile));
+  if (alertsSeen && [...now].some(t => !alertsSeen.has(t))) beep();
+  alertsSeen = now;
+}
+
+function fmtAgo(s) {
+  return s < 60 ? `${s} s geleden` : `${Math.floor(s / 60)} min geleden`;
+}
+
+function beep() {
+  try {
+    const ctx = new AudioContext(), o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.value = 880; g.gain.value = 0.15;
+    o.connect(g).connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + 0.4);
+  } catch (e) { /* no sound: the bar is enough */ }
 }
 
 // the live places: the floor tiles, then the mobile players (drones)
@@ -87,12 +113,13 @@ function renderTiles(s) {
 function tileCards(s, from, to) {
   const players = Object.fromEntries((s.players || []).map(p => [p.tile, p]));
   const pending = Object.fromEntries((s.pending || []).map(p => [p.tile, p]));
+  const broken = new Set((live.alerts?.tiles || []).map(a => a.tile));
   let html = "";
   for (let t = from; t <= to; t++) {
     const p = players[t], inv = pending[t];
-    const mobile = t > FLOOR_TILES ? " mobile" : "";
+    const mobile = (t > FLOOR_TILES ? " mobile" : "") + (broken.has(t) ? " broken" : "");
     if (p) {
-      html += `<div class="tile playing${mobile} ${p.out ? "out" : ""}"><span class="no">${label(t)}</span>
+      html += `<div class="tile playing${mobile} ${p.out ? "out" : ""}"><span class="no">${label(t)}</span>${broken.has(t) ? `<span class="kapot">KAPOT</span>` : ""}
         ${p.rank ? `<span class="rank">#${p.rank}</span>` : ""}
         <div class="name">${esc(p.name)}</div>
         <div class="hearts">${"♥".repeat(p.lives)}${"♡".repeat(Math.max(0, (p.max_lives || 0) - p.lives))}</div>
@@ -115,7 +142,7 @@ function tileCards(s, from, to) {
     } else if ((s.disabled || []).includes(t)) {
       html += `<div class="tile out${mobile}"><span class="no">${label(t)}</span><div class="name">BUITEN GEBRUIK</div></div>`;
     } else {
-      html += `<div class="tile free${mobile}"><span class="no">${label(t)}</span><div class="name">VRIJ</div>
+      html += `<div class="tile free${mobile}"><span class="no">${label(t)}</span><div class="name">${broken.has(t) ? `<span class="bad">KAPOT</span>` : "VRIJ"}</div>
         ${mobile ? `<div class="hint">drone in de parking</div>` : ""}</div>`;
     }
   }
@@ -966,8 +993,70 @@ connectLive();
 // ---------------------------------------------------------------- settings
 const UNITS = { s: "s", ms: "ms", x: "×", "%": "%" };
 
+// ---------------------------------------------------------------- the life table (Instellingen)
+// By the number of players in the round: the row with the highest "vanaf" at or
+// below it applies. One table for every game, a game can have its own.
+let lifeEdit = null, lifeInfo = null;
+const LIFE_COLS = [["from", "vanaf spelers"], ["win_places", "+1: beste plaatsen"], ["win_percent", "+1: beste %"],
+  ["lose_places", "−1: laatste plaatsen"], ["lose_percent", "−1: slechtste %"]];
+
+function renderLife() {
+  const table = key => `<table class="life-table" data-life="${key}"><tr>${LIFE_COLS.map(([, h]) => `<th>${h}</th>`).join("")}<th></th></tr>` +
+    lifeEdit[key].map((r, i) => `<tr>${LIFE_COLS.map(([k]) => {
+      const [lo, hi] = lifeInfo.limits[k];
+      return `<td><input type="number" min="${lo}" max="${hi}" step="1" data-row="${i}" data-k="${k}" value="${r[k]}"></td>`;
+    }).join("")}<td>${lifeEdit[key].length > 1 ? `<button class="small danger" data-del="${i}" title="rij weg">✕</button>` : ""}</td></tr>`).join("") +
+    `</table><button class="small" data-add="${key}">+ rij</button> <span class="hint">${esc(lifeSummary(lifeEdit[key]))}</span>`;
+  $("#life-tables").innerHTML = `<fieldset><legend>Levens na een ronde, per aantal spelers</legend>
+    <p class="hint">De rij met de hoogste <b>vanaf spelers</b> die past bij het aantal spelers in de ronde geldt.
+      Een % groter dan 0 gaat voor de plaatsen; 0 plaatsen = niemand. Gelijke spelers krijgen hetzelfde; het schild
+      (jonger dan de leeftijd van het spel) houdt een −1 tegen. De quiz heeft zijn eigen regel (fout = −1).</p>
+    <h4>Alle spellen</h4>${table("all")}
+    ${Object.entries(lifeInfo.games).map(([g, title]) => `<h4><label class="own"><input type="checkbox" data-own="${g}" ${lifeEdit[g] ? "checked" : ""}>
+      ${esc(title)}: eigen tabel</label></h4>${lifeEdit[g] ? table(g) : ""}`).join("")}</fieldset>`;
+}
+
+function lifeSummary(rows) {
+  const side = (n, pct, best) => pct > 0 ? `${best ? "beste" : "slechtste"} ${pct}%`
+    : n === 1 ? (best ? "1e plaats" : "laatste plaats") : n > 1 ? `${best ? "beste" : "laatste"} ${n} plaatsen` : "niemand";
+  return rows.map((r, i) => `${r.from}${rows[i + 1] ? `–${rows[i + 1].from - 1}` : "+"} spelers: +1 ${side(r.win_places, r.win_percent, true)}, −1 ${side(r.lose_places, r.lose_percent, false)}`).join(" · ");
+}
+
+$("#life-tables").oninput = e => {
+  const i = e.target.closest("input[data-k]");
+  if (!i) return;
+  const key = i.closest("table").dataset.life;
+  lifeEdit[key][Number(i.dataset.row)][i.dataset.k] = Number(i.value);
+  i.closest("table").nextElementSibling.nextElementSibling.textContent = lifeSummary(lifeEdit[key]);
+};
+$("#life-tables").onchange = e => {
+  if (e.target.matches("input[data-k]")) {           // sorted again by "vanaf" when a value is done
+    const key = e.target.closest("table").dataset.life;
+    lifeEdit[key].sort((a, b) => a.from - b.from);
+    renderLife();
+  }
+};
+$("#life-tables").onclick = e => {
+  const b = e.target.closest("button, input[data-own]");
+  if (!b) return;
+  if (b.dataset.own) {
+    lifeEdit[b.dataset.own] = b.checked ? structuredClone(lifeEdit.all) : undefined;
+    if (!b.checked) delete lifeEdit[b.dataset.own];
+  } else if (b.dataset.add) {
+    const rows = lifeEdit[b.dataset.add], last = rows[rows.length - 1];
+    rows.push({ ...last, from: Math.min(lifeInfo.limits.from[1], last.from + 4) });
+  } else if (b.dataset.del) {
+    lifeEdit[b.closest("table").dataset.life].splice(Number(b.dataset.del), 1);
+  } else return;
+  renderLife();
+};
+
 async function loadSettings() {
-  const { schema, values } = await api("GET", "/api/settings");
+  const { schema, values, life } = await api("GET", "/api/settings");
+  lifeInfo = life;
+  lifeEdit = structuredClone(values.life_tables || {});
+  if (!lifeEdit.all) lifeEdit.all = [{ ...life.default }];
+  renderLife();
   if (!schema.length) {
     $("#settings").innerHTML = `<p class="hint">Nog geen master verbonden: de instellingen komen van het spel.</p>`;
     return;
@@ -1013,6 +1102,10 @@ $("#settings-save").onclick = async () => {
     });
     if (Object.keys(g).length) values[f.dataset.group] = g;
   });
+  const life = Object.fromEntries(Object.entries(lifeEdit || {}).filter(([, rows]) => rows));
+  const plain = life.all?.length === 1 && Object.keys(life).length === 1
+    && Object.entries(lifeInfo.default).every(([k, v]) => life.all[0][k] === v);
+  if (!plain) values.life_tables = life;             // (only the default: nothing to save)
   await api("PUT", "/api/settings", values);
   await loadSettings();
   $("#settings-msg").textContent = "Opgeslagen ✓";

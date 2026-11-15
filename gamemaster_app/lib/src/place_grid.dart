@@ -44,6 +44,7 @@ class PlaceGrid extends StatelessWidget {
     final border = isSel
         ? Retro.amber
         : switch (st) {
+            _ when state.isBroken(t) => Retro.bad,
             PlaceStatus.playing => state.isDying(t) ? Retro.bad : Retro.orange,
             PlaceStatus.pending => invite!.color,
             PlaceStatus.disabled => Retro.bad,
@@ -52,7 +53,7 @@ class PlaceGrid extends StatelessWidget {
     final who = switch (st) {
       PlaceStatus.playing => player!.name,
       PlaceStatus.pending => invite!.name,
-      PlaceStatus.disabled => 'BUITEN GEBRUIK',
+      PlaceStatus.disabled => state.isBroken(t) ? 'KAPOT' : 'BUITEN GEBRUIK',
       PlaceStatus.free => 'VRIJ',
     };
     return Opacity(
@@ -78,6 +79,8 @@ class PlaceGrid extends StatelessWidget {
             if (st == PlaceStatus.playing && !state.isDying(t))
               Text('♥' * player!.lives, style: const TextStyle(color: Color(0xFFFF3355), fontSize: 11)),
             if (st == PlaceStatus.pending) const Text('wacht…', style: TextStyle(color: Retro.dim, fontSize: 11)),
+            if (state.isBroken(t) && st != PlaceStatus.disabled)
+              const Text('TEGEL KAPOT', style: TextStyle(color: Retro.bad, fontSize: 11, fontWeight: FontWeight.bold)),
             if (state.isDying(t))
               Text('vrij over ${state.dyingText(t)}', style: const TextStyle(color: Retro.bad, fontSize: 11, fontWeight: FontWeight.bold)),
           ]),

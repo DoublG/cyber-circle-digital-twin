@@ -383,7 +383,10 @@ func _next_round() -> void:
 	current = entry.type.new()
 	settings.configure(current, type_name, entry.get("options", {}))   # the operator's, this round's in the plan
 	_apply_tempo(current)
-	current.prepare(self, arena.players.player_ids().filter(func(id): return not arena.tiles[id - 1].is_dead))
+	var playing := arena.players.player_ids().filter(func(id): return not arena.tiles[id - 1].is_dead)
+	var current_count := playing.size()
+	current.prepare(self, playing)
+	current.set_life_rule(settings.life_rule(type_name, current_count))   # the life table's row for this many
 	current.adapt_rules()                                  # (other life settings: the rules say them)
 	Texts.dress(current, type_name)                        # the operator's name and rules for this game
 	_set_state(State.INTRO)
@@ -428,6 +431,7 @@ func status() -> Dictionary:
 		"timer": screen_wall.timer_text(), "players": players, "pending": pending,
 		"plan": picker.planned_rounds(), "round_types": picker.types_status(),
 		"disabled": range(1, arena.tiles.size() + 1).filter(func(id): return not arena.installation.is_enabled(id)),
+		"broken": range(1, arena.tiles.size() + 1).filter(func(id): return arena.installation.is_broken(id)),
 		"dying": _dying(),
 		"installed": range(1, arena.tiles.size() + 1).filter(func(id): return arena.installation.is_installed(id))}
 

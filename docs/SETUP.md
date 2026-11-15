@@ -557,7 +557,7 @@ godot-4 --rendering-method gl_compatibility --path . -- --replica --show=1,2 --m
 4. **Lives change only on the scoreboard after a round, by at most 1:**
    rounds with places – by default 1st place +1, last place −1; quiz – a wrong or missing
    answer −1, and every 10 right answers in a row (over rounds) +1. Max 5 lives.
-   Configurable per game (not the quiz; *Instellingen*, see the *Lives* note below). During a round the robot's shots are harmless.
+   Configurable by the number of players (not the quiz; *Instellingen › Levens*, see the *Lives* note below). During a round the robot's shots are harmless.
    The scoreboard first shows the lives as they were; after `lives_delay`
    (2.5 s) the rows show the change (+♥ green, −♥ red) and the robot gives /
    takes the lives. At 0 a player is **exterminated** – very visible: a big
@@ -742,6 +742,7 @@ Prefix `cybercircle` (setting `topic_prefix` on the *Mqtt* node). Payloads are J
 | `cybercircle/master` | control → all | retained: the chosen master `{node, host, port}` |
 | `cybercircle/device/<dev>/hello` | tile → all | retained: a physical tile announces itself (its own id; `fw`, `build` = the git commit, `reset` = why it started, `mqtt_dropped`, `stuck`) |
 | `cybercircle/device/<dev>/status` | broker → all | `{"online": false}`: the tile's last will – it dropped out (the robot: `robot/status`); the control server shows it offline at once |
+| `cybercircle/alerts` | control → all | retained: `{"tiles": [{tile, label, device, reason, player, text}]}` – the broken tiles now (the game puts nobody new there; its state lists them as `broken` for the apps) |
 | `cybercircle/selection` | control → game | retained: `{"games_off": ["code", …]}` – not played at the current event (the questions: via the API) |
 | `cybercircle/settings` | control → game | retained game settings `{"game": {...}, "quiz": {...}, …}` (only the changed values) |
 | `cybercircle/settings/schema` | master → all | retained: every setting with label, range, unit, default and current value |
@@ -972,7 +973,7 @@ godot-4 --headless --path . --fixed-fps 60 res://tests/test_exterminated.tscn  #
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_pause.tscn  # the paused mode: the game's waits stand still
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_countdown.tscn  # the round's green countdown LED (outer ring, not in Cyclone)
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_ages.tscn       # ages: the shield in personal rounds, rounds and questions weighted by age
-godot-4 --headless --path . --fixed-fps 60 res://tests/test_lives.tscn      # life settings: best / last places or %, ties, rules text
+godot-4 --headless --path . --fixed-fps 60 res://tests/test_lives.tscn      # the life table: rows by player count, best / last places or %, ties, rules text
 godot-4 --path . --disable-vsync res://tests/test_rhythm_shot.tscn      # Ritme (chart, judging, screenshot)
 godot-4 --path . --disable-vsync res://tests/test_code.tscn             # Code kraken (hints, codes, a round, screenshots)
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_settings.tscn  # settings, tempo, sounds
@@ -985,6 +986,7 @@ godot-4 --path . --disable-vsync res://tests/test_stream_capture.tscn -- --out=$
 godot-4 --path . --disable-vsync res://tests/test_installed_shot.tscn      # a partial installation: hidden places, screens (shots/86_*)
 godot-4 --path . --disable-vsync res://tests/test_invite_shot.tscn         # the invite: tile drawn, pressed icons greyed (shots/85_*)
 godot-4 --path . --disable-vsync res://tests/test_explosion_shot.tscn       # hit, explosion, shield, drone, room lights (shots/80-84_*)
+godot-4 --path . --disable-vsync res://tests/test_names_shot.tscn         # names in other scripts (accents, Cyrillic, Arabic, Hebrew, Chinese, Hindi, emoji): plates, scoreboard
 tests/run_replica_test.sh       # display nodes: a master + a display node, state and screens compared (tests/shots/replica/)
 tests/run_display_perf.sh       # what a display node (a Pi) renders: fps, draw calls, triangles, with 2 full screens
 python3 tests/mqtt_test_broker.py 9011 &                                 # then:
@@ -1268,6 +1270,28 @@ or a new master continues in the same mode.
   the last check, the last registration that came in, a history. When it is
   down the top bar says *website ✗ OFFLINE* and the gamemaster app shows an
   amber banner: new registrations don't come in.
+* **Names in any script** (Zoë, Ömer, Иван, محمد, שרה, 李明, आर्या, emoji): the
+  control server stores a name the same way however it was typed (Unicode NFC:
+  "ë" one character), without invisible characters (a pasted line break, a
+  right-to-left mark), spaces collapsed, at most 40 characters; only invisible
+  characters: refused. The game's font draws Latin, Cyrillic, Greek and Arabic;
+  for the rest Godot uses the system's fonts – `install_game.sh` installs
+  `fonts-noto-core`, `fonts-noto-cjk` and `fonts-noto-color-emoji` on the Pis.
+  Right-to-left names line up with the others on the scoreboard.
+  (`game/tests/test_names_shot.tscn`: screenshots.)
+* **A tile broken** (outside SETUP): a place that is installed, in service and
+  has a physical tile, but that tile is gone – its **last will** came from the
+  broker (`device/<dev>/status {"online": false}`: power, cable, a crash; the
+  broker sends it when the tile's keepalive runs out) or it stopped saying
+  hello for 30 s, or it was never seen since the server started. At once:
+  a **red bar** on every tab of the web interface (*Tegel T05 kapot: verbinding
+  verbroken … – Erik speelt erop*) with a beep, the tile card says **KAPOT**;
+  the **gamemaster app** shows a red banner, the phone buzzes, the place shows
+  KAPOT and can't be chosen; the **game** puts nobody new on it (also not
+  "het spel kiest") and its event feed says *T05 KAPOT*. A player on it stays –
+  the gamemaster decides (*Tegels*: out of service, swap the tile). When the
+  tile says hello again it is over (*weer in orde*). `GET /api/alerts`: now and
+  the last changes; MQTT `cybercircle/alerts` (retained).
 * **Vragen** – **CSV importeren / downloaden**: many questions at once from a
   spreadsheet (Excel: save as CSV; `;` or `,`). Columns (header row): `vraag`,
   `antwoord1`–`antwoord4`, `juist` (1–4: square, triangle, cross, circle)
@@ -1306,15 +1330,19 @@ or a new master continues in the same mode.
   light speed, penalty; Ritme: fall time and spacing at the start / end, when
 hold notes start (chance, how long), when two at once start, band and line size, points, tile delay; Code kraken:
   points per code, the bonus per try fewer, extra per harder code, how long the hints stay on the tile;
-  **Lives** in every round type with places: *+1 leven: beste plaatsen* (default 1 = the 1st place;
-  0 = nobody), *+1 leven: beste % spelers* (> 0 is used instead of the places), *−1 leven:
-  laatste plaatsen* and *−1 leven: slechtste % spelers* – e.g. top 3 places +1 and the worst
-  25 % (half of the bottom half) −1. Players with equal progress get the same: a cut-off
-  between equals takes them all; a % is at least 1 player; +1 and −1 at once cancel; the
-  shield (*Beschermd onder leeftijd*) still blocks a −1. The intro's rules text says the
-  settings when they are not the default, and a round type that can give nobody a life
-  counts as a no-life round for the randomizer's director. The quiz keeps its own rule
-  (wrong / late −1, the streak +1)), *Randomizer* and *Vragen* (weights per round type and
+  **Levens na een ronde, per aantal spelers** (above the groups): a table, each row
+  *vanaf spelers* N: *+1: beste plaatsen*, *+1: beste %*, *−1: laatste plaatsen*, *−1:
+  slechtste %*. The row with the highest N at or below the players in the round applies
+  (counted at the intro). A % above 0 is used instead of the places; 0 places = nobody.
+  E.g. from 1: 1st +1, last −1 · from 5: best 2 places +1 · from 9: best 20 % +1, worst
+  25 % (half of the bottom half) −1. One table for **all games**; tick *eigen tabel* for
+  a game that needs its own. Default: one row, 1st +1, last −1. Players with equal
+  progress get the same (a cut-off between equals takes them all); a % is at least 1
+  player; +1 and −1 at once cancel; the shield (*Beschermd onder leeftijd*) still blocks a
+  −1. The intro's rules text says the row when it is not the default; a game whose row
+  gives nobody a life counts as a no-life round for the randomizer's director. The quiz
+  keeps its own rule (wrong / late −1, the streak +1). Saved with the settings as
+  `life_tables: {"all": [rows], "<game>": [rows]}`), *Randomizer* and *Vragen* (weights per round type and
   per question category, see below) and *Geluid* (volume, random
   sound interval) and *Licht* (the brightness of the virtual lights in the
   room, flashes on / off – also sent to the real lights).
@@ -1442,8 +1470,16 @@ install it by hand, "unknown sources"): Instellingen → the control
 server's IP address on the installation's wifi (and the MQTT login); live
 updates come straight from the MQTT broker. **iPhone / any browser**: the
 control server serves the web version at `http://<server ip>:8080/gm/`
-(`flutter build web --release --base-href /gm/ --no-web-resources-cdn` – no
-internet needed); live updates through the server. A browser only allows the
+(`flutter build web --release --base-href /gm/ --no-web-resources-cdn`, then
+`python3 tools/assets/flutter_web_fonts.py gamemaster_app/build/web` – both in
+`deploy/install/build.sh`); live updates through the server. **No internet
+needed**: Flutter's engine comes with the app, and the fonts it falls back to
+for names in other scripts (Chinese, Hebrew, Hindi, colour emoji …, ~80 MB, a
+phone only loads the ones a name needs) are downloaded once on the build PC
+(cached in `out/flutter_fonts/`) and served from `/gm/fonts/fallback/`
+(`gamemaster_app/web/flutter_bootstrap.js`: `fontFallbackBaseUrl`).
+Test: `control/.venv/bin/python control/test_gm_offline.py` – the app with
+every request to the internet blocked. A browser only allows the
 camera on **https**: `tools/ops/make_cert.sh <server ip>` and start the control
 server with `--ssl-cert control/cert.pem --ssl-key control/key.pem`; open
 `https://<server ip>:8080/gm/` once on every iPhone and accept the warning.

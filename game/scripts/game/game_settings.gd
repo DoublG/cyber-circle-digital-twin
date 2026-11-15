@@ -26,11 +26,20 @@ const GAME_TUNABLES := [
 		"step": 1, "unit": ""},
 	{"key": "queue_length", "label": "Rondes vooruit gepland", "min": 1, "max": 10, "step": 1, "unit": ""},
 ]
+## Lives at the end of a round with places, by the number of players: a table
+## of rows {from, win_places, win_percent, lose_places, lose_percent} - the row
+## with the highest "from" at or below the players in the round applies (none:
+## the first). One table for every game ("all"), a game can have its own
+## (its type name). See GameRound.win_places ... for what the values mean.
+const LIFE_ROW := {"from": 1, "win_places": 1, "win_percent": 0, "lose_places": 1, "lose_percent": 0}
+const LIFE_LIMITS := {"from": [1, 18], "win_places": [0, 13], "win_percent": [0, 100],
+	"lose_places": [0, 13], "lose_percent": [0, 100]}
 const ARENA_KEYS := ["clip_wait", "clip_time"]                 # game settings kept by the arena
 const PICKER_KEYS := ["personal_min_players", "queue_length"]  # ... and by the round picker
 
 var game: GameManager
 var values := {}                   # the operator's values: {"game": {key: v}, "<round type>": {key: v}, ...}
+var life_tables := {}              # the operator's: {"all": [rows], "<round type>": [rows]} (LIFE_ROW)
 var _defaults := {}                # group -> {key: the value before the operator changed anything}
 
 
@@ -58,6 +67,42 @@ func round_value(type: Script, key: String) -> Variant:
 	return of_round(RoundPicker.type_name(type)).get(key, type.new().get(key))
 
 
+## The life rule for a round of this type with this many players (a LIFE_ROW).
+func life_rule(type_name: String, player_count: int) -> Dictionary:
+	var table: Array = life_tables.get(type_name, life_tables.get("all", [LIFE_ROW]))
+	var rule: Dictionary = table[0]
+	for row in table:                  # (sorted by "from")
+		if row.from <= player_count:
+			rule = row
+	return rule
+
+
+## The operator's tables, made safe: rows of whole numbers within LIFE_LIMITS,
+## sorted by "from", one per "from"; a table without rows is left out.
+static func clean_life_tables(given: Variant) -> Dictionary:
+	var out := {}
+	if not given is Dictionary:
+		return out
+	for key in given:
+		if not given[key] is Array:
+			continue
+		var rows := {}
+		for r in given[key]:
+			if not r is Dictionary:
+				continue
+			var row := {}
+			for k in LIFE_ROW:
+				var v = r.get(k, LIFE_ROW[k])
+				row[k] = clampi(int(v) if (v is int or v is float) else LIFE_ROW[k], LIFE_LIMITS[k][0], LIFE_LIMITS[k][1])
+			rows[row.from] = row
+		if rows.is_empty():
+			continue
+		var froms := rows.keys()
+		froms.sort()
+		out[str(key)] = froms.map(func(f): return rows[f])
+	return out
+
+
 ## A new round's settings: the operator's for its type, then this round's in
 ## the round plan (web interface), e.g. {"categories": ["Computers"],
 ## "duration": 60, "question_count": 5}: every key that is a property of the
@@ -83,7 +128,7 @@ func schema() -> Array:
 	for type in RoundPicker.ROUND_TYPES:
 		var r: GameRound = type.new()
 		var own := of_round(RoundPicker.type_name(type))
-		groups.append({"group": RoundPicker.type_name(type), "title": r.title, "items": (r.tunables() + r.life_tunables() + r.age_tunables()).map(func(t):
+		groups.append({"group": RoundPicker.type_name(type), "title": r.title, "items": (r.tunables() + r.age_tunables()).map(func(t):
 			return t.merged({"default": r.get(t.key), "value": own.get(t.key, r.get(t.key))}))})
 	for name in ["randomizer", "questions", "sound", "light", "voice"]:
 		groups.append(live[name])
@@ -103,6 +148,7 @@ func apply(given_values: Dictionary) -> void:
 				out[t.key] = roundi(v) if t.default is int else v
 		clean[g.group] = out
 	values = clean
+	life_tables = clean_life_tables(given_values.get("life_tables", {}))
 	game.questions.category_weights.clear()
 	for g in _live_groups():
 		for t in g.items:

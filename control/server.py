@@ -23,6 +23,8 @@ Gamemaster app in a browser (iPhone): http://<this pc>:8080/gm/ (the Flutter web
                GET|PUT /api/texts (the slogans, how to join, per game its name and rules)
                GET /api/mqtt/log?since=&filter= (the raw MQTT traffic)
   gamemaster   POST /api/session {device, gamemaster} (sign of life: who is logged in, on the dashboard)
+  alerts       GET /api/alerts (a tile broken now: its last will came, or it stopped saying hello;
+               the web interface and the gamemaster apps show it; also MQTT <prefix>/alerts, retained)
   this event   GET|PUT /api/selection {games_off?, questions?: {id: true|false|null}} (which games are
                played and which questions asked at the current event; a new event: all as normal)
   gamemaster   GET /api/config (where MQTT, the layout), GET /api/cards/{code} (who has this QR card),
@@ -34,7 +36,9 @@ import argparse
 import asyncio
 import json
 import os
+import threading
 import time
+from collections import deque
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -49,7 +53,7 @@ import a11y
 import event_export
 import questions_csv
 from website import Website
-from db import FLOOR_TILES, PLACES, Database
+from db import FLOOR_TILES, PLACES, Database, clean_name
 from mqtt_link import MqttLink
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -264,6 +268,8 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
             link.publish_settings(game_settings())
             link.publish_texts(texts())
             link.publish_selection(db.selection())
+        if kind in ("device", "devices", "mqtt"):
+            check_alerts(force=kind == "mqtt")   # (a tile's last will: at once; reconnected: send them again)
         if "loop" in loop:
             for q in list(listeners):
                 loop["loop"].call_soon_threadsafe(q.put_nowait, kind)
@@ -276,7 +282,9 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         link.start()
         site.on_change = lambda: changed("website")
         site.start()
+        watch = asyncio.create_task(watch_alerts())
         yield
+        watch.cancel()
         site.stop()
         link.stop()
 
@@ -320,7 +328,8 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
                 "events": list(link.events), "sounds": link.sounds, "installed": installed(), "devices": link.device_list(), "mode": db.setting("mode", "setup"),
                 "t01_clock": float(db.setting("t01_clock", "12") or 12), "event": db.event(), "selection": db.selection(),
                 "website": {k: v for k, v in site.snapshot().items() if k != "history"},
-                "gamemasters_online": online_ref[0]() if online_ref else []}
+                "gamemasters_online": online_ref[0]() if online_ref else [],
+                "alerts": alerts_view()}
 
     # ------------------------------------------------------------ performance (web interface: Prestaties)
 
@@ -402,6 +411,81 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
 
     def place_label(n):
         return f"T{n:02d}" if n <= FLOOR_TILES else f"M{n - FLOOR_TILES}"
+
+    # ------------------------------------------------------------ alerts: a tile broken (web interface, gamemaster apps)
+
+    alerts = {"tiles": {}, "log": deque(maxlen=50), "lock": threading.Lock()}   # place -> its alert
+
+    def broken_tiles():
+        """The places whose tile is broken now: installed, on and given a physical tile,
+        but that tile is gone - its last will came from the broker (the tile's
+        connection broke off: power, cable, a crash) or it stopped saying hello
+        (NODE_TIMEOUT). Not in SETUP: there the tiles come and go (Tegels › Diagnose)."""
+        if db.setting("mode", "setup") == "setup":
+            return {}
+        devices = {d["device"]: d for d in link.device_list()}
+        inst = set(installed())
+        players = {int(p.get("tile", 0)): p.get("name", "") for p in (link.state or {}).get("players", [])
+                   if isinstance(p, dict)}
+        out = {}
+        for t in db.tiles():
+            if not t["device"] or not t["enabled"] or t["number"] not in inst:
+                continue
+            d = devices.get(t["device"])
+            if d and d.get("online"):
+                continue
+            why = "last_will" if d and d.get("gone") else "silent" if d else "unknown"
+            out[t["number"]] = {"tile": t["number"], "label": place_label(t["number"]), "device": t["device"],
+                                "reason": why, "player": players.get(t["number"], "")}
+        return out
+
+    ALERT_REASONS = {"last_will": "verbinding verbroken (stroom, kabel of vastgelopen)",
+                     "silent": "geen teken van leven meer", "unknown": "nooit gezien sinds de server startte"}
+
+    def check_alerts(force=False):
+        """Compares with the last check: a newly broken tile or one back goes in the log,
+        the live views hear it, and the game on MQTT <prefix>/alerts (retained)."""
+        now = time.time()
+        broken = broken_tiles()
+        with alerts["lock"]:
+            was = alerts["tiles"]
+            if set(broken) == set(was) and not force:
+                return
+            for n, a in broken.items():
+                if n in was:
+                    broken[n] = was[n]
+                    continue
+                a.update(since=now, text=f"Tegel {a['label']} kapot: {ALERT_REASONS[a['reason']]}"
+                         + (f" - {a['player']} speelt erop" if a["player"] else ""))
+                alerts["log"].appendleft({"time": time.strftime("%H:%M:%S"), "tile": n, "text": a["text"], "bad": True})
+            for n in set(was) - set(broken):
+                alerts["log"].appendleft({"time": time.strftime("%H:%M:%S"), "tile": n,
+                                          "text": f"Tegel {was[n]['label']} weer in orde", "bad": False})
+            alerts["tiles"] = broken
+            current = sorted(broken.values(), key=lambda a: a["tile"])
+        link.publish_alerts(current)
+        changed("alerts")
+
+    def alerts_view():
+        now = time.time()
+        with alerts["lock"]:
+            return {"tiles": [{**a, "ago": round(now - a["since"])} for a in sorted(alerts["tiles"].values(),
+                                                                                  key=lambda a: a["tile"])],
+                    "log": list(alerts["log"])[:20]}
+
+    async def watch_alerts():
+        while True:                              # (a tile that stops saying hello has no last will: look)
+            await asyncio.sleep(2.0)
+            try:
+                check_alerts()
+            except Exception as e:               # (the database busy, ...: next time)
+                print("alerts:", e)
+
+    @app.get("/api/alerts")
+    def get_alerts():
+        """The broken tiles now ({tile, label, device, reason, player, since, ago, text}) and the
+        last changes (newest first) - the gamemaster apps poll it."""
+        return alerts_view()
 
     @app.get("/api/clients")
     def clients():
@@ -655,17 +739,50 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         except ValueError:
             return {}
 
+    LIFE_ROW = {"from": 1, "win_places": 1, "win_percent": 0, "lose_places": 1, "lose_percent": 0}
+    LIFE_LIMITS = {"from": (1, PLACES), "win_places": (0, FLOOR_TILES), "win_percent": (0, 100),
+                   "lose_places": (0, FLOOR_TILES), "lose_percent": (0, 100)}
+
+    def clean_life_tables(given):
+        """{"all": [rows], "<game>": [rows]}: rows {from, win_places, win_percent, lose_places,
+        lose_percent} (whole numbers in LIFE_LIMITS), sorted by "from", one per "from"
+        (as the game's GameSettings.clean_life_tables)."""
+        out = {}
+        for key, rows in (given.items() if isinstance(given, dict) else []):
+            if not (key == "all" or key in ROUND_TYPES and key != "quiz") or not isinstance(rows, list):
+                continue
+            by_from = {}
+            for r in rows:
+                if not isinstance(r, dict):
+                    continue
+                row = {}
+                for k, d in LIFE_ROW.items():
+                    v = r.get(k, d)
+                    lo, hi = LIFE_LIMITS[k]
+                    row[k] = min(hi, max(lo, int(v))) if isinstance(v, (int, float)) and not isinstance(v, bool) else d
+                by_from[row["from"]] = row
+            if by_from:
+                out[key] = [by_from[f] for f in sorted(by_from)]
+        return out
+
     @app.get("/api/settings")
     def get_settings():
-        """What the game offers (from the master, with defaults) and the saved values."""
-        return {"schema": link.schema, "values": game_settings()}
+        """What the game offers (from the master, with defaults) and the saved values;
+        for the life table: the games with places and the default row."""
+        return {"schema": link.schema, "values": game_settings(),
+                "life": {"games": {t: n for t, n in ROUND_TYPES.items() if t != "quiz"}, "default": LIFE_ROW,
+                         "limits": LIFE_LIMITS}}
 
     @app.put("/api/settings")
     def put_settings(values: dict):
-        """{"game": {"tempo": 1.2}, "quiz": {...}}: only changed values; {} = all defaults.
-        The game applies them at once (round settings from the next round)."""
+        """{"game": {"tempo": 1.2}, "quiz": {...}, "life_tables": {"all": [rows], ...}}: only
+        changed values; {} = all defaults. The game applies them at once (round settings
+        and the life table from the next round)."""
         clean = {g: {k: v for k, v in items.items() if isinstance(v, (int, float))}
-                 for g, items in values.items() if isinstance(items, dict)}
+                 for g, items in values.items() if isinstance(items, dict) and g != "life_tables"}
+        tables = clean_life_tables(values.get("life_tables"))
+        if tables:
+            clean["life_tables"] = tables
         db.set_setting("game_settings", json.dumps(clean))
         link.publish_settings(clean)
         return {"values": clean}
@@ -723,7 +840,10 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
 
     @app.post("/api/players")
     def add_player(p: PlayerIn):
-        return {"id": db.add_player(p.name, p.color, p.age, (p.card or "").strip() or None)}
+        try:
+            return {"id": db.add_player(p.name, p.color, p.age, (p.card or "").strip() or None)}
+        except ValueError:
+            raise HTTPException(422, "name needed")
 
     @app.get("/api/cards/{code}")
     def card(code: str):
@@ -737,10 +857,14 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
     def put_card(code: str, c: CardIn):
         """Who registered with this card: the registration website's sync, or a
         gamemaster for a visitor without a phone."""
-        if not code.strip() or not c.name.strip():
+        try:
+            name = clean_name(c.name)
+        except ValueError:
+            name = ""
+        if not code.strip() or not name:
             raise HTTPException(422, "card code and name needed")
         site.synced()
-        return {"id": db.upsert_card(code.strip(), c.name.strip(), c.age, (c.email or "").strip() or None)}
+        return {"id": db.upsert_card(code.strip(), name, c.age, (c.email or "").strip() or None)}
 
     @app.get("/api/website")
     def website():

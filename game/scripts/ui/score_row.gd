@@ -35,6 +35,7 @@ func fill(font_size: int, gap: int, color: Color, texts: Array, style: StyleBox 
 		else:
 			c.add_theme_font_size_override("font_size", font_size)
 			c.text = texts[k]
+			c.text_direction = Control.TEXT_DIRECTION_LTR   # (an Arabic / Hebrew name: still read right to left, but the row's room and ▶ stay in front)
 		tint(k, color)
 		if widths[k] > 0:
 			c.custom_minimum_size.x = widths[k] * font_size * CHAR_WIDTH

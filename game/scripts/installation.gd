@@ -7,6 +7,7 @@ extends RefCounted
 var arena: Arena
 var _disabled := {}               # tile_id -> true: out of service (not in the game)
 var _not_installed := {}          # tile_id -> true: not part of this installation (hidden, see set_installed)
+var _broken := {}                 # tile_id -> true: its physical tile is gone (the control server's alerts, set_broken)
 
 
 func _init(arena_node: Arena) -> void:
@@ -33,6 +34,27 @@ func apply_replica(f: Dictionary) -> void:
 ## In service: the tile can be used in the game (see set_enabled).
 func is_enabled(tile_id: int) -> bool:
 	return not _disabled.has(tile_id) and not _not_installed.has(tile_id)
+
+
+## Its physical tile is broken (gone: its last will, or no more hellos): no
+## new player is put on it; a player on it stays (it may come back) - the
+## gamemasters see it and decide.
+func is_broken(tile_id: int) -> bool:
+	return _broken.has(tile_id)
+
+
+## The control server's alerts (<prefix>/alerts): the places whose tile is broken now.
+func set_broken(ids: Array) -> void:
+	var now := {}
+	for id in ids:
+		now[int(id)] = true
+	for id in now:
+		if not _broken.has(id):
+			arena.game.log_event("%s KAPOT - GAMEMASTER GEWAARSCHUWD" % Retro.tile_label(id), Retro.BAD)
+	for id in _broken:
+		if not now.has(id):
+			arena.game.log_event("%s WEER IN ORDE" % Retro.tile_label(id), Retro.DIM)
+	_broken = now
 
 
 func is_installed(tile_id: int) -> bool:

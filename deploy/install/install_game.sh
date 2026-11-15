@@ -67,6 +67,9 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
 apt-get install -y -q rsync curl unzip libgl1 libgles2 libasound2t64 2>/dev/null \
     || apt-get install -y -q rsync curl unzip libgl1 libgles2 libasound2
+# fonts for the players' names in any script (the game's own font: Latin, Cyrillic, Greek,
+# Arabic; Godot falls back to these for Chinese, Japanese, Korean, Hebrew, Hindi ... and emoji)
+apt-get install -y -q fontconfig fonts-noto-core fonts-noto-cjk fonts-noto-color-emoji
 if [ "${A11Y_VIDEO:-0}" = "1" ] && [ "$ROLE" = master ]; then   # the accessible page's video: the master pipes frames to FFmpeg
     apt-get install -y -q ffmpeg
 fi
