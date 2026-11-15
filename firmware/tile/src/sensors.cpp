@@ -13,6 +13,9 @@
 //   - an icon held longer than SENSOR_STUCK_S is let go of and its reading
 //     becomes the resting value (a bag on the tile, a sensor gone bad): the
 //     other icons keep working, and the hello counts it ("stuck").
+// How hard a press must be can change while it runs (setThreshold: % of
+// SENSOR_PRESS / SENSOR_RELEASE): a small child on the tile, a sensor that
+// reads low - the control server sends it in the tile's config.
 #include "sensors.h"
 #include "config.h"
 
@@ -26,6 +29,18 @@ static uint32_t downSince[4];
 static uint32_t lastRead = 0;
 static uint8_t lastReleased = 0;
 static uint32_t stuckCount = 0;
+static int thresholdPct = 100;
+static int pressCounts = SENSOR_PRESS, releaseCounts = SENSOR_RELEASE;
+
+void setThreshold(int percent) {
+    thresholdPct = constrain(percent, THRESHOLD_MIN, THRESHOLD_MAX);
+    pressCounts = SENSOR_PRESS * thresholdPct / 100;
+    releaseCounts = SENSOR_RELEASE * thresholdPct / 100;
+}
+
+int threshold() { return thresholdPct; }
+int pressAt() { return pressCounts; }
+int releaseAt() { return releaseCounts; }
 
 void begin() {
     analogReadResolution(12);
@@ -64,9 +79,9 @@ uint8_t update() {
         level[i] = level[i] * 0.6f + analogRead(SENSOR_PINS[i]) * 0.4f;   // a little smoothing
         float d = level[i] - rest[i];
         if (d < 0) rest[i] += d * min(1.0f, ms / 500.0f);                 // below the resting value: it was too high
-        else if (!down[i] && d < SENSOR_RELEASE && SENSOR_DRIFT_S > 0)    // resting: follow the drift
+        else if (!down[i] && d < releaseCounts && SENSOR_DRIFT_S > 0)     // resting: follow the drift
             rest[i] += d * min(1.0f, ms / (SENSOR_DRIFT_S * 1000.0f));
-        bool want = down[i] ? d > SENSOR_RELEASE : d > SENSOR_PRESS;
+        bool want = down[i] ? d > releaseCounts : d > pressCounts;
         if (down[i] && want && SENSOR_STUCK_S > 0 && now - downSince[i] > SENSOR_STUCK_S * 1000UL) {
             rest[i] = level[i];              // held for too long: this is how it rests now
             stuckCount++;

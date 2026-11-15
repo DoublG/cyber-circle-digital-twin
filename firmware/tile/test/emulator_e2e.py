@@ -7,7 +7,7 @@ playwright installed, tile A's web view (--web) is used too: the icons
 clicked in the browser, screenshots of the tile's top (*.png).
     cd firmware/tile && pio run -e native && python3 test/emulator_e2e.py
 """
-import json, os, pty, select, subprocess, sys, tempfile, time, urllib.request
+import re, json, os, pty, select, subprocess, sys, tempfile, time, urllib.request
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
 S = tempfile.mkdtemp(prefix="cc_tiles_")
 PORT, WS, TCP = 8114, 9024, 18830; BASE = f"http://127.0.0.1:{PORT}"; DB = os.path.join(S, "emu.db")
@@ -143,6 +143,49 @@ try:
     pump(); tiles[0].save("emu_reaction"); shot("web_reaction")
     res = [m for m in call("GET", f"/api/mqtt/log?since={seq}&filter=tile/1/event")["messages"] if '"result"' in m["payload"]]
     check(len(res) >= 3, f"results from the tile's program: {len(res)} (e.g. {res[0]['payload'][:90] if res else '-'})")
+    print("--- a small child: a lower threshold by age, a gamemaster's own %, the live readings")
+    def light_presses(keys="5678"):
+        seq = call("GET", "/api/mqtt/log?filter=tile/1/event")["seq"]
+        for k in keys:
+            tiles[0].key(k); time.sleep(0.35); pump()
+        time.sleep(0.4)
+        return [m["payload"] for m in call("GET", f"/api/mqtt/log?since={seq}&filter=tile/1/event")["messages"]
+                if '"press"' in m["payload"]]
+    call("POST", "/api/game/stop"); time.sleep(1)
+    call("POST", "/api/tiles/1/leave"); time.sleep(1)
+    tiles[0].out = b""
+    check(not light_presses("5"), "as built (100 %): a light press does not count")
+    mila = call("POST", "/api/players", {"name": "Mila", "age": 7})["id"]
+    call("POST", f"/api/players/{mila}/assign", {"tile": 1, "color": "#33ccff"})
+    check(until(lambda: b"threshold: 60 %" in tiles[0].out, 8), "Mila (7) invited on T01: her tile at 60 % (by age), at once")
+    light_presses()
+    check(until(lambda: any(p["tile"] == 1 and p["name"] == "Mila" for p in live()["state"]["players"]), 8),
+          "... she activates the tile with 4 light presses")
+    sens = call("GET", "/api/sensitivity")
+    t1 = next(p for p in sens["places"] if p["number"] == 1)
+    check(t1["threshold"] == 60 and t1["auto"] and t1["player"]["name"] == "Mila", f"/api/sensitivity: T01 60 %, by age ({t1})")
+    tiles[0].out = b""
+    call("PUT", f"/api/players/{mila}/press", {"press": 100})
+    check(until(lambda: b"threshold: 100 %" in tiles[0].out, 5), "a gamemaster: 100 % for Mila - her tile follows")
+    check(not light_presses("6"), "... a light press does not count any more")
+    call("PUT", f"/api/players/{mila}/press", {"press": 40})
+    check(until(lambda: b"threshold: 40 %" in tiles[0].out, 5) and light_presses("7"), "40 %: it counts again")
+    check(call("GET", f"/api/players/{mila}")["press"] == 40, "... kept for her (another tile, another day)")
+    dev = "02:00:00:00:00:0A"
+    call("POST", f"/api/devices/{dev}/measure", {"seconds": 10})
+    def lightly_measured():
+        tiles[0].key("5")                         # (a light press on the square, over and over)
+        p = call("GET", f"/api/devices/{dev}/pressure")
+        return p if p and p["threshold"] == 40 and p["counts"][0] > 300 else None
+    r = until(lambda: lightly_measured(), 6)
+    check(bool(r) and len(r["counts"]) == 4 and r["press"] == 240,
+          f"measured: the square pressed lightly {r and r['counts'][0]} > the threshold {r and r['press']} (40 %)")
+    call("PUT", "/api/tiles/1", {"press": 150})
+    check(until(lambda: b"threshold: 60 %" in tiles[0].out, 5), "the place's sensors at 150 %: 40 % x 150 % = 60 %")
+    call("PUT", "/api/tiles/1", {"press": 100})
+    call("POST", "/api/tiles/1/leave")
+    last = lambda: re.findall(rb"threshold: (\d+) %", tiles[0].out)[-1:]
+    check(until(lambda: last() == [b"100"], 5), "Mila leaves: the tile back to 100 %")
     print("--- what the hello says about the board; a tile that drops out (its last will)")
     perf = [t for t in call("GET", "/api/metrics")["tiles"] if t["device"] == "02:00:00:00:00:0B"]
     check(bool(perf) and perf[0].get("build") and perf[0].get("reset") == "emulator" and perf[0].get("mqtt_dropped") == 0

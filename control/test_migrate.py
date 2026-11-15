@@ -67,7 +67,8 @@ try:
           "names in any script")
     check(len(b.setting("checkpoint")) == 2_000_000 and b.setting("db_id") == a.setting("db_id"),
           "the settings (the checkpoint, the database's own id)")
-    check([t for t in b.tiles() if t["device"]] == [{"number": 3, "device": "aa:bb:cc", "enabled": 0}], "the tiles")
+    check([t for t in b.tiles() if t["device"]] == [{"number": 3, "device": "aa:bb:cc", "enabled": 0, "press": 100}],
+          "the tiles (and a column added since: its default)")
     check([g["name"] for g in b.gamemasters()] == ["Erik"], "the gamemasters")
     pid, gid = b.add_player("Nieuw"), b.start_game()
     check(pid == 123 and gid > max(g["id"] for g in a.export_event(a.current_event_id())["games"]),

@@ -5,8 +5,13 @@
 //                       the broker did not take), reset (why it started), stuck (sensors written off)}
 //                       device/<mac>/status {"online": false}: its last will (the broker sends it
 //                       when the tile is gone - no need to wait for the hellos to stop)
-//   its place           device/<mac>/config {"tile": n} (the control server: Tegels / the app)
+//   its place           device/<mac>/config {"tile": n, "threshold": %} (the control server: Tegels / the
+//                       app; threshold: how hard a press must be, % of SENSOR_PRESS - the place's own
+//                       setting x the player's on it: a small child presses more lightly)
 //   find it             device/<mac>/identify {"seconds": 6}
+//   measure it          device/<mac>/measure {"seconds": 60} -> device/<mac>/pressure every SENSOR_REPORT_MS
+//                       {"counts": [4 x ADC counts above rest], "press": counts, "release": counts,
+//                       "threshold": %} (Tegels › Diagnose, the app: how hard does this child press?)
 //   the setup           mode {"mode": "setup" | "closed" | ...} (the control server, retained)
 //   then, as tile n     tile/<n>/state  (retained) what to show - display.cpp
 //                       tile/<n>/cmd    programs, effects - programs.cpp, display.cpp
@@ -40,6 +45,7 @@ static int place = 0;                       // 0 = no place yet
 static bool gotConfig = false;              // on this connection: the control server's config (the place, or none yet)
 static bool placeKnown = false;             // since power-up: a place after that is one the operator gives now
 static uint32_t lastHello = 0, lastTry = 0, lastTick = 0, lastFrame = 0, lastSensorReport = 0;
+static uint32_t measureUntil = 0;          // measuring: the live readings until then (millis)
 static uint32_t loops = 0, loopsAt = 0, mqttConnects = 0;   // (hello: the loop rate and reconnects, Prestaties tab)
 static uint32_t dropped = 0;                // messages the broker did not take (hello)
 
@@ -107,6 +113,7 @@ static void hello() {
     doc["mqtt_dropped"] = dropped;
     doc["reset"] = watchdog::resetReason();     // why it started: "poweron", "task_wdt" (the loop hung), "brownout" ...
     doc["stuck"] = sensors::stuck();            // an icon held for SENSOR_STUCK_S: a bag on it, or a sensor gone bad
+    doc["threshold"] = sensors::threshold();    // how hard a press must be now (% of SENSOR_PRESS)
     loops = 0;
     loopsAt = now;
     String out;
@@ -140,11 +147,16 @@ static void onMessage(char *t, byte *payload, unsigned int len) {
         int n = doc["tile"] | 0;
         if (placeKnown && n > 0 && n != place) display::showNumber(PLACE_SHOW_MS);   // (given now: the hearts say which)
         placeKnown = true;
+        sensors::setThreshold(doc["threshold"] | 100);
+        Serial.printf("threshold: %d %%\n", sensors::threshold());
         setPlace(n);
     } else if (tp == modeTopic()) {                     // SETUP: the hearts show the place until it is locked
         display::setupPhase(!strcmp(doc["mode"] | "", "setup"));
     } else if (tp == deviceTopic("identify")) {
         display::identify((doc["seconds"] | 6) * 1000);
+    } else if (tp == deviceTopic("measure")) {          // the live readings for a while (0: stop)
+        int s = constrain((int)(doc["seconds"] | 60), 0, 600);
+        measureUntil = s ? millis() + s * 1000UL : 0;
     } else if (place > 0 && tp == topic("state")) {
         display::applyState(doc.as<JsonObjectConst>());
     } else if (place > 0 && tp == topic("cmd")) {
@@ -171,6 +183,7 @@ static void connect() {
     gotConfig = false;                      // (retained: it arrives again with the subscription)
     mqtt.subscribe(deviceTopic("config").c_str());       // (retained: the place arrives at once)
     mqtt.subscribe(deviceTopic("identify").c_str());
+    mqtt.subscribe(deviceTopic("measure").c_str());
     mqtt.subscribe(modeTopic().c_str());                 // (retained: the control server's setup / closed / open / paused)
     setPlace(was);
     hello();
@@ -254,11 +267,19 @@ void loop() {
             sendEvent(ev);
         }
     }
-    if (SENSOR_REPORT_MS > 0 && now - lastSensorReport > SENSOR_REPORT_MS) {
+    if (measureUntil && (int32_t)(measureUntil - now) > 0 && now - lastSensorReport >= SENSOR_REPORT_MS
+            && mqtt.connected()) {                  // measuring: how hard each icon is pressed now
         lastSensorReport = now;
         JsonDocument ev;
-        for (int i = 0; i < 4; i++) ev["pressure"][ICON_NAMES[i]] = constrain(sensors::raw(i) / 2000.0f, 0.0f, 1.0f);
-        sendEvent(ev);
+        for (int i = 0; i < 4; i++) ev["counts"][i] = sensors::raw(i);
+        ev["press"] = sensors::pressAt();
+        ev["release"] = sensors::releaseAt();
+        ev["threshold"] = sensors::threshold();
+        String out;
+        serializeJson(ev, out);
+        send(deviceTopic("pressure"), out, false);
+    } else if (measureUntil && (int32_t)(measureUntil - now) <= 0) {
+        measureUntil = 0;
     }
 
     if (now - lastFrame >= 16) {            // ~60 frames/s

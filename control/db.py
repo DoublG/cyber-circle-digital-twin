@@ -30,6 +30,7 @@ players = Table(
     Column("age", Integer, nullable=False, server_default="0"),                # 0 = unknown
     Column("card", String(191)),                                               # the QR card's code
     Column("email", String(255)),                                              # optional
+    Column("press", Integer),                  # how hard a press must be for them: % (NULL: by age, Tegels)
     Column("created_at", DateTime, nullable=False, server_default=func.now()),
     Index("players_card", "card", unique=True))
 questions = Table(
@@ -93,7 +94,8 @@ tiles_t = Table(
     "tiles", meta,
     Column("number", Integer, primary_key=True, autoincrement=False),   # the place: 1-13 floor, 14-18 mobile
     Column("device", String(64), unique=True),                 # the physical tile on it (its MAC address)
-    Column("enabled", Integer, nullable=False, server_default="1"))     # 0 = out of service
+    Column("enabled", Integer, nullable=False, server_default="1"),     # 0 = out of service
+    Column("press", Integer, nullable=False, server_default="100"))     # its sensors: % of the firmware's threshold
 gamemasters_t = Table(
     "gamemasters", meta,
     Column("id", Integer, primary_key=True, autoincrement=True),
@@ -108,7 +110,8 @@ settings_t = Table(
 # columns added after the first installations: (table, column, SQL type) - added when missing
 LATER_COLUMNS = (("questions", "image", "VARCHAR(255) NOT NULL DEFAULT ''"),
                  ("players", "card", "VARCHAR(191)"), ("players", "email", "VARCHAR(255)"),
-                 ("games", "event_id", "INTEGER"), ("events", "days", "TEXT"))
+                 ("games", "event_id", "INTEGER"), ("events", "days", "TEXT"),
+                 ("players", "press", "INTEGER"), ("tiles", "press", "INTEGER NOT NULL DEFAULT 100"))
 
 
 def engine_url(db):
@@ -163,7 +166,7 @@ class Database:
                 con.execute("PRAGMA journal_mode = WAL")
                 con.execute("PRAGMA foreign_keys = ON")
         meta.create_all(self.engine)
-        cols = {t: {c["name"] for c in inspect(self.engine).get_columns(t)} for t in ("questions", "players", "games", "events")}
+        cols = {t: {c["name"] for c in inspect(self.engine).get_columns(t)} for t in ("questions", "players", "games", "events", "tiles")}
         with self.engine.begin() as con:
             for table, column, sqltype in LATER_COLUMNS:       # databases from before these columns
                 if column not in cols[table]:
@@ -218,10 +221,11 @@ class Database:
             missing = [{"number": n} for n in range(1, PLACES + 1) if n not in have]
             if missing:
                 con.execute(insert(tiles_t), missing)
-        return self._all(select(tiles_t.c.number, tiles_t.c.device, tiles_t.c.enabled).order_by(tiles_t.c.number))
+        return self._all(select(tiles_t.c.number, tiles_t.c.device, tiles_t.c.enabled, tiles_t.c.press)
+                         .order_by(tiles_t.c.number))
 
-    def set_tile(self, number, device=..., enabled=None):
-        """device: a device id, None (no device) or ... (unchanged)."""
+    def set_tile(self, number, device=..., enabled=None, press=None):
+        """device: a device id, None (no device) or ... (unchanged); press: its sensors' % (None: unchanged)."""
         self.tiles()
         with self.engine.begin() as con:
             if device is not ...:
@@ -230,6 +234,8 @@ class Database:
                 con.execute(update(tiles_t).where(tiles_t.c.number == number).values(device=device or None))
             if enabled is not None:
                 con.execute(update(tiles_t).where(tiles_t.c.number == number).values(enabled=int(bool(enabled))))
+            if press is not None:
+                con.execute(update(tiles_t).where(tiles_t.c.number == number).values(press=int(press)))
 
     # ------------------------------------------------------------ gamemasters
 
@@ -267,7 +273,7 @@ class Database:
 
     def _player_cols(self):
         p = players.c
-        return select(p.id, p.name, p.color, p.age, p.card)
+        return select(p.id, p.name, p.color, p.age, p.card, p.press)
 
     def player(self, pid):
         return self._one(self._player_cols().where(players.c.id == pid))
@@ -282,6 +288,10 @@ class Database:
         self._write(update(players).where(players.c.id == pid).values(name=name, age=int(age), email=email or None))
         return pid
 
+    def set_player_press(self, pid, press):
+        """How hard a press must be for this player: % of the firmware's threshold (None: by age)."""
+        self._write(update(players).where(players.c.id == pid).values(press=press))
+
     def player_by_card(self, card):
         """The player registered with this QR card, or None."""
         return self._one(self._player_cols().where(players.c.card == card))
@@ -289,10 +299,11 @@ class Database:
     def players(self, search="", limit=50):
         p, r = players.c, results.c
         return self._all(
-            select(p.id, p.name, p.color, p.age, p.card, func.max(r.score).label("best"), func.count(r.id).label("plays"))
+            select(p.id, p.name, p.color, p.age, p.card, p.press, func.max(r.score).label("best"),
+                   func.count(r.id).label("plays"))
             .select_from(players.outerjoin(results, r.player_id == p.id))
             .where(p.name.ilike(f"%{search}%"))           # (any case, as before)
-            .group_by(p.id, p.name, p.color, p.age, p.card).order_by(p.id.desc()).limit(limit))
+            .group_by(p.id, p.name, p.color, p.age, p.card, p.press).order_by(p.id.desc()).limit(limit))
 
     # ------------------------------------------------------------ questions
 

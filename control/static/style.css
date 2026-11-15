@@ -180,3 +180,12 @@ tr.dim td { opacity: .5; }
 .closing-edit label { display: inline-flex; gap: 6px; align-items: center; }
 .life-table td.calc { color: var(--teal); white-space: nowrap; min-width: 9em; }
 .day-row { margin: 4px 0; } .day-row input { width: auto; }
+.tpress { width: 4.5em; }
+.press-meter { background: var(--panel); border: 2px solid var(--teal); padding: 10px; margin: 8px 0; max-width: 760px; }
+.pm-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.pm-name { width: 6em; } .pm-val { width: 9em; text-align: right; font-variant-numeric: tabular-nums; }
+.pm-bar { position: relative; flex: 1; height: 18px; background: var(--bg); border: 1px solid var(--line); }
+.pm-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--dim); }
+.pm-bar i.on { background: var(--good); }
+.pm-th { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--amber); }
+.pm-max { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--teal); }

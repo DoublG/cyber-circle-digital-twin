@@ -211,6 +211,20 @@ class InstallationIn(BaseModel):
 class TileIn(BaseModel):
     device: str | None = "-"                 # "-" = leave as it is; None / "" = no device
     enabled: bool | None = None
+    press: int | None = None                 # its sensors: % of the firmware's threshold (a sensor that reads low)
+
+
+class PressIn(BaseModel):
+    press: int | None = None                 # % of the threshold for this player (lower: more sensitive); None: by age
+
+
+class SensitivityIn(BaseModel):
+    young_age: int = 8                       # this age and younger ...
+    young: int = 60                          # ... press this % of the threshold (a small child presses lightly)
+
+
+class MeasureIn(BaseModel):
+    seconds: int = 60                        # the live readings for this long (0: stop)
 
 
 GM_WEB = os.path.join(HERE, "..", "gamemaster_app", "build", "web")
@@ -293,6 +307,8 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
             ids = None
         return sorted({int(i) for i in ids if 1 <= int(i) <= PLACES}) if isinstance(ids, list) else list(range(1, PLACES + 1))
 
+    seen_on_tiles = {}                       # (who was on which tile at the last state: thresholds)
+
     def changed(kind):                       # called from the MQTT thread
         if kind in ("mqtt", "devices"):
             link.publish_tiles(db.tiles(), installed())   # (re)connected / a tile appeared: send the layout
@@ -305,6 +321,16 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
             link.publish_selection(db.selection())
             link.publish_busy(busy_state())
             link.publish_closing(closing_plan())
+        if kind in ("state", "devices", "mqtt"):
+            st = link.state or {}
+            who = sorted((int(p.get("tile", 0)), int(p.get("player_id") or 0), bool(p.get("out")))
+                         for p in st.get("players", []) + st.get("pending", []) if isinstance(p, dict))
+            try:
+                if kind != "state" or who != seen_on_tiles.get("who"):   # (the state changes often: only who
+                    seen_on_tiles["who"] = who                           #  is on the tiles matters here)
+                    apply_thresholds()           # somebody came / went: their tile's threshold
+            except Exception as e:               # (the database busy: the next state)
+                print("thresholds:", e)
         if kind in ("device", "devices", "mqtt"):
             check_alerts(force=kind == "mqtt")   # (a tile's last will: at once; reconnected: send them again)
         if "loop" in loop:
@@ -599,14 +625,19 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         inst = set(installed())
         tiles = db.tiles()
         places = []
+        sens = place_thresholds()
         for t in tiles:
             d = devices.get(t["device"] or "", {})
             p = link.presses.get(t["number"])
+            th = sens.get(t["number"], {})
             places.append({"number": t["number"], "label": place_label(t["number"]), "device": t["device"],
                            "enabled": bool(t["enabled"]), "installed": t["number"] in inst, "online": bool(d.get("online")),
                            "seen_s": round(now - d["seen"]) if d.get("seen") else None,
                            **{k: d.get(k) for k in ("fw", "net", "ip", "link", "uptime", "mqtt_reconnects")},
-                           "press": {"button": p["button"], "ago": round(now - p["at"], 1)} if p else None})
+                           "press": {"button": p["button"], "ago": round(now - p["at"], 1)} if p else None,
+                           "threshold": th.get("threshold", 100), "tile_press": th.get("tile", 100),
+                           "player_press": th.get("press", 100), "auto": th.get("auto", False),
+                           "player": th.get("player"), "tile_threshold": d.get("threshold")})
         nodes = link.node_list()
         metrics = {m.get("id"): m for m in link.metrics_list()}
         masters = [n for n in nodes if n.get("role") == "master"]
@@ -909,9 +940,108 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         if t.device != "-" and db.setting("mode", "setup") != "setup" and current["enabled"]:
             # locked: swap a physical tile only on a place that is out of service
             raise HTTPException(409, "setup locked: take the tile out of service first, then swap it")
-        db.set_tile(number, ... if t.device == "-" else t.device, t.enabled)
+        if t.press is not None and not PRESS_MIN <= t.press <= PRESS_MAX:
+            raise HTTPException(422, f"press: {PRESS_MIN} - {PRESS_MAX} %")
+        db.set_tile(number, ... if t.device == "-" else t.device, t.enabled, t.press)
+        apply_thresholds(publish=False)
         link.publish_tiles(db.tiles(), installed())
         return {"ok": True}
+
+    # ------------------------------------------------------------ how hard a press must be (small children)
+    # Each tile's threshold (its config, retained): the place's own % (its sensors) x the
+    # player's on it - a gamemaster's % for that player, else by age (young_age and
+    # younger: young %). The tile is told when somebody comes or goes (the game's state)
+    # or a setting changes; the invite too (the 4 icons to start). Measured live:
+    # POST /api/devices/{dev}/measure -> GET /api/devices/{dev}/pressure.
+
+    PRESS_MIN, PRESS_MAX = 20, 200            # (the firmware's THRESHOLD_MIN / _MAX)
+
+    def sensitivity():
+        try:
+            s = json.loads(db.setting("sensitivity", "{}") or "{}")
+        except ValueError:
+            s = {}
+        return {"young_age": int(s.get("young_age", 8)), "young": int(s.get("young", 60))}
+
+    def player_press(p, sens=None):
+        """A player's %: the gamemaster's, else by age. (p: a players row; None: 100.)"""
+        if not p:
+            return 100
+        if p.get("press"):
+            return int(p["press"])
+        sens = sens or sensitivity()
+        return sens["young"] if 0 < int(p.get("age") or 0) <= sens["young_age"] else 100
+
+    def place_thresholds():
+        """{place: {threshold, player, press (the player's %), auto, tile (the place's %)}} - who is on it
+        now (playing or invited, the game's state) and the threshold its tile gets."""
+        st, sens = link.state or {}, sensitivity()
+        on = {int(p.get("tile", 0)): int(p.get("player_id") or 0) for p in st.get("pending", []) if isinstance(p, dict)}
+        on.update({int(p.get("tile", 0)): int(p.get("player_id") or 0) for p in st.get("players", [])
+                   if isinstance(p, dict) and not p.get("out")})
+        out = {}
+        for t in db.tiles():
+            p = db.player(on[t["number"]]) if on.get(t["number"]) else None
+            pp = player_press(p, sens)
+            out[t["number"]] = {"threshold": max(PRESS_MIN, min(PRESS_MAX, round(int(t["press"] or 100) * pp / 100))),
+                                "tile": int(t["press"] or 100), "press": pp, "auto": bool(p and not p.get("press")),
+                                "player": {"id": p["id"], "name": p["name"], "age": p["age"]} if p else None,
+                                "device": t["device"]}
+        return out
+
+    threshold_lock = threading.Lock()
+
+    def apply_thresholds(publish=True):
+        """Every placed tile its threshold - sent only when it changed (publish=False: only remembered,
+        publish_tiles sends it with the places)."""
+        with threshold_lock:
+            for n, t in place_thresholds().items():
+                dev = t["device"]
+                if dev and link.thresholds.get(dev, 100) != t["threshold"]:
+                    if publish:
+                        link.publish_threshold(dev, n, t["threshold"])
+                    else:
+                        link.thresholds[dev] = t["threshold"]
+
+    @app.get("/api/sensitivity")
+    def get_sensitivity():
+        """The rule by age and every place: who is on it, the threshold its tile has now."""
+        return {**sensitivity(), "min": PRESS_MIN, "max": PRESS_MAX,
+                "places": [{"number": n, "label": place_label(n), **t} for n, t in place_thresholds().items()]}
+
+    @app.put("/api/sensitivity")
+    def put_sensitivity(s: SensitivityIn):
+        if not PRESS_MIN <= s.young <= PRESS_MAX or not 0 <= s.young_age <= 18:
+            raise HTTPException(422, f"young: {PRESS_MIN} - {PRESS_MAX} %, young_age: 0 - 18")
+        db.set_setting("sensitivity", json.dumps({"young_age": s.young_age, "young": s.young}))
+        apply_thresholds()
+        return get_sensitivity()
+
+    @app.put("/api/players/{pid}/press")
+    def set_player_press(pid: int, p: PressIn):
+        """A gamemaster: how hard a press must be for this player (% of the threshold; lower =
+        more sensitive), None = by age again. Their tile gets it at once."""
+        if db.player(pid) is None:
+            raise HTTPException(404, "unknown player")
+        if p.press is not None and not PRESS_MIN <= p.press <= PRESS_MAX:
+            raise HTTPException(422, f"press: {PRESS_MIN} - {PRESS_MAX} %")
+        db.set_player_press(pid, p.press)
+        apply_thresholds()
+        changed("players")
+        return db.player(pid)
+
+    @app.post("/api/devices/{dev}/measure")
+    def measure(dev: str, m: MeasureIn):
+        """A tile's live readings for a while (how hard does this child press?)."""
+        link.pressure.pop(dev, None)
+        link.measure(dev, max(0, min(600, m.seconds)))
+        return {"ok": True}
+
+    @app.get("/api/devices/{dev}/pressure")
+    def pressure(dev: str):
+        """Its last live readings: {counts: [4], press, release, threshold, ago} (null: none yet)."""
+        p = link.pressure.get(dev)
+        return {**p, "ago": round(time.time() - p["seen"], 1)} if p else None
 
     # ------------------------------------------------------------ game settings
 

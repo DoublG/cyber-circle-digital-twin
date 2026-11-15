@@ -223,6 +223,35 @@ void test_the_clock_wraps() {                               // millis() after 49
     TEST_ASSERT_EQUAL(1 << 0, releases);
 }
 
+void test_a_light_child_with_a_lower_threshold() {         // the control server: a small child on the tile
+    start();
+    run(500);
+    int light = REST + SENSOR_PRESS * 7 / 10;                 // 70 % of the force a press needs as built
+    set(1, light);
+    run(200);
+    TEST_ASSERT_EQUAL(0, pressCount);                       // as built: not a press
+    set(1, REST);
+    run(200);
+    sensors::setThreshold(60);
+    TEST_ASSERT_EQUAL(60, sensors::threshold());
+    TEST_ASSERT_EQUAL(SENSOR_PRESS * 60 / 100, sensors::pressAt());
+    TEST_ASSERT_EQUAL(SENSOR_RELEASE * 60 / 100, sensors::releaseAt());
+    set(1, light);
+    run(200);
+    TEST_ASSERT_EQUAL(1 << 1, presses);                     // 60 %: the same light press counts
+    set(1, REST + SENSOR_RELEASE * 6 / 10 + 20);            // just above the lower release: still held
+    run(200);
+    TEST_ASSERT_EQUAL(0, releaseCount);
+    set(1, REST);
+    run(200);
+    TEST_ASSERT_EQUAL(1 << 1, releases);
+    sensors::setThreshold(5);
+    TEST_ASSERT_EQUAL(THRESHOLD_MIN, sensors::threshold());   // never below the minimum (noise would press)
+    sensors::setThreshold(900);
+    TEST_ASSERT_EQUAL(THRESHOLD_MAX, sensors::threshold());
+    sensors::setThreshold(100);
+}
+
 int main() {
     UNITY_BEGIN();
     RUN_TEST(test_press_and_release);
@@ -234,5 +263,6 @@ int main() {
     RUN_TEST(test_somebody_on_the_icon_at_power_up);
     RUN_TEST(test_a_stuck_icon_is_let_go_of);
     RUN_TEST(test_the_clock_wraps);
+    RUN_TEST(test_a_light_child_with_a_lower_threshold);
     return UNITY_END();
 }

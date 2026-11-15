@@ -39,6 +39,7 @@ const char *emu_user = "";
 const char *emu_password = "";
 static std::string emu_mac;
 static uint32_t pressUntil[4];
+static uint32_t lightUntil[4];                    // a light press (keys 5-8): a small child - 70 % of what a press needs
 static bool webHeld[4];                           // icons held down in the browser
 static int webPort = 0;
 static bool running = true;
@@ -63,7 +64,8 @@ void delay(uint32_t ms) { usleep(ms * 1000); }
 
 int analogRead(int pin) {                         // a key = the icon pressed for a moment
     for (int i = 0; i < 4; i++)
-        if (SENSOR_PINS[i] == pin) return webHeld[i] || millis() < pressUntil[i] ? 3000 : 100;
+        if (SENSOR_PINS[i] == pin)
+            return webHeld[i] || millis() < pressUntil[i] ? 3000 : millis() < lightUntil[i] ? 100 + SENSOR_PRESS * 7 / 10 : 100;
     return 0;
 }
 
@@ -181,9 +183,10 @@ static std::string dot(const CRGB &c, const char *on, const char *off = "·") {
 // millisecond, not once per frame - a press's time is not rounded to a frame).
 static void input() {
     char ch;
-    while (term && read(STDIN_FILENO, &ch, 1) == 1) {   // keys: 1-4 press the icons, q quits (the terminal only:
+    while (term && read(STDIN_FILENO, &ch, 1) == 1) {   // keys: 1-4 press the icons (5-8 lightly: a small child), q quits (the terminal only:
                                                         //  stdin is non-blocking there, not with --no-term)
         if (ch >= '1' && ch <= '4') pressUntil[ch - '1'] = millis() + 180;
+        if (ch >= '5' && ch <= '8') lightUntil[ch - '5'] = millis() + 180;
         if (ch == 'q' || ch == 'Q') running = false;
     }
     webPoll(ledBuf, ledCount, emu_mac, logLines, webHeld);

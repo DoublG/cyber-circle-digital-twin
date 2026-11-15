@@ -104,6 +104,21 @@ frame), LED for LED at the same place around the tile. The game itself
 | Flashing | TXD0/IO1, RXD0/IO3, IO0, EN | 3.3 V USB-serial adapter; IO0 to GND during reset = boot mode |
 | 5 V, GND | 5V, GND | from the tile's 5 V rail |
 
+**How hard a press must be.** An icon counts as pressed at `SENSOR_PRESS`
+(600) ADC counts above its resting value. The control server lowers that per
+tile while a small child is on it (the player's %: by age, or a gamemaster's
+choice) - see *docs/SETUP.md, Drukgevoeligheid*. Measure first (*Tegels ›
+Diagnose › 📏 meten*, or the app's tile page). Still too stiff for light
+children at 50-60 %? The hardware:
+
+* **a bigger resistor to GND** - an FSR under a light force is tens of kΩ, so
+  with 10 kΩ the node hardly moves; **47 kΩ** gives roughly 3-4 times the
+  reading at light forces (then measure again: adults read higher too, the
+  place's % - *Plaats %* - brings it back);
+* **a puck between the glass and the FSR** (rubber or felt, about the size of
+  its active area) - the glass spreads a light foot over the whole quarter, the
+  FSR only feels what reaches its small active area.
+
 **The LED chain** (one data line, 105 LEDs, in this order): outer ring 48
 (#0–47, #0 = LED_00 facing the robot, then clockwise seen from above) →
 inner ring 48 (#48–95) → hearts 5 (#96–100, heart 1 nearest the logo) →

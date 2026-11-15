@@ -10,8 +10,10 @@ sends commands. Topics (prefix "cybercircle"):
   master        control -> all   retained {node, host, port}: the chosen master
   cmd           control -> game  any arena.apply_command message ({"game": "start"}, {"assign": 42}, ...)
   device/<dev>/hello    tile -> all     retained: a physical tile announces itself {device, fw, ...}
-  device/<dev>/config   control -> tile retained {"tile": n}: the place it stands on (0 = none) -
-                                        the tile then uses tile/<n>/cmd and tile/<n>/event
+  device/<dev>/config   control -> tile retained {"tile": n, "threshold": %}: the place it stands on
+                                        (0 = none) - the tile then uses tile/<n>/cmd and tile/<n>/event -
+                                        and how hard a press must be (the place's % x the player's)
+  device/<dev>/measure  control -> tile {"seconds": 60}: its live readings -> device/<dev>/pressure
   alerts        control -> all  retained {"tiles": [{tile, label, device, reason, player, text}]}: broken tiles
   tiles         control -> game  retained {"enabled": {"1": true, ...}, "devices": {"1": "dev", ...}}
   mode          control -> game  retained {"mode": "setup" | "closed" | "open" | "paused"}
@@ -49,6 +51,8 @@ class MqttLink:
         self.text_defaults = {}              # the game's texts as they are without changes (texts/defaults)
         self.devices = {}                    # physical tile id -> hello + "seen"
         self.presses = {}                    # place number -> {"button", "at"}: its last press (Tegels › Diagnose)
+        self.pressure = {}                   # physical tile -> its live readings while measured {counts, press, ..., seen}
+        self.thresholds = {}                 # physical tile -> the threshold % in its config now (how hard a press must be)
         self.state = {}
         self.events = deque(maxlen=60)
         self.voice = deque(maxlen=200)       # the lines the game reads out (voice), each with "seq" (the a11y pages)
@@ -134,6 +138,15 @@ class MqttLink:
                     m["hist"].append([round(data["seen"], 1), data.get("fps", 0), data.get("frame_ms", 0),
                                       data.get("worst_ms", 0), data.get("cpu", 0)])
             return                              # (every 2 s per process: not in the traffic log, no live push)
+        if msg.topic.startswith(self.prefix + "/device/") and msg.topic.endswith("/pressure"):
+            try:                                # a tile being measured: 10 per s - not in the traffic log either
+                data = json.loads(msg.payload.decode() or "null")
+            except ValueError:
+                return
+            if isinstance(data, dict):
+                with self.lock:
+                    self.pressure[msg.topic.split("/")[-2]] = {**data, "seen": time.time()}
+            return
         self.traffic_seq += 1
         self.traffic.append({"seq": self.traffic_seq, "time": time.strftime("%H:%M:%S") + ".%03d" % (time.time() % 1 * 1000),
                              "topic": msg.topic, "payload": msg.payload[:4000].decode(errors="replace"),
@@ -287,6 +300,16 @@ class MqttLink:
 
     # ------------------------------------------------------------ outgoing
 
+    def measure(self, device, seconds=60):
+        """A tile's live readings for a while (device/<dev>/pressure, 10 per s; 0: stop)."""
+        self.client.publish(f"{self.prefix}/device/{device}/measure", json.dumps({"seconds": seconds}))
+
+    def publish_threshold(self, device, tile, threshold):
+        """One tile's config again: its place and how hard a press must be (retained)."""
+        self.thresholds[device] = threshold
+        self.client.publish(f"{self.prefix}/device/{device}/config", json.dumps({"tile": tile, "threshold": threshold}),
+                            retain=True)
+
     def identify(self, device, seconds=6):
         """A physical tile lights up so the crew can find it (also before it has a place)."""
         self.client.publish(f"{self.prefix}/device/{device}/identify", json.dumps({"seconds": seconds}))
@@ -313,8 +336,8 @@ class MqttLink:
         service and which are installed at all (a partial installation)."""
         placed = {t["device"]: t["number"] for t in tiles if t["device"]}
         for dev in set(placed) | set(self.devices):
-            self.client.publish(f"{self.prefix}/device/{dev}/config", json.dumps({"tile": placed.get(dev, 0)}),
-                                retain=True)
+            self.client.publish(f"{self.prefix}/device/{dev}/config", json.dumps(
+                {"tile": placed.get(dev, 0), "threshold": self.thresholds.get(dev, 100)}), retain=True)
         self.client.publish(f"{self.prefix}/tiles", json.dumps({
             "enabled": {str(t["number"]): bool(t["enabled"]) for t in tiles},
             "devices": {str(t["number"]): t["device"] for t in tiles if t["device"]},

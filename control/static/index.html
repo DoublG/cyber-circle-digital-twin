@@ -109,8 +109,20 @@
     Is alles getest: <b>🔒 Setup vergrendelen</b> – tegels, schermen en de uitlijning van de robot liggen dan vast,
     de nummers gaan weg – en dan pas <b>▶ Start spel</b>.</p>
   <div id="diag-summary" class="row"></div>
+  <details class="closing-edit" id="sens-box"><summary>Drukgevoeligheid – kleine kinderen drukken lichter</summary>
+    <p class="hint">Hoe hard een speler moet drukken, in % van de drempel van de tegel (100 = zoals gebouwd; lager =
+      gevoeliger). Per speler: automatisch volgens leeftijd, of wat een gamemaster voor die speler kiest (Spelers, de app).
+      Per plaats: voor een tegel waarvan de sensoren zwakker meten (de kolom <b>Plaats %</b>). De tegel krijgt het zodra er
+      iemand op komt (ook bij de uitnodiging: de 4 iconen). <b>📏 meten</b>: de live waarden van een tegel, met de drempel –
+      laat het kind drukken en kijk hoe ver het komt.</p>
+    <div class="row"><label>Kinderen t/m <input type="number" id="sens-age" min="0" max="18" style="width:4em"> jaar:
+      <input type="number" id="sens-young" min="20" max="200" step="5" style="width:5em"> %</label>
+      <button id="sens-save" class="small">Opslaan</button><span id="sens-msg" class="hint"></span></div>
+  </details>
+  <div id="press-meter" class="press-meter" hidden></div>
   <table id="diag-places"><thead><tr><th>Plaats</th><th>Tegel</th><th>Status</th><th>Firmware</th><th>IP</th><th>Kabel</th>
-    <th>Gezien</th><th>Laatste knop</th></tr></thead><tbody></tbody></table>
+    <th>Gezien</th><th>Laatste knop</th><th title="hoe hard drukken: % van de drempel (de speler x de plaats)">Druk</th>
+    <th title="de sensoren van deze plaats: % van de drempel">Plaats %</th><th></th></tr></thead><tbody></tbody></table>
   <table id="diag-screens"><thead><tr><th>Scherm</th><th>Node</th><th>Status</th><th>FPS</th><th>Frame</th><th>Traag (2 s)</th>
     <th>Ping</th><th>CPU</th><th>Temp.</th></tr></thead><tbody></tbody></table>
   <h2>Niet toegewezen tegels</h2>
@@ -215,7 +227,7 @@
     <button>+ Speler</button>
   </form>
   <input id="player-search" placeholder="Zoek speler…">
-  <table id="players"><thead><tr><th>#</th><th>Naam</th><th>Kaart</th><th>Leeftijd</th><th>Record (rondes)</th><th>Gespeeld</th><th>Toewijzen (kleur, tegel)</th></tr></thead><tbody></tbody></table>
+  <table id="players"><thead><tr><th>#</th><th>Naam</th><th>Kaart</th><th>Leeftijd</th><th title="hoe hard drukken op de tegel">Druk</th><th>Record (rondes)</th><th>Gespeeld</th><th>Toewijzen (kleur, tegel)</th></tr></thead><tbody></tbody></table>
 </section>
 
 <section id="tab-gamemasters" class="tab">

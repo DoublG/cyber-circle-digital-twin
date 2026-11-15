@@ -519,6 +519,81 @@ async function pollDiag() {
   try { renderDiag(await (await fetch("/api/diagnose")).json()); } catch (e) { /* the next poll */ }
 }
 const BUTTON_NL = { Square: "vierkant", Triangle: "driehoek", Cross: "kruis", Circle: "cirkel" };
+
+// how hard a press must be (small children): the age rule, a place's %, the live meter
+// What % a player needs: the weakest icon's best press (pressed at all: > 50 counts),
+// with a margin (85 %) - in steps of 5, 20 .. 100.
+function pressSuggestion(maxima, press, threshold) {
+  const pressed = maxima.filter(m => m > 50);
+  if (pressed.length < 4) return null;
+  const weakest = Math.min(...pressed), base = press * 100 / threshold;     // (the threshold at 100 %)
+  const ratio = Math.round(weakest * 100 / base);
+  return { weakest, ratio, pct: Math.max(20, Math.min(100, Math.floor(ratio * 0.85 / 5) * 5)) };
+}
+
+function pressWhy(p) {
+  if (!p.player) return `niemand op de tegel: de plaats ${p.tile_press} %`;
+  return `${p.player.name}${p.player.age ? ` (${p.player.age} jaar)` : ""}: ${p.player_press} %${p.auto ? " (automatisch, leeftijd)" : " (gekozen)"}`
+    + (p.tile_press !== 100 ? ` x de plaats ${p.tile_press} %` : "");
+}
+async function loadSensitivity() {
+  const s = await api("GET", "/api/sensitivity");
+  $("#sens-age").value = s.young_age;
+  $("#sens-young").value = s.young;
+}
+$("#sens-save").onclick = async () => {
+  await api("PUT", "/api/sensitivity", { young_age: Number($("#sens-age").value), young: Number($("#sens-young").value) });
+  $("#sens-msg").textContent = "Opgeslagen ✓";
+};
+$("#sens-box").ontoggle = () => { if ($("#sens-box").open) loadSensitivity(); };
+$("#diag-places").onchange = async e => {
+  const i = e.target.closest("input[data-tpress]");
+  if (i) await api("PUT", `/api/tiles/${i.dataset.tpress}`, { press: Math.round(Number(i.value)) });
+};
+let meter = null;                         // {dev, place, until, timer}
+$("#diag-places").onclick = async e => {
+  const b = e.target.closest("button[data-measure]");
+  if (!b) return;
+  stopMeter();
+  await api("POST", `/api/devices/${encodeURIComponent(b.dataset.measure)}/measure`, { seconds: 60 });
+  meter = { dev: b.dataset.measure, place: Number(b.dataset.place), until: Date.now() + 60000, max: {} };
+  meter.timer = setInterval(pollMeter, 150);
+  $("#press-meter").hidden = false;
+  $("#press-meter").innerHTML = `<b>${label(meter.place)}</b> <span class="hint">wacht op de tegel…</span>`;
+};
+function stopMeter() {
+  if (!meter) return;
+  clearInterval(meter.timer);
+  api("POST", `/api/devices/${encodeURIComponent(meter.dev)}/measure`, { seconds: 0 }).catch(() => {});
+  meter = null;
+  $("#press-meter").hidden = true;
+}
+async function pollMeter() {
+  if (!meter) return;
+  if (Date.now() > meter.until || !$("#tab-tiles").classList.contains("active")) { stopMeter(); return; }
+  let p;
+  try { p = await (await fetch(`/api/devices/${encodeURIComponent(meter.dev)}/pressure`)).json(); } catch (e) { return; }
+  if (!p || !meter) return;
+  const scale = Math.max(p.press * 2, ...p.counts.map(c => c * 1.1), 400);
+  const names = ["vierkant", "driehoek", "kruis", "cirkel"];
+  $("#press-meter").innerHTML = `<div class="row"><b>${label(meter.place)} – live</b>
+      <span class="hint">drempel ${p.press} (${p.threshold} %) · los onder ${p.release} · nog ${Math.ceil((meter.until - Date.now()) / 1000)} s</span>
+      <button class="small" id="meter-stop">stop</button></div>` +
+    p.counts.map((c, i) => {
+      meter.max[i] = Math.max(meter.max[i] || 0, c);
+      const pct = v => Math.max(0, Math.min(100, v * 100 / scale));
+      return `<div class="pm-row"><span class="pm-name">${names[i]}</span><div class="pm-bar">
+        <i class="${c > p.press ? "on" : ""}" style="width:${pct(c)}%"></i>
+        <span class="pm-max" style="left:${pct(meter.max[i])}%" title="hoogste"></span>
+        <span class="pm-th" style="left:${pct(p.press)}%" title="drempel"></span></div>
+        <span class="pm-val">${Math.max(0, c)} <span class="hint">max ${meter.max[i]}</span></span></div>`;
+    }).join("") + (() => {
+      const s = pressSuggestion(Object.values(meter.max), p.press, p.threshold);
+      return s ? `<p class="hint">Zwakste icoon: ${s.weakest} = ${s.ratio} % van de drempel →
+        voor dit kind: <b>${s.pct} %</b> (Spelers, of de app)</p>` : `<p class="hint">Laat het kind op elk icoon drukken.</p>`;
+    })();
+  $("#meter-stop").onclick = stopMeter;
+}
 function renderDiag(d) {
   const places = d.places.filter(p => p.installed);
   const online = places.filter(p => p.device && p.online).length;
@@ -536,7 +611,12 @@ function renderDiag(d) {
     return `<tr class="${fresh ? "diag-press" : ""} ${p.enabled ? "" : "off"}"><td>${label(p.number)}</td><td>${esc(p.device || "–")}</td>
       <td class="${st[1]}">${st[0]}${p.enabled ? "" : " (buiten gebruik)"}</td><td>${esc(p.fw || "–")}</td><td>${esc(p.ip || "–")}</td>
       <td>${esc(p.link || (p.device ? "?" : "–"))}</td><td>${p.seen_s == null ? "–" : p.seen_s + " s"}</td>
-      <td>${p.press ? `${BUTTON_NL[p.press.button] || esc(p.press.button)}, ${num(p.press.ago)} s` : "–"}</td></tr>`;
+      <td>${p.press ? `${BUTTON_NL[p.press.button] || esc(p.press.button)}, ${num(p.press.ago)} s` : "–"}</td>
+      <td class="${p.threshold < 100 ? "good" : ""}" title="${esc(pressWhy(p))}">${p.threshold} %${
+        p.device && p.online && p.tile_threshold != null && p.tile_threshold !== p.threshold ? ` <span class="warn" title="de tegel meldt ${p.tile_threshold} %: oude firmware of nog niet aangekomen">⚠</span>` : ""}</td>
+      <td><input type="number" class="tpress" data-tpress="${p.number}" min="20" max="200" step="5" value="${p.tile_press}"
+        title="de sensoren van deze plaats (100 = zoals gebouwd)"></td>
+      <td>${p.device && p.online ? `<button class="small" data-measure="${esc(p.device)}" data-place="${p.number}">📏 meten</button>` : ""}</td></tr>`;
   }).join("");
   $("#diag-screens tbody").innerHTML = d.screens.map(s => {
     const slow = s.slow_frames || 0;
@@ -970,6 +1050,10 @@ async function loadPlayers() {
   const rows = await api("GET", `/api/players?search=${encodeURIComponent($("#player-search").value)}`);
   $("#players tbody").innerHTML = rows.map(p => `<tr><td>${p.id}</td><td>${esc(p.name)}</td>
     <td>${esc(p.card || "-")}</td><td>${p.age || "-"}</td>
+    <td><select data-press="${p.id}" title="hoe hard drukken op de tegel (lager = gevoeliger)">${
+      [["", "automatisch"], ["100", "100 % normaal"], ["80", "80 %"], ["60", "60 % gevoelig"], ["40", "40 % zeer gevoelig"], ["30", "30 %"]]
+        .map(([v, t]) => `<option value="${v}" ${String(p.press ?? "") === v ? "selected" : ""}>${t}</option>`).join("")}${
+      p.press && ![100, 80, 60, 40, 30].includes(p.press) ? `<option selected value="${p.press}">${p.press} %</option>` : ""}</select></td>
     <td>${p.best ?? "-"}</td><td>${p.plays}</td>
     <td><input type="color" data-color="${p.id}" value="${nextColor()}" title="de tegel licht op in deze kleur">
       <select data-pid="${p.id}"><option value="">tegel…</option><option value="0">vrije vloertegel</option>
@@ -980,6 +1064,11 @@ async function loadPlayers() {
 }
 $("#player-search").oninput = loadPlayers;
 $("#players").onchange = async e => {
+  const pr = e.target.closest("select[data-press]");
+  if (pr) {
+    await api("PUT", `/api/players/${pr.dataset.press}/press`, { press: pr.value === "" ? null : Number(pr.value) });
+    return;
+  }
   const sel = e.target.closest("select[data-pid]");
   if (!sel || sel.value === "") return;
   const color = $(`input[data-color="${sel.dataset.pid}"]`).value;

@@ -131,8 +131,10 @@ static const int SENSOR_PINS[4] = {32, 33, 39, 35};
 #define SENSOR_STUCK_S   60             // an icon held this long: let go of, its reading is the resting value now (0 = never)
 #endif
 #ifndef SENSOR_REPORT_MS
-#define SENSOR_REPORT_MS 0              // >0: also send {"pressure": {...}} every n ms (debugging)
+#define SENSOR_REPORT_MS 100            // measuring (Tegels › Diagnose, the app): device/<mac>/pressure every n ms
 #endif
+#define THRESHOLD_MIN    20             // % of SENSOR_PRESS: the most sensitive a tile can be set
+#define THRESHOLD_MAX    200            // ... and the least
 
 // ---- timing
 #ifndef HELLO_MS

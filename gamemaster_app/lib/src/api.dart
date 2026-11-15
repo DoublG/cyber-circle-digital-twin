@@ -53,6 +53,46 @@ class Device {
   final Map<String, dynamic> info;   // what the tile told about itself (firmware, ...)
 }
 
+/// How hard a press must be on one place (small children press lightly): the
+/// threshold its tile has now (% of the firmware's), the player's % (theirs, or by
+/// age: auto) and the place's own.
+class PlaceSensitivity {
+  PlaceSensitivity(this.threshold, this.press, this.auto, this.tilePress, this.age);
+  final int threshold;
+  final int press;
+  final bool auto;
+  final int tilePress;
+  final int age;
+
+  /// "60 % - automatisch (8 jaar)" / "60 % - gekozen" / "100 % - normaal".
+  String get text => '$threshold % - ${!auto && press != 100 ? 'gekozen' : auto && press != 100 ? 'automatisch ($age jaar)' : 'normaal'}'
+      '${tilePress != 100 ? ' (plaats $tilePress %)' : ''}';
+}
+
+class Sensitivity {
+  Sensitivity(this.youngAge, this.young, this.places);
+  final int youngAge;
+  final int young;
+  final Map<int, PlaceSensitivity> places;
+
+  factory Sensitivity.fromJson(Map<String, dynamic> j) {
+    int i(dynamic v) => v is num ? v.toInt() : 0;
+    return Sensitivity(i(j['young_age']), i(j['young']), {
+      for (final p in (j['places'] as List? ?? []))
+        i((p as Map)['number']): PlaceSensitivity(i(p['threshold']), i(p['press']), p['auto'] == true, i(p['tile']),
+            i((p['player'] as Map?)?['age'])),
+    });
+  }
+}
+
+/// A tile's live readings while measured: per icon the ADC counts above rest, the threshold.
+class TileReading {
+  TileReading(this.counts, this.press, this.threshold);
+  final List<int> counts;
+  final int press;
+  final int threshold;
+}
+
 class Hardware {
   Hardware(this.places, this.devices);
   final List<Place> places;
@@ -242,6 +282,24 @@ class Api {
 
   /// Busy: visitors are waiting (on) or not (off) - switched by this gamemaster.
   Future<void> setBusy(bool on, int gamemaster) => _send('PUT', '/api/busy', {'busy': on, 'gamemaster': gamemaster});
+
+  /// How hard a press must be: the rule by age and every place now.
+  Future<Sensitivity> sensitivity() async =>
+      Sensitivity.fromJson(await _send('GET', '/api/sensitivity') as Map<String, dynamic>);
+
+  /// This player's % of the threshold (lower = more sensitive); null = by age again.
+  Future<void> setPlayerPress(int playerId, int? press) => _send('PUT', '/api/players/$playerId/press', {'press': press});
+
+  /// A tile's live readings for a while (0: stop).
+  Future<void> measure(String device, int seconds) =>
+      _send('POST', '/api/devices/${Uri.encodeComponent(device)}/measure', {'seconds': seconds});
+
+  Future<TileReading?> reading(String device) async {
+    final j = await _send('GET', '/api/devices/${Uri.encodeComponent(device)}/pressure') as Map<String, dynamic>?;
+    if (j == null) return null;
+    return TileReading([for (final c in (j['counts'] as List? ?? [])) (c as num).toInt()], (j['press'] as num?)?.toInt() ?? 600,
+        (j['threshold'] as num?)?.toInt() ?? 100);
+  }
 
   /// Cancel an invite / remove a player from their place.
   Future<void> leave(int tile) => _send('POST', '/api/tiles/$tile/leave');

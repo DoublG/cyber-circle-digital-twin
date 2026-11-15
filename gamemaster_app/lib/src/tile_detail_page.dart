@@ -2,7 +2,8 @@
 // told about itself), who plays there, and what the crew can do: kick the
 // player out of the game, take the place out of service (decommission) or
 // back in, swap the tile for another one (a broken tile), unlink it, light
-// it up to find it.
+// it up to find it. How hard the player on it must press (a small child presses
+// lightly): their own %, and the tile's live readings to see how far they get.
 
 import 'dart:async';
 
@@ -24,6 +25,7 @@ class TileDetailPage extends StatefulWidget {
 
 class _TileDetailPageState extends State<TileDetailPage> {
   Hardware? _hw;
+  Sensitivity? _sens;
   Timer? _poll;
 
   AppState get app => widget.app;
@@ -50,6 +52,8 @@ class _TileDetailPageState extends State<TileDetailPage> {
     try {
       final hw = await app.api?.hardware();
       if (mounted && hw != null) setState(() => _hw = hw);
+      final sens = await app.api?.sensitivity();
+      if (mounted && sens != null) setState(() => _sens = sens);
     } catch (_) {}
   }
 
@@ -113,6 +117,8 @@ class _TileDetailPageState extends State<TileDetailPage> {
                     await _do(() => api.leave(t), '$name is uit het spel');
                   }
                 }),
+              if ((player?.playerId ?? invite?.playerId ?? 0) > 0) ..._pressSection(
+                  player?.playerId ?? invite!.playerId, player?.name ?? invite!.name, place?.device, dev?.online == true),
               _button(enabled ? Icons.block : Icons.check_circle, enabled ? 'BUITEN GEBRUIK ZETTEN' : 'WEER IN GEBRUIK NEMEN',
                   enabled ? Retro.bad : Retro.good, () async {
                 if (!enabled || await _sure('${s.label(t)} buiten gebruik?',
@@ -153,6 +159,106 @@ class _TileDetailPageState extends State<TileDetailPage> {
                   }
                 }),
             ]),
+    );
+  }
+
+  /// How hard this player must press: now, the choices (AUTO = by age), measuring.
+  List<Widget> _pressSection(int playerId, String name, String? device, bool online) {
+    final now = _sens?.places[t];
+    final choices = <(String, int?)>[('AUTO', null), ('100 %', 100), ('80 %', 80), ('60 %', 60), ('40 %', 40)];
+    final current = now == null ? null : (now.auto ? null : now.press);
+    return [
+      _section('DRUKGEVOELIGHEID'),
+      Text(now?.text ?? '…', style: const TextStyle(fontSize: 16)),
+      const Text('Drukt het kind te licht om de iconen te laten werken? Kies een lager %: dan volstaat minder kracht. '
+          'Het geldt voor deze speler, ook later op een andere tegel.', style: TextStyle(color: Retro.dim)),
+      const SizedBox(height: 8),
+      Wrap(spacing: 8, runSpacing: 8, children: [
+        for (final (label, v) in choices)
+          ChoiceChip(
+            label: Text(label),
+            selected: now != null && current == v,
+            onSelected: (_) => _do(() => app.api!.setPlayerPress(playerId, v),
+                v == null ? '$name: automatisch (leeftijd)' : '$name: $v %'),
+          ),
+      ]),
+      if (device != null && online)
+        _button(Icons.speed, 'METEN: HOE HARD DRUKT $name?'.toUpperCase(), Retro.teal, () => _measure(device, name)),
+    ];
+  }
+
+  /// The tile's live readings (60 s): a bar per icon, the threshold - let the child press.
+  Future<void> _measure(String device, String name) async {
+    final api = app.api!;
+    await api.measure(device, 60);
+    TileReading? r;
+    final best = List.filled(4, 0);
+    Timer? timer;
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Retro.panel,
+      builder: (context) => StatefulBuilder(builder: (context, setSheet) {
+        timer ??= Timer.periodic(const Duration(milliseconds: 200), (_) async {
+          try {
+            final n = await api.reading(device);
+            if (n == null || !context.mounted) return;
+            for (var i = 0; i < 4 && i < n.counts.length; i++) {
+              if (n.counts[i] > best[i]) best[i] = n.counts[i];
+            }
+            setSheet(() => r = n);
+          } catch (_) {}
+        });
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${name.toUpperCase()} DRUKT ...', style: const TextStyle(color: Retro.teal, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text(r == null ? 'wacht op de tegel ...' : 'groen = telt als druk · gele streep = drempel (${r!.threshold} %)',
+                style: const TextStyle(color: Retro.dim)),
+            const SizedBox(height: 12),
+            for (var i = 0; i < 4; i++) _meterRow(['VIERKANT', 'DRIEHOEK', 'KRUIS', 'CIRKEL'][i], r, i, best[i]),
+            const SizedBox(height: 8),
+            Text(_suggest(best, r) ?? 'Laat het kind op elk icoon drukken.', style: const TextStyle(color: Retro.amber)),
+          ]),
+        );
+      }),
+    );
+    timer?.cancel();
+    api.measure(device, 0).catchError((_) {});
+  }
+
+  /// What % this child needs: the weakest icon's best press, with a margin (as the web interface).
+  String? _suggest(List<int> best, TileReading? r) {
+    if (r == null || best.any((b) => b <= 50)) return null;
+    final weakest = best.reduce((a, b) => a < b ? a : b);
+    final ratio = (weakest * r.threshold / r.press).round();      // % of the threshold at 100 %
+    final pct = ((ratio * 0.85) ~/ 5 * 5).clamp(20, 100);
+    return 'Zwakste icoon: $ratio % van de drempel → kies $pct %';
+  }
+
+  Widget _meterRow(String label, TileReading? r, int i, int best) {
+    final c = r == null || i >= r.counts.length ? 0 : r.counts[i];
+    final press = r?.press ?? 600;
+    final scale = [press * 2, (best * 1.1).round(), 400].reduce((a, b) => a > b ? a : b).toDouble();
+    double f(num v) => (v / scale).clamp(0.0, 1.0).toDouble();
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(children: [
+        SizedBox(width: 90, child: Text(label)),
+        Expanded(
+          child: LayoutBuilder(builder: (context, box) {
+            final w = box.maxWidth;
+            return Stack(children: [
+              Container(height: 22, color: Retro.bg),
+              Container(height: 22, width: w * f(c), color: c > press ? Retro.good : Retro.dim),
+              Positioned(left: w * f(best) - 1, child: Container(width: 2, height: 22, color: Retro.teal)),
+              Positioned(left: w * f(press) - 1, top: -2, child: Container(width: 3, height: 26, color: Retro.amber)),
+            ]);
+          }),
+        ),
+        SizedBox(width: 56, child: Text('${c < 0 ? 0 : c}', textAlign: TextAlign.right)),
+      ]),
     );
   }
 

@@ -1398,6 +1398,23 @@ hold notes start (chance, how long), when two at once start, band and line size,
   sound interval) and *Licht* (the brightness of the virtual lights in the
   room, flashes on / off – also sent to the real lights).
   **Tempo** (×) scales every time at once: 1.25 = everything 25 % faster.
+* **Drukgevoeligheid (small children press lightly)** – how hard a press on a
+  tile must be, in % of the firmware's threshold (`SENSOR_PRESS`, 100 = as built;
+  lower = more sensitive). Per **player**: automatically by age (*Tegels ›
+  Diagnose › Drukgevoeligheid*: 8 and younger 60 %), or what a **gamemaster**
+  chooses for that player – the app's tile page (*DRUKGEVOELIGHEID*: AUTO, 100,
+  80, 60, 40 %) or *Spelers* (*Druk*); it stays with the player (another tile,
+  another day). Per **place**: *Plaats %* for a tile whose sensors read weaker.
+  The tile gets place % × player % in its config (`device/<mac>/config`
+  `threshold`, retained) the moment somebody is invited on it (the 4 icons to
+  start count already) and 100 % again when they leave. **📏 meten** (Diagnose,
+  and the app's tile page): the tile's live readings per icon for a minute, the
+  threshold, each icon's best – let the child press every icon, and it suggests a
+  % (the weakest icon, with a margin). Still not enough: the hardware
+  (`docs/WIRING.md`, a bigger resistor, a puck under the glass). API: `GET|PUT
+  /api/sensitivity`, `PUT /api/players/{id}/press {press}`, `PUT /api/tiles/{n}
+  {press}`, `POST /api/devices/{dev}/measure {seconds}`, `GET
+  /api/devices/{dev}/pressure`.
 * **Busy (Drukte)** – a player who survives for long keeps a tile somebody in the
   line wants. When visitors are waiting, a gamemaster switches **Drukte** on: in the
   app (the bar under the title: *ER WACHTEN MENSEN? TIK*) or on the web interface's
