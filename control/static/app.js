@@ -706,6 +706,11 @@ async function loadWebsite() {
         <tr><td>Laatst gecontroleerd</td><td>${ago(w.checked_ago)} (elke ${w.interval} s)${w.latency_ms !== null ? ` · ${w.latency_ms} ms` : ""}</td></tr>
         <tr><td>Laatst bereikbaar</td><td>${ago(w.last_ok_ago)}</td></tr>
         <tr><td>Laatste registratie binnen</td><td>${ago(w.last_sync_ago)} · ${w.syncs} sinds de start</td></tr>
+        ${w.sync ? `<tr><td>Sync</td><td>${esc(w.sync.api)} · ${w.sync.pulled} registraties opgehaald</td></tr>
+        <tr><td>Laatst opgehaald</td><td>${ago(w.sync.last_pull_ago)}</td></tr>
+        <tr><td>Scorebord laatst verstuurd</td><td>${ago(w.sync.last_push_ago)}</td></tr>
+        ${w.sync.error ? `<tr><td>Sync-fout</td><td class="bad">${esc(w.sync.error)}</td></tr>` : ""}`
+        : `<tr><td>Sync</td><td class="hint">uit (--website-api URL --website-token GEHEIM)</td></tr>`}
       </table>
       ${w.mock ? `<div class="row"><button data-mock="${w.mock_up ? "0" : "1"}">${w.mock_up ? "Mock: zet website uit (test)" : "Mock: zet website aan"}</button></div>` : ""}
     </div>`;

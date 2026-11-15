@@ -16,7 +16,8 @@ Gamemaster app in a browser (iPhone): http://<this pc>:8080/gm/ (the Flutter web
   app          POST /api/players {name, color, age, card?} -> {id};  POST /api/players/{id}/assign {tile?, mobile?}
   website      GET /api/website (is the registration website up? --website=URL of its health endpoint,
                none: a mock - POST /api/website/mock {"up": false} to test), the last registration in
-  website sync PUT /api/cards/{code} {name, age, email?} (visitors register on the website with their card;
+  website sync --website-api: this server pulls the registrations and pushes the scoreboard (website.py);
+               or the website pushes: PUT /api/cards/{code} {name, age, email?} (visitors register on the website with their card;
                the gamemaster app the same for a visitor without a phone)
   setup        PUT /api/layout {t01_clock} (where T01 is, as on a clock; the entrance at 6)
                GET|POST /api/gamemasters, PUT|DELETE /api/gamemasters/{id} {name, color}
@@ -281,6 +282,10 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         loop["loop"] = asyncio.get_running_loop()
         link.start()
         site.on_change = lambda: changed("website")
+        site.get_cursor = lambda: int(db.setting("website_cursor", "0") or 0)
+        site.set_cursor = lambda n: db.set_setting("website_cursor", str(n))
+        site.on_registrations = website_registrations
+        site.scoreboard = website_scoreboard
         site.start()
         watch = asyncio.create_task(watch_alerts())
         yield
@@ -866,6 +871,30 @@ def create_app(db: Database, link: MqttLink, gm_web: str = GM_WEB, site: Website
         site.synced()
         return {"id": db.upsert_card(code.strip(), name, c.age, (c.email or "").strip() or None)}
 
+    def website_registrations(regs):
+        """The website's sync: new / changed registrations (card, name, age)."""
+        n = 0
+        for r in regs:
+            try:
+                db.upsert_card(str(r["card"]).strip(), r.get("name", ""), int(r.get("age") or 0))
+                n += 1
+            except (KeyError, ValueError, TypeError) as e:
+                print("website sync: skipped", r.get("card") if isinstance(r, dict) else r, e)
+        if n:
+            link.db_changed("players")               # (the game fetches them again)
+
+    def website_scoreboard():
+        """The current event's ranking for the website (its key: id + start, unique
+        even when this database is ever started again)."""
+        ev = db.event()
+        if not ev:
+            return None
+        started = str(ev["started_at"])                  # ("2026-11-15 15:17:19", or a datetime)
+        return {"event": {"key": f"{ev['id']}-" + "".join(c for c in started[:19] if c.isdigit()), "name": ev["name"],
+                          "date": started[:10], "current": ev["ended_at"] is None},
+                "rows": [{k: r[k] for k in ("rank", "name", "card", "best", "lives", "points", "plays")}
+                         for r in db.leaderboard(5000)]}
+
     @app.get("/api/website")
     def website():
         """The connection with the registration website: its health endpoint
@@ -1231,6 +1260,12 @@ def main():
     ap.add_argument("--gm-web", default=GM_WEB, help="the gamemaster app's web build, served at /gm/")
     ap.add_argument("--website", default="", help="the registration website's health endpoint (none: a mock)")
     ap.add_argument("--website-interval", type=float, default=15.0, help="s between its checks")
+    ap.add_argument("--website-api", default=os.environ.get("CC_WEBSITE_API", ""),
+                    help="the website's base URL for the sync (registrations in, scoreboard out), e.g. "
+                         "https://cyberchallenge.coderdojobelgium.be; empty: no sync")
+    ap.add_argument("--website-token", default=os.environ.get("CC_WEBSITE_TOKEN", ""),
+                    help="the sync's shared secret (the website's SYNC_TOKEN); also CC_WEBSITE_TOKEN")
+    ap.add_argument("--website-sync-interval", type=float, default=5.0, help="s between syncs")
     # the accessible page's video (partially sighted players; docs/SETUP.md §15) - empty: text only
     ap.add_argument("--stream-publish", default="", help="where the game publishes a player's video, "
                     "e.g. rtsp://cybercircle:PASS@192.168.1.10:8554 (MediaMTX); empty: no video")
@@ -1250,7 +1285,8 @@ def main():
     link = MqttLink(a.mqtt, a.prefix, a.mqtt_user, a.mqtt_password, ca=a.ca)
     scheme = "https" if a.ssl_cert else "http"
     print(f"control: database {os.path.normpath(a.db)}, MQTT {a.mqtt}, web {scheme}://{a.host}:{a.port}/")
-    site = Website(a.website, a.website_interval)
+    site = Website(a.website, a.website_interval, api=a.website_api, token=a.website_token,
+                   sync_interval=a.website_sync_interval)
     a11y_opts = {"stream_publish": a.stream_publish.rstrip("/"), "stream_view": a.stream_view.rstrip("/"),
                  "stream_user": a.stream_user, "stream_password": a.stream_password,
                  "encoder": a.stream_encoder, "fps": a.stream_fps, "buttons": not a.a11y_no_buttons}

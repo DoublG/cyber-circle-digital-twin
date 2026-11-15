@@ -1,0 +1,35 @@
+{% load static %}<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a0807">
+<title>{% block title %}CoderDojo Cyber Circle Challenge{% endblock %}</title>
+<link rel="stylesheet" href="{% static 'challenge/style.css' %}">
+{% block head %}{% endblock %}
+</head>
+<body>
+<header class="top">
+  <a class="logo" href="{% url 'home' %}"><span class="tag">CYBER CIRCLE</span> CHALLENGE</a>
+  <nav>
+    <a href="{% url 'home' %}"{% if request.resolver_match.url_name == 'home' %} class="on"{% endif %}>Home</a>
+    <a href="{% url 'scoreboard' %}"{% if request.resolver_match.url_name == 'scoreboard' %} class="on"{% endif %}>Scorebord</a>
+    <a href="{% url 'how_it_works' %}"{% if request.resolver_match.url_name == 'how_it_works' %} class="on"{% endif %}>Technisch</a>
+    {% if past_events %}
+    <details class="menu">
+      <summary>Vorige events</summary>
+      <div class="drop">
+        {% for e in past_events %}<a href="{% url 'scoreboard_event' e.pk %}">{{ e.name }}</a>{% endfor %}
+      </div>
+    </details>
+    {% endif %}
+  </nav>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+<footer>
+  <a href="https://coderdojobelgium.be/nl">CoderDojo Belgium</a> · <a href="{% url 'privacy' %}">Privacy</a>
+</footer>
+</body>
+</html>

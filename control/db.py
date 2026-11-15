@@ -445,12 +445,12 @@ class Database:
         """The ranking of an event (default: the current one), best first: per player
         their best play at it - most rounds survived, then most lives left, then the
         most points in that play (the tie-breakers). "rank": shared only when all
-        three are equal. [{player_id, name, best, lives, points, plays, rank}]"""
+        three are equal. [{player_id, name, card, best, lives, points, plays, rank}]"""
         r, p, rs = results.c, players.c, round_scores.c
         pts = (select(rs.game_id, rs.player_id, func.sum(rs.points).label("points"))
                .group_by(rs.game_id, rs.player_id).subquery())
         rows = self._all(
-            select(p.id.label("player_id"), p.name.label("name"), r.score, r.lives,
+            select(p.id.label("player_id"), p.name.label("name"), p.card.label("card"), r.score, r.lives,
                    func.coalesce(pts.c.points, 0).label("points"))
             .select_from(results.join(players, p.id == r.player_id).join(games, games.c.id == r.game_id)
                          .outerjoin(pts, (pts.c.game_id == r.game_id) & (pts.c.player_id == r.player_id)))
@@ -461,9 +461,9 @@ class Database:
             key = (int(row["score"]), int(row["lives"]), int(row["points"]))
             plays[pid] = plays.get(pid, 0) + 1
             if pid not in best or key > best[pid][0]:
-                best[pid] = (key, row["name"])
-        out = sorted(({"player_id": pid, "name": name, "best": k[0], "lives": k[1], "points": k[2],
-                       "plays": plays[pid]} for pid, (k, name) in best.items()),
+                best[pid] = (key, row["name"], row["card"])
+        out = sorted(({"player_id": pid, "name": name, "card": card, "best": k[0], "lives": k[1], "points": k[2],
+                       "plays": plays[pid]} for pid, (k, name, card) in best.items()),
                      key=lambda x: (-x["best"], -x["lives"], -x["points"], x["name"]))
         for i, row in enumerate(out):
             same = i > 0 and (row["best"], row["lives"], row["points"]) == (out[i - 1]["best"], out[i - 1]["lives"],

@@ -1,0 +1,28 @@
+{% extends "challenge/base.html" %}
+{% block content %}
+<section class="hero">
+  <h1>Welkom bij de CoderDojo Cyber Circle Challenge</h1>
+  <p>Klaar voor de ultieme uitdaging? Duik in de opwindende wereld van de CoderDojo Cyber Circle Challenge!</p>
+  <p>Laat zien dat je de beste keuzes kunt maken in dit meeslepende denk-doe-kijk-spel vol actie en strategie.</p>
+  <p>Overleef zo lang mogelijk en win een coole CoderDojo prijs.</p>
+  <p class="warn">Maar wees snel, de klok tikt en Big Brother is meedogenloos!</p>
+</section>
+
+<section class="panel steps">
+  <h2>Zo doe je mee</h2>
+  <ol>
+    <li>Haal een <b>QR-kaart</b> bij de gamemaster.</li>
+    <li>Scan de QR-code met je gsm en <b>registreer</b> je.</li>
+    <li>Geef je kaart aan de gamemaster: je krijgt een <b>tegel</b> rond de robot.</li>
+    <li>Druk op de 4 iconen op je tegel en <b>speel</b>! Hoe meer rondes je overleeft, hoe hoger op het scorebord.</li>
+  </ol>
+</section>
+
+{% if event %}
+<section class="panel">
+  <h2>{{ event.name }} <span class="dim">- top 10</span></h2>
+  {% include "challenge/_board.html" with rows=top %}
+  <p><a class="button" href="{% url 'scoreboard' %}">Volledig scorebord</a></p>
+</section>
+{% endif %}
+{% endblock %}

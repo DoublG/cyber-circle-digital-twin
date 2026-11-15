@@ -1263,6 +1263,22 @@ or a new master continues in the same mode.
 * **Geluid** – play any sound now: a button per sound (a random file) and per
   file, optionally at its own volume; *Alles stoppen*; *Opnieuw inlezen* after
   adding files. Below: how other systems trigger them (HTTP, MQTT). See §4 *Sound*.
+* **The registration website** (`website/`, Django – hosted on the internet,
+  `website/README.md`): `/register/?id=<card>` (the QR card's link: name,
+  age, country, email, postcode and place, the privacy statement and an
+  agreement – younger than 13: ask a parent), `/scoreboard/` (the current
+  event, live; earlier events in the menu; `?id=<card>`: your place), the
+  admin (events, registrations, the winners with their email as CSV, erasing
+  personal data; `manage.py purge_personal_data --older-than 30` from cron).
+  **The sync** – the control server calls out (the installation's network
+  can't be reached from the internet): `--website-api https://<site>
+  --website-token <SYNC_TOKEN>` (or `CC_WEBSITE_API` / `CC_WEBSITE_TOKEN`).
+  Every 5 s it pulls the new registrations – only card, name and age; email,
+  postcode and place stay on the website – and pushes the current event's
+  scoreboard when it changed (the ranking as computed here, with the card
+  codes for "your place"). Offline for a while: it catches up when the
+  website is back. Test: `control/.venv/bin/python control/test_website_sync.py`
+  (both servers real), `cd website && DJANGO_DEBUG=1 .venv/bin/python manage.py test`.
 * **Website** – the connection with the registration website (visitors
   register there with their card; it syncs them here): its health endpoint
   is checked every 15 s (`--website=https://…/health` when starting the

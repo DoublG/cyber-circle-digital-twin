@@ -42,3 +42,8 @@ deploy/certs/server.san
 # the reference voice (a person's voice: not in git)
 tools/assets/voice/models/
 tools/assets/voice/reference*.wav
+
+# the website (website/): local database, collected static files, secrets
+website/db.sqlite3
+website/staticfiles/
+website/.env

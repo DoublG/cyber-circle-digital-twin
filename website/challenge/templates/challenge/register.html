@@ -1,0 +1,31 @@
+{% extends "challenge/base.html" %}
+{% block title %}Registreren{% endblock %}
+{% block content %}
+<section class="panel narrow">
+  <h1>Coderdojo Cyber Challenge</h1>
+  <p class="card-code">Kaart <code>{{ card }}</code></p>
+  {% if existing and not again and not form.errors %}
+    <p class="ok">Deze kaart is al geregistreerd als <b dir="auto">{{ existing.name }}</b>.</p>
+    <p>Geef je kaart aan de gamemaster om te spelen.</p>
+    <p><a class="button" href="{% url 'scoreboard' %}?id={{ card|urlencode }}#mine">Mijn plaats op het scorebord</a></p>
+    <p class="dim small">Is dit niet jouw naam? <a href="?id={{ card|urlencode }}&again=1">Opnieuw registreren</a> (de vorige gegevens worden vervangen).</p>
+  {% else %}
+  <form method="post" class="form" novalidate>
+    {% csrf_token %}
+    {% if form.non_field_errors %}<p class="error">{{ form.non_field_errors|join:" " }}</p>{% endif %}
+    {% for f in form %}{% if f.name != "consent" %}
+      <label class="{% if f.errors %}bad{% endif %}">{{ f.label }}{{ f }}
+        {% if f.errors %}<span class="error">{{ f.errors|join:" " }}</span>{% elif f.help_text %}<span class="help">{{ f.help_text }}</span>{% endif %}
+      </label>
+    {% endif %}{% endfor %}
+    <details class="privacy" open>
+      <summary>Privacyverklaring Coderdojo Cyber Challenge</summary>
+      {% include "challenge/_privacy.html" %}
+    </details>
+    <label class="check {% if form.consent.errors %}bad{% endif %}">{{ form.consent }} <span>{{ form.consent.label }}</span>
+      {% if form.consent.errors %}<span class="error">{{ form.consent.errors|join:" " }}</span>{% endif %}</label>
+    <button type="submit">Registreer</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

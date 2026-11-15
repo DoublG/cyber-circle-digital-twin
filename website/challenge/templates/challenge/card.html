@@ -1,0 +1,14 @@
+{% extends "challenge/base.html" %}
+{% block title %}Registreren{% endblock %}
+{% block content %}
+<section class="panel narrow">
+  <h1>Registreren</h1>
+  <p>Scan de <b>QR-code op je kaart</b> met de camera van je gsm. Lukt dat niet? Typ dan de code die onder de QR-code staat.</p>
+  <form method="get" action="{% url 'register' %}" class="form">
+    {% if bad %}<p class="error">Dat is geen geldige code. Scan de QR-code op je kaart.</p>{% endif %}
+    <label>Code op je kaart <input name="id" required maxlength="64" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <button type="submit">Verder</button>
+  </form>
+  <p class="dim small">Nog geen kaart? Vraag er een aan de gamemaster bij de Cyber Circle.</p>
+</section>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "challenge/base.html" %}
+{% block title %}Scorebord{% if event %} - {{ event.name }}{% endif %}{% endblock %}
+{% block head %}{% if live %}<meta http-equiv="refresh" content="30">{% endif %}{% endblock %}
+{% block content %}
+{% if event %}
+<section class="panel">
+  <h1>Scorebord <span class="dim">{{ event.name }}</span></h1>
+  <p class="dim small">{{ event.starts_on|date:"l j F Y" }}{% if live %} · <span class="live">● LIVE</span> - ververst elke 30 s{% endif %}{% if event.scores_updated %} · bijgewerkt {{ event.scores_updated|date:"H:i" }}{% endif %}</p>
+  {% if mine %}<p class="you">Jij staat op plaats <b>{{ mine.rank }}</b> met <b>{{ mine.best }}</b> rondes overleefd. <a href="#mine">Toon</a></p>{% endif %}
+  {% include "challenge/_board.html" %}
+  <p class="dim small">Per speler telt de beste keer: de meeste rondes overleefd, dan de meeste levens over, dan de meeste punten.</p>
+</section>
+{% else %}
+<section class="panel"><h1>Scorebord</h1><p class="dim">Nog geen event.</p></section>
+{% endif %}
+{% endblock %}

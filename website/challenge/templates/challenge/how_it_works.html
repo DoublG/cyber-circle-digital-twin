@@ -1,0 +1,20 @@
+{% extends "challenge/base.html" %}
+{% block title %}Technisch{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Hoe werkt het?</h1>
+  <p>De Cyber Circle Challenge is een installatie: tot 13 spelers staan op <b>lichtgevende tegels</b> in een cirkel rond een
+    <b>robot</b>, en tot 5 mobiele spelers doen mee met een tegel in de hand. Boven de tegels hangen schermen waarop elke speler
+    zijn eigen beeld ziet.</p>
+  <h2>De tegels</h2>
+  <p>Elke tegel heeft 4 iconen (vierkant, driehoek, kruis, cirkel) met drukknoppen, twee ringen van 48 leds en 5 hartjes: je
+    levens. Een kleine computer (ESP32) in de tegel leest de knoppen en stuurt de leds, verbonden met een netwerkkabel.</p>
+  <h2>Het spel</h2>
+  <p>Ronde na ronde: een quiz over computers en online veiligheid, en snelle spelletjes zoals Reactie, Simon zegt, Ritme,
+    Cyclone, Zwarte Piet en Code kraken. Wie slecht scoort verliest een leven, de beste wint er een. Bij 0 levens draait de robot
+    naar je toe en vuurt: game over. Het spel draait in Godot op een computer, de schermen op Raspberry Pi's.</p>
+  <h2>De gamemasters</h2>
+  <p>Gamemasters scannen je QR-kaart met een app en wijzen je een tegel toe. Een control server houdt de spelers, de vragen en
+    de scores bij en zet het scorebord op deze website.</p>
+</section>
+{% endblock %}

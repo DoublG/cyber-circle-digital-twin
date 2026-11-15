@@ -1,0 +1,11 @@
+{% extends "challenge/base.html" %}
+{% block title %}Geregistreerd{% endblock %}
+{% block content %}
+<section class="panel narrow center">
+  <h1 class="ok">Je bent geregistreerd!</h1>
+  <p class="big" dir="auto">{{ reg.name }}</p>
+  <p>Geef nu je <b>kaart</b> aan de gamemaster. Je krijgt een tegel rond de robot - druk op de 4 iconen en het spel begint.</p>
+  <p class="dim small">Bewaar je kaart: wil je nog eens spelen, dan scan je dezelfde kaart. Je beste keer telt.</p>
+  <p><a class="button" href="{% url 'scoreboard' %}?id={{ reg.card|urlencode }}#mine">Naar het scorebord</a></p>
+</section>
+{% endblock %}

@@ -1,0 +1,18 @@
+{% if rows %}
+<table class="board">
+  <thead><tr><th>#</th><th class="name">Speler</th><th title="rondes overleefd">Rondes</th><th class="wide" title="levens over">Levens</th><th class="wide" title="keer gespeeld">Keer</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+    <tr class="{% if r.rank <= 3 %}top{{ r.rank }}{% endif %}{% if mine and r.pk == mine.pk %} mine{% endif %}"{% if mine and r.pk == mine.pk %} id="mine"{% endif %}>
+      <td class="rank">{{ r.rank|stringformat:"02d" }}</td>
+      <td class="name" dir="auto">{{ r.name }}</td>
+      <td class="num">{{ r.best }}</td>
+      <td class="num wide hearts">{% if r.lives %}{% for _ in ""|center:r.lives %}♥{% endfor %}{% else %}☠{% endif %}</td>
+      <td class="num wide">{{ r.plays }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="dim">Nog niemand op het scorebord. Wie wordt de eerste?</p>
+{% endif %}
