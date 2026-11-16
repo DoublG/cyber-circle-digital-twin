@@ -12,7 +12,10 @@ namespace display {
 // The names from MQTT become these where they come in (applyState, effect):
 // a name the tile does not know is Other (a black ring) / no effect.
 enum class Mode : uint8_t { Idle, Pending, Setup, Unplaced, Playing, Dead, Off, Other };
-enum class Fx : uint8_t { None, Attack, Hit, Block, Life, Doomed, Death };
+enum class Fx : uint8_t { None, Attack, Hit, Block, Life, Doomed, Death, Success, Error };
+static const int iconQuarter[4] = ICON_QUARTERS;
+static int fxFrom = -1;
+const uint32_t RESULT_MS = 1500;            // the success / error animation (the game waits as long)                     // success / error: the icon whose quarter goes first (-1: the robot side)
 static Mode mode = Mode::Idle;
 static int number = 0;
 static CRGB inviteColor = CRGB::White;
@@ -41,7 +44,7 @@ static Mode modeByName(const char *name) {
 static Fx fxByName(const char *name) {
     static const struct { const char *name; Fx fx; } names[] = {
         {"attack", Fx::Attack}, {"hit", Fx::Hit}, {"block", Fx::Block}, {"life", Fx::Life},
-        {"doomed", Fx::Doomed}, {"death", Fx::Death}};
+        {"doomed", Fx::Doomed}, {"death", Fx::Death}, {"success", Fx::Success}, {"error", Fx::Error}};
     for (auto &n : names)
         if (name && !strcmp(name, n.name)) return n.fx;
     return Fx::None;
@@ -63,9 +66,10 @@ void applyState(JsonObjectConst st) {
     for (int i = 0; i < 4; i++) buttons[i] = parseColor(b[ICON_NAMES[i]] | "", CRGB::Black);
 }
 
-void effect(const char *name, CRGB color) {
+void effect(const char *name, CRGB color, int from) {
     fx = fxByName(name);
     fxColor = color;
+    fxFrom = from >= 0 && from < 4 ? from : -1;
     fxStart = millis();
 }
 
@@ -180,6 +184,19 @@ static bool effects(uint32_t t) {           // false when the effect is over
     if (fx == Fx::Life) {
         if (e > 600) return false;
         fillRing(GREEN);
+        return true;
+    }
+    if (fx == Fx::Success || fx == Fx::Error) {   // the answer / the round: right (green) or wrong (red) -
+        // the chosen icon's quarter lights up, the colour fills the rest of the ring clockwise,
+        // holds and fades (as the first tiles showed it: the answer revealed, a round over)
+        if (e > RESULT_MS) return false;
+        int start = fxFrom >= 0 ? iconQuarter[fxFrom] : 0;
+        const int q = RING_COUNT / 4;
+        int lit = e < 400 ? q : e < 800 ? q + (int)(e - 400) * (RING_COUNT - q) / 400 : RING_COUNT;
+        CRGB c = fxColor;
+        if (e > 1200) c.nscale8(255 - (e - 1200) * 255 / (RESULT_MS - 1200));
+        fillRing(CRGB::Black);
+        for (int k = 0; k < lit; k++) ring(start + k) = c;
         return true;
     }
     if (fx == Fx::Doomed) {                   // exterminated: blinks red until the death (no end)

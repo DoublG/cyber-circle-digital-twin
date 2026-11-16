@@ -169,7 +169,7 @@ func shared_countdown() -> float:              # the answer time (the ring on th
 	return _phase_left if _phase == "question" else -1.0
 
 
-func countdown_now() -> Vector2:                # the tiles' green LED: the answer time too
+func countdown_now() -> Vector2:                # the tiles' violet LED: the answer time too
 	return Vector2(_phase_left, _question_time) if _phase == "question" and not _done else Vector2(-1.0, 0.0)
 
 
@@ -402,18 +402,25 @@ func _reveal() -> void:
 	_attacks(right, wrong, shielded)
 
 
-## First the players' combined attack, then the robot's combined counter-attack.
-## Shielded players are shot at too, but the shield blocks it. The robot's shot
-## only shows the answer was wrong: lives change at the end of the round.
+## First every tile says right or wrong (the success / error animation, from
+## the answer's quarter), then the players' combined attack, then the robot's
+## combined counter-attack. Shielded players are shot at too, but the shield
+## blocks it. The robot's shot only shows the answer was wrong: lives change at
+## the end of the round.
 func _attacks(right: Array[int], wrong: Array[int], shielded: Array[int]) -> void:
 	var any_wrong := not (wrong.is_empty() and shielded.is_empty())
-	if not right.is_empty():
+	for id in right + wrong + shielded:
+		var a: int = _answers[id].answer if _answers.has(id) else -1
+		game.arena.rt(_tile(id)).play_result(id in right, ANSWER_BUTTONS[a] if a >= 0 else &"")
+	if not right.is_empty():                        # (with the green on the tiles)
 		game.arena.sound.play(&"quiz_right")
+	elif any_wrong:                                 # (nobody right: with the red)
+		game.arena.sound.play(&"quiz_wrong")
+	await game.wait(CyberTile.RESULT_TIME)
 	game.arena.players_attack(right, not any_wrong)
 	if not right.is_empty() and any_wrong:
 		await game.wait(1.6)
-	if any_wrong:
-		game.arena.sound.play(&"quiz_wrong")
+		game.arena.sound.play(&"quiz_wrong")        # (with the robot's counter-attack)
 	game.arena.robot_attack(wrong, Color(1.0, 0.1, 0.05), shielded, false)
 
 

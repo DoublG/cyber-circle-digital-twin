@@ -22,7 +22,7 @@ extends Node
 ##   {"stop": true}
 ##   {"pause": true} / {"pause": false}   game paused: freeze the program's clock
 ##   {"countdown": {"length": ms, "left": ms}} / {"countdown": false}
-##       The round's time (all rounds but Cyclone): one green LED once round the
+##       The round's time (all rounds but Cyclone): one violet LED once round the
 ##       outer ring, on top of what it shows (not on the inner ring); the tile
 ##       counts down itself, frozen while paused. (Here the game draws it on the
 ##       3D tile itself: GameManager._show_countdown.)

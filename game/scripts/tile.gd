@@ -21,9 +21,9 @@ signal button_released(tile_id: int, button: StringName)
 signal pressure_changed(tile_id: int, button: StringName, value: float)
 signal died(tile_id: int)   # health went from >0 to 0
 signal health_changed(tile_id: int, health: int)
-## A one-off effect, for the real tile (MqttBridge: tile/<n>/cmd {"fx": name, "color"}):
-## attack, hit, block, life, doomed, death.
-signal fx(tile_id: int, name: String, color: Color)
+## A one-off effect, for the real tile (MqttBridge: tile/<n>/cmd {"fx": name, "color", ...data}):
+## attack, hit, block, life, doomed, death, success / error (data: {"from": icon}).
+signal fx(tile_id: int, name: String, color: Color, data: Dictionary)
 
 const TILE_SCENE := preload("res://models/tile.glb")
 const LED_COUNT := TileRing.COUNT   # the ring: LED 0 faces the robot, counting clockwise from above
@@ -258,7 +258,7 @@ func _set_health(value: int) -> void:
 ## Death effect on the tile: red wipe around the ring, blinking, then dark.
 ## Exterminated, waiting for the robot: the whole ring blinks red (until play_death).
 func blink_doomed() -> void:
-	fx.emit(tile_id, "doomed", Color.RED)
+	fx.emit(tile_id, "doomed", Color.RED, {})
 	is_dead = true
 	shielded = false
 	_doomed = true
@@ -272,7 +272,7 @@ func blink_doomed() -> void:
 
 
 func play_death() -> void:
-	fx.emit(tile_id, "death", Color.RED)
+	fx.emit(tile_id, "death", Color.RED, {})
 	_doomed = false
 	is_dead = true
 	shielded = false
@@ -581,7 +581,7 @@ func _soft_texture(offsets: Array, values: Array) -> GradientTexture2D:
 ## Attack towards the robot: two lights run from the back of the ring along
 ## both sides to LED_00 (the robot side). Returns when they meet.
 func play_attack(color := Color(0.2, 1.0, 0.3)) -> void:
-	fx.emit(tile_id, "attack", color)
+	fx.emit(tile_id, "attack", color, {})
 	var half := LED_COUNT / 2
 	for step in half + 1:
 		ring.clear()
@@ -601,7 +601,7 @@ func play_attack(color := Color(0.2, 1.0, 0.3)) -> void:
 ## Hit by the robot: red runs from LED_00 (robot side) along both sides to the
 ## back of the ring, then the whole ring flashes.
 func play_hit(color := Color(1.0, 0.1, 0.05)) -> void:
-	fx.emit(tile_id, "hit", color)
+	fx.emit(tile_id, "hit", color, {})
 	var y: float = (_anchors[BUTTONS[0]] as Node3D).position.y + 0.05
 	_flash(color, 7.0, 3.0, 0.06, 0.4, y + 0.3)            # the impact: visible from across the room
 	_glow_ball(color.lightened(0.3), 0.1, 0.9, 0.35, y + 0.1)
@@ -671,10 +671,42 @@ func _shield_glow() -> void:
 		ring.clear()
 
 
+const RESULT_TIME := 1.5          # s: the success / error animation (as the firmware's RESULT_MS)
+const RESULT_GREEN := Color(0.1, 1.0, 0.25)
+const RESULT_RED := Color(1.0, 0.1, 0.05)
+## Each icon's quarter of the ring: its first LED, clockwise from LED_00 (the firmware's ICON_QUARTERS).
+const ICON_QUARTERS := {&"Square": 36, &"Triangle": 0, &"Cross": 24, &"Circle": 12}
+
+
+## Right or wrong (the quiz's answer revealed, a round over): the chosen icon's
+## quarter lights up (green / red), the colour fills the rest of the ring
+## clockwise, holds and fades - as the first tiles showed it. from_icon: the
+## answer ("" : none - from the robot side).
+func play_result(success: bool, from_icon: StringName = &"") -> void:
+	var color := RESULT_GREEN if success else RESULT_RED
+	var i := BUTTONS.find(from_icon)
+	fx.emit(tile_id, "success" if success else "error", color, {"from": i})
+	var start: int = ICON_QUARTERS.get(from_icon, 0)
+	var q := LED_COUNT / 4
+	var t := 0.0
+	while t < RESULT_TIME:                           # (the game's clock, frame by frame: in step with the real tile)
+		var lit := q if t < 0.4 else (q + int((t - 0.4) / 0.4 * (LED_COUNT - q)) if t < 0.8 else LED_COUNT)
+		var c := color if t < 1.2 else color * (1.0 - (t - 1.2) / (RESULT_TIME - 1.2))
+		var leds := []
+		leds.resize(LED_COUNT)
+		leds.fill(Color.BLACK)
+		for k in mini(lit, LED_COUNT):
+			leds[(start + k) % LED_COUNT] = c
+		ring.set_all(leds)
+		await get_tree().process_frame
+		t += get_process_delta_time()
+	_shield_glow()
+
+
 ## An attack hits the shield: red stops at the front of the ring, the ring
 ## flashes blue and the dome ripples from the robot side. No life lost.
 func play_block(color := Color(1.0, 0.1, 0.05)) -> void:
-	fx.emit(tile_id, "block", color)
+	fx.emit(tile_id, "block", color, {})
 	_shield.visible = true
 	var hit_at := _shield_impact()                     # (tile space) where the shot hits the shield
 	_shield_mat.set_shader_parameter("impact", _shield.transform.affine_inverse() * hit_at)

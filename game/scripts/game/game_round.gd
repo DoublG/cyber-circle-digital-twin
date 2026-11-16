@@ -18,7 +18,7 @@ var game: GameManager
 var players: Array[int] = []      # tile ids taking part in this round
 var points := {}                  # tile_id -> points scored this round
 var time_left := 0.0
-## The round's countdown on the tiles: one green LED once round the outer ring
+## The round's countdown on the tiles: one violet LED once round the outer ring
 ## (GameManager shows it on the 3D tiles and sends it to the real ones). Off:
 ## Cyclone (its own green light runs round the ring).
 var tile_countdown := true

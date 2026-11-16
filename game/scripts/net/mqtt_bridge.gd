@@ -107,9 +107,10 @@ func setup(arena_node: Arena) -> void:
 	arena.tile_message.connect(func(id, msg):
 		publish_json("%s/tile/%d/cmd" % [topic_prefix, id], msg))
 	for t in arena.tiles:                               # one-off effects for the real tiles
-		t.fx.connect(func(id, name, color):
+		t.fx.connect(func(id, name, color, data):
 			if online:
-				publish_json("%s/tile/%d/cmd" % [topic_prefix, id], {"fx": name, "color": "#" + color.to_html(false)}))
+				publish_json("%s/tile/%d/cmd" % [topic_prefix, id],
+					{"fx": name, "color": "#" + color.to_html(false)}.merged(data)))
 	arena.registered.connect(func(id, who, color):
 		publish_json(topic_prefix + "/registered",
 			{"tile": id, "player": who, "color": "#" + color.to_html(false)}))

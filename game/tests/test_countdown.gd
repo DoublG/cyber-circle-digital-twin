@@ -1,5 +1,5 @@
 extends Node
-## The round's countdown LED (headless): one green LED once round the OUTER
+## The round's countdown LED (headless): one violet LED once round the OUTER
 ## ring of every player's tile (not the inner ring), moving on with the time;
 ## the real tiles get one {"countdown"} at the start and {"countdown": false}
 ## at the end; Cyclone (its own green light) has none.
@@ -38,7 +38,7 @@ func _ready() -> void:
 	var ring := arena.tiles[0].ring
 	var led := _expected(r)
 	check(ring._countdown == led, "T01: the countdown LED is %d (%.1f of %.1f s left)" % [led, r.time_left, r.duration])
-	check(ring.shown(led) == TileRing.COUNTDOWN_COLOR, "... green on the outer ring")
+	check(ring.shown(led) == TileRing.COUNTDOWN_COLOR, "... violet on the outer ring")
 	check(ring.shown(led, true) == ring.colors[led], "... the inner ring shows the ring's own colour there")
 	check(arena.tiles[2].ring._countdown == -1, "T03 (no player): no countdown LED")
 	var starts := sent.filter(func(s): return s[1].countdown is Dictionary)

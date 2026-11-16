@@ -161,7 +161,7 @@ static void onMessage(char *t, byte *payload, unsigned int len) {
         display::applyState(doc.as<JsonObjectConst>());
     } else if (place > 0 && tp == topic("cmd")) {
         JsonObjectConst msg = doc.as<JsonObjectConst>();
-        if (msg["fx"].is<const char *>()) display::effect(msg["fx"], parseColor(msg["color"] | "#ffffff"));
+        if (msg["fx"].is<const char *>()) display::effect(msg["fx"], parseColor(msg["color"] | "#ffffff"), msg["from"] | -1);
         programs::receive(msg);
     }
 }
@@ -292,8 +292,8 @@ void loop() {
         for (int i = 0; i < INNER_COUNT; i++)           // the inner ring mirrors the outer one
             inner(i) = ring(i * RING_COUNT / INNER_COUNT);
 #endif
-        int cd = programs::countdownLed();              // the round's countdown: outer ring only (after the copy)
-        if (cd >= 0) ring(cd) = GREEN;
+        int cd = programs::countdownLed();              // the round's countdown (violet): outer ring only (after the copy)
+        if (cd >= 0) ring(cd) = TIMER;
 #if STATUS_LED >= 0
         leds[STATUS_LED] = mqtt.connected() ? (place > 0 ? CRGB(0, 40, 0) : CRGB(40, 30, 0))
                                             : (net::up() ? CRGB(0, 0, 50) : CRGB(50, 0, 0));

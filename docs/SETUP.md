@@ -992,7 +992,8 @@ godot-4 --headless --path . --fixed-fps 60 res://tests/test_db.tscn     # databa
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_piet.tscn   # Zwarte Piet
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_exterminated.tscn  # everyone exterminated: no new round, the lobby
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_pause.tscn  # the paused mode: the game's waits stand still
-godot-4 --headless --path . --fixed-fps 60 res://tests/test_countdown.tscn  # the round's green countdown LED (outer ring, not in Cyclone)
+godot-4 --headless --path . --fixed-fps 60 res://tests/test_countdown.tscn  # the round's violet countdown LED (outer ring, not in Cyclone)
+godot-4 --headless --path . --fixed-fps 60 res://tests/test_result.tscn    # right / wrong on the tile: the quiz's reveal (from the answer's quarter), a round's end
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_ages.tscn       # ages: the shield in personal rounds, rounds and questions weighted by age
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_lives.tscn      # the life table: rows by occupancy %, best / last places or %, ties, rules text
 godot-4 --headless --path . --fixed-fps 60 res://tests/test_pressure.tscn   # busy: full floor, the levels up / down, what a level does, protection by score
@@ -1349,8 +1350,12 @@ or a new master continues in the same mode.
   cross, circle; ages; video; a picture next to the question – a file in
   `game/data/images/`, `.png`/`.jpg`/`.webp`/`.svg`; explanation). On the
   screen a question goes: the question with the 4 buttons (no answers yet,
-  *Leestijd*) → the answers fade in and the countdown runs → TIJD OM → everyone's
-  icon → who was right.
+  *Leestijd*) → the answers fade in and the countdown runs (on the tiles: one
+  violet LED round the outer ring) → TIJD OM → everyone's icon → who was right:
+  on every tile the chosen icon's quarter lights up green (right) or red (wrong,
+  no answer: from the robot side) and the colour fills the ring (1.5 s), then
+  the attacks. Every other round ends the same way on the tiles: green for who
+  keeps or wins a life, red for who loses one.
 * **Ranglijst** – the ranking of the current **event** (highest score per player
   at this event), and the events. An event is a fair or festival (1–2 days):
   *Nieuw event starten* (with its name) closes the current one and starts an

@@ -82,6 +82,12 @@
 #ifndef ICON_FIRST
 #define ICON_FIRST     101              // Square, Triangle, Cross, Circle
 #endif
+// Each icon's quarter of the ring: its first LED (clockwise from LED_00, the robot side), order
+// Square, Triangle, Cross, Circle - the success / error animation starts there (the answer chosen).
+// As the game's 3D tile: Triangle top right, Circle bottom right, Cross bottom left, Square top left.
+#ifndef ICON_QUARTERS
+#define ICON_QUARTERS  {36, 0, 24, 12}
+#endif
 #ifndef STATUS_LED
 #define STATUS_LED     -1               // the built tiles have none (-1); a status LED at the end: 105, LED_TOTAL 106
 #endif

@@ -51,6 +51,11 @@ func clear_ring() -> void:
 	tile.ring.clear()
 
 
+func play_result(success: bool, from_icon: StringName = &"") -> void:
+	_r(&"play_result", [success, from_icon])
+	tile.play_result(success, from_icon)
+
+
 func blink_doomed() -> void:
 	_r(&"blink_doomed", [])
 	tile.blink_doomed()

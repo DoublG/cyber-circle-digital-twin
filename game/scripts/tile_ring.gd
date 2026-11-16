@@ -9,7 +9,7 @@ extends RefCounted
 const COUNT := 48
 const LED_SHADER := preload("res://shaders/led.gdshader")
 const GLOW_SHADER := preload("res://shaders/tile_glow.gdshader")
-const COUNTDOWN_COLOR := Color(0.1, 1.0, 0.25)   # the round's countdown LED (the firmware's GREEN)
+const COUNTDOWN_COLOR := Color(0.59, 0.16, 1.0)   # the round's countdown LED (the firmware's TIMER: violet)
 const COUNTDOWN_SCALE := 2.2     # ... drawn bigger and brighter than the real LED: readable on the screens
 const COUNTDOWN_BOOST := 1.8
 
@@ -19,7 +19,7 @@ var _leds := MultiMesh.new()
 
 
 var _inner := false              # the model has the inner ring: instances COUNT..2*COUNT-1
-var _countdown := -1             # the round's green countdown LED on the outer ring (-1: none)
+var _countdown := -1             # the round's violet countdown LED on the outer ring (-1: none)
 var _outer_xf: Array[Transform3D] = []   # the outer LEDs' own transforms (the countdown LED is scaled up)
 var _glow: ShaderMaterial        # the plates the rings light up (Ring_Glow)
 var _glow_leds := PackedVector3Array()
@@ -103,7 +103,7 @@ func shown(index: int, inner := false) -> Color:
 	return COUNTDOWN_COLOR if index == _countdown and not inner else colors[index]
 
 
-## The round's countdown LED (GameManager): green on the outer ring only, on
+## The round's countdown LED (GameManager): violet on the outer ring only, on
 ## top of what the ring shows (colors keep the ring's own colours); -1: none.
 func set_countdown(index: int) -> void:
 	if index == _countdown:

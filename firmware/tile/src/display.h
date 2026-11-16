@@ -10,7 +10,7 @@ namespace display {
 //  "buttons": {"Square": "#ff59bf", "Triangle": "", ...}}
 void applyState(JsonObjectConst st);
 // {"fx": attack|hit|block|life|doomed|death, "color": "#rrggbb"}
-void effect(const char *name, CRGB color);
+void effect(const char *name, CRGB color, int from = -1);   // from: an icon (success / error: its quarter first)
 void identify(uint32_t ms);                // device/<mac>/identify: light up so the crew finds it
 bool identifying();                        // ... and it does so now
 void unplaced(int number);                 // no place yet (0) / the place from the config

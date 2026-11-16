@@ -19,6 +19,8 @@ const CRGB HEART_ON(255, 13, 38);
 const CRGB HEART_LOST(31, 0, 5);
 const CRGB SHIELD(77, 191, 255);
 const CRGB GREEN(26, 255, 64);
+const CRGB TIMER(150, 40, 255);          // the round's countdown LED: violet - no icon's colour, not "right"
+                                         // (green), not Cyclone's own green light (as the first tiles had it)
 const CRGB YELLOW(255, 204, 0);
 
 CRGB parseColor(const char *hex, CRGB fallback = CRGB::Black);   // "#rrggbb"

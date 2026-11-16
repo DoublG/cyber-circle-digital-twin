@@ -77,7 +77,7 @@ func _init() -> void:
 	q._answers = {1: {"answer": correct}, 2: {"answer": (correct + 1) % 4}}
 	q._reveal()
 	check(played(sound, &"quiz_right", t0), "someone right: quiz_right")
-	await create_timer(2.0).timeout                 # the robot's counter-attack 1.6 s later
+	await create_timer(CyberTile.RESULT_TIME + 2.0).timeout   # the tiles' right / wrong, then the counter-attack 1.6 s later
 	check(played(sound, &"quiz_wrong", t0), "someone wrong: quiz_wrong (with the robot's counter-attack)")
 	game._show_round_ranking({})
 	check(played(sound, &"ranking", t0), "the UITSLAG: ranking")

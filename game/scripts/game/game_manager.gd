@@ -293,7 +293,7 @@ func _process(delta: float) -> void:
 	_show_countdown()
 
 
-## The round's countdown (GameRound.countdown): one green LED once round the
+## The round's countdown (GameRound.countdown): one violet LED once round the
 ## outer ring of every player's tile - on the 3D tiles here, and sent to the
 ## real tiles, which count down themselves (frozen by {"pause"}): a message
 ## when it starts (or its length changes) and when it ends.
@@ -512,6 +512,9 @@ func _end_round() -> void:
 	for id in current.players:                   # (the round's shields: until the lives are decided)
 		arena.tiles[id - 1].shielded = false
 	var doomed := changes.keys().filter(func(id): return arena.tiles[id - 1].health + changes[id] <= 0)
+	if current.ranked:                           # the round is over: every tile right / wrong (the quiz: at its reveal)
+		for id in changes:
+			arena.rt(arena.tiles[id - 1]).play_result(changes[id] >= 0)
 	arena.aim_at_doomed(doomed)                  # the robot turns to the first one already
 	views.lives_shown = false
 	_score_seq += 1

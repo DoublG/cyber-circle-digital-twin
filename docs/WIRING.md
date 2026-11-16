@@ -104,6 +104,15 @@ frame), LED for LED at the same place around the tile. The game itself
 | Flashing | TXD0/IO1, RXD0/IO3, IO0, EN | 3.3 V USB-serial adapter; IO0 to GND during reset = boot mode |
 | 5 V, GND | 5V, GND | from the tile's 5 V rail |
 
+**The tile's quarters.** Each icon has its quarter of the ring (12 LEDs): the
+success / error animation (the quiz's answer revealed, a round over) starts in
+the chosen icon's quarter. Which LEDs: `ICON_QUARTERS` in `config.h` (the first
+LED of each quarter, clockwise from LED_00, order Square, Triangle, Cross,
+Circle) - default as the game's 3D tile (Triangle top right, Circle bottom
+right, Cross bottom left, Square top left). The built tiles have their icons at
+12, 3, 6 and 9 o'clock with the dividers on the diagonals: set it to where they
+really are (e.g. an icon at 12 o'clock: its quarter starts at LED 42).
+
 **How hard a press must be.** An icon counts as pressed at `SENSOR_PRESS`
 (600) ADC counts above its resting value. The control server lowers that per
 tile while a small child is on it (the player's %: by age, or a gamemaster's
